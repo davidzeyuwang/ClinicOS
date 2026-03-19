@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClinicOS — Operations Board</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-active { border-bottom: 3px solid #16a34a; color: #166534; font-weight: 600; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-available { background: #dcfce7; color: #166534; }
+    .badge-occupied { background: #fef9c3; color: #854d0e; }
+    .badge-cleaning { background: #e0e7ff; color: #3730a3; }
+    .badge-out_of_service { background: #fee2e2; color: #991b1b; }
+    .badge-checked_in { background: #dbeafe; color: #1e40af; }
+    .badge-in_service { background: #fef9c3; color: #854d0e; }
+    .badge-service_completed { background: #dcfce7; color: #166534; }
+    .badge-checked_out { background: #f3f4f6; color: #374151; }
+    .badge-scheduled { background: #ede9fe; color: #5b21b6; }
+    .badge-confirmed { background: #dbeafe; color: #1e40af; }
+    .badge-no_show { background: #fee2e2; color: #991b1b; }
+    .badge-cancelled { background: #f3f4f6; color: #6b7280; }
+    .badge-completed { background: #dcfce7; color: #166534; }
+    .badge-open { background: #dbeafe; color: #1e40af; }
+    .badge-in_progress { background: #fef9c3; color: #854d0e; }
+    .badge-blocked { background: #fee2e2; color: #991b1b; }
+    .badge-draft { background: #f3f4f6; color: #6b7280; }
+    .badge-signed { background: #dcfce7; color: #166534; }
+    .badge-final { background: #dbeafe; color: #1e40af; }
+    .badge-unknown { background: #f3f4f6; color: #6b7280; }
+    .badge-verified { background: #dcfce7; color: #166534; }
+    .badge-denied { background: #fee2e2; color: #991b1b; }
+    .badge-expired { background: #fef9c3; color: #854d0e; }
+    .badge-pending { background: #fef9c3; color: #854d0e; }
+    .badge-low { background: #f3f4f6; color: #6b7280; }
+    .badge-normal { background: #dbeafe; color: #1e40af; }
+    .badge-high { background: #fef9c3; color: #854d0e; }
+    .badge-urgent { background: #fee2e2; color: #991b1b; }
+    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all 0.15s; min-height: 44px; min-width: 44px; border: none; }
+    .btn-primary { background: #16a34a; color: white; }
+    .btn-primary:hover { background: #15803d; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-warning:hover { background: #d97706; }
+    .btn-blue { background: #2563eb; color: white; }
+    .btn-blue:hover { background: #1d4ed8; }
+    .btn-outline { border: 1px solid #d1d5db; background: white; }
+    .btn-outline:hover { background: #f9fafb; }
+    .btn-sm { padding: 4px 12px; font-size: 0.875rem; min-height: 36px; }
+    .btn-xs { padding: 2px 8px; font-size: 0.75rem; min-height: 28px; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; }
+    .input { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; width: 100%; min-height: 44px; box-sizing: border-box; }
+    .input:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+    select.input { appearance: auto; }
+    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 50; animation: slideIn 0.3s; }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .room-card { transition: all 0.2s; border-left: 4px solid #d1d5db; }
+    .room-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .room-card-available { border-left-color: #22c55e; }
+    .room-card-occupied { border-left-color: #f59e0b; }
+    .room-card-cleaning { border-left-color: #6366f1; }
+    .room-card-out_of_service { border-left-color: #ef4444; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: flex; align-items: center; justify-content: center; }
+    .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 560px; width: 95%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div id="app">
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🏥</span>
+        <h1 class="text-xl font-bold text-gray-800">ClinicOS</h1>
+        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">v0.3</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-sm text-gray-500" id="clock"></span>
+        <span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700" id="room-summary"></span>
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
+      <button onclick="switchTab('ops')" id="tab-ops" class="px-4 py-3 text-sm whitespace-nowrap tab-active">🏥 Ops Board</button>
+      <button onclick="switchTab('patients')" id="tab-patients" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">👤 Patients</button>
+      <button onclick="switchTab('appointments')" id="tab-appointments" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📅 Appointments</button>
+      <button onclick="switchTab('tasks')" id="tab-tasks" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📋 Tasks</button>
+      <button onclick="switchTab('admin')" id="tab-admin" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">⚙️ Admin</button>
+      <button onclick="switchTab('report')" id="tab-report" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📊 Report</button>
+      <button onclick="switchTab('events')" id="tab-events" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📜 Events</button>
+    </div>
+  </header>
+  <main class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- ==================== OPS BOARD (§11.3 unified) ==================== -->
+    <div id="page-ops">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+        <div class="bg-green-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-green-700" id="dash-avail">0</div><div class="text-xs text-green-600">Available</div></div>
+        <div class="bg-yellow-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-yellow-700" id="dash-occ">0</div><div class="text-xs text-yellow-600">Occupied</div></div>
+        <div class="bg-indigo-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-indigo-700" id="dash-clean">0</div><div class="text-xs text-indigo-600">Cleaning</div></div>
+        <div class="bg-red-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-red-700" id="dash-oos">0</div><div class="text-xs text-red-600">Out of Svc</div></div>
+        <div class="bg-blue-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-blue-700" id="dash-visits">0</div><div class="text-xs text-blue-600">Active Visits</div></div>
+        <div class="bg-purple-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-purple-700" id="dash-appts">0</div><div class="text-xs text-purple-600">Today Appts</div></div>
+      </div>
+      <div class="card mb-6">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h2 class="text-base font-semibold whitespace-nowrap">➕ Quick Check-In</h2>
+          <div style="position:relative;max-width:280px;width:100%">
+            <input id="qi-search" class="input" placeholder="Search patient or type new name..." autocomplete="off"
+              oninput="patientAutocomplete(this.value,'qi-results','qi')" onfocus="patientAutocomplete(this.value,'qi-results','qi')">
+            <div id="qi-results" class="absolute z-30 bg-white border rounded-lg shadow-lg w-full mt-1 max-h-48 overflow-y-auto hidden"></div>
+            <input type="hidden" id="qi-patient-id"><input type="hidden" id="qi-patient-name"><input type="hidden" id="qi-patient-ref">
+          </div>
+          <button onclick="quickCheckIn()" class="btn btn-primary btn-sm">✓ Check In</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 card">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">🚪 Room Board</h2>
+            <button onclick="refreshOps()" class="btn btn-outline btn-sm">↻</button>
+          </div>
+          <div id="room-board" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+          <p id="room-board-empty" class="text-gray-400 text-center py-8 hidden">No rooms yet — add them in Admin.</p>
+        </div>
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">⏱ Staff Hours</h2>
+          <div id="staff-hours"></div>
+          <p id="staff-hours-empty" class="text-gray-400 text-center py-8 hidden">No staff.</p>
+        </div>
+      </div>
+      <div class="card mt-6">
+        <h2 class="text-lg font-semibold mb-4">📋 Active Visits</h2>
+        <div id="visits-list"></div>
+        <p id="visits-empty" class="text-gray-400 text-center py-4 hidden">No active visits.</p>
+      </div>
+    </div>
+
+    <!-- ==================== PATIENTS (§11.1) ==================== -->
+    <div id="page-patients" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold">👤 Patient Master</h2>
+          <div class="flex gap-2">
+            <input id="pt-search" class="input" style="max-width:240px" placeholder="Search name, MRN, phone..." onkeyup="if(event.key==='Enter')searchPatients()">
+            <button onclick="searchPatients()" class="btn btn-outline btn-sm">🔍</button>
+            <button onclick="openNewPatient()" class="btn btn-primary btn-sm">+ New</button>
+          </div>
+        </div>
+        <div id="patients-list"></div>
+        <p id="patients-empty" class="text-gray-400 text-center py-4">Search or add a patient.</p>
+      </div>
+    </div>
+
+    <!-- ==================== APPOINTMENTS (§11.2) ==================== -->
+    <div id="page-appointments" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold">📅 Appointments</h2>
+          <div class="flex gap-2">
+            <input id="appt-date" type="date" class="input" style="max-width:180px" onchange="loadAppointments()">
+            <button onclick="openNewAppointment()" class="btn btn-primary btn-sm">+ New</button>
+          </div>
+        </div>
+        <div id="appts-list"></div>
+        <p id="appts-empty" class="text-gray-400 text-center py-4 hidden">No appointments for this date.</p>
+      </div>
+    </div>
+
+    <!-- ==================== TASKS (§11.9) ==================== -->
+    <div id="page-tasks" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold">📋 Tasks</h2>
+          <div class="flex gap-2">
+            <select id="task-filter" class="input" style="max-width:160px" onchange="loadTasks()">
+              <option value="">All Open</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="blocked">Blocked</option>
+            </select>
+            <button onclick="openNewTask()" class="btn btn-primary btn-sm">+ New</button>
+          </div>
+        </div>
+        <div id="tasks-list"></div>
+        <p id="tasks-empty" class="text-gray-400 text-center py-4 hidden">No tasks.</p>
+      </div>
+    </div>
+
+    <!-- ==================== ADMIN ==================== -->
+    <div id="page-admin" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">🚪 Rooms</h2>
+          <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+            <div class="text-sm font-medium text-gray-600">Add Room</div>
+            <div class="grid grid-cols-3 gap-2">
+              <input id="room-name" class="input" placeholder="Name">
+              <input id="room-code" class="input" placeholder="Code">
+              <select id="room-type" class="input"><option value="treatment">Treatment</option><option value="evaluation">Evaluation</option><option value="gym">Gym</option></select>
+            </div>
+            <button onclick="addRoom()" class="btn btn-primary w-full">+ Add Room</button>
+          </div>
+          <div id="rooms-list" class="space-y-2"></div>
+        </div>
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">👥 Staff</h2>
+          <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+            <div class="text-sm font-medium text-gray-600">Add Staff</div>
+            <div class="grid grid-cols-3 gap-2">
+              <input id="staff-name" class="input" placeholder="Name">
+              <select id="staff-role" class="input"><option value="therapist">Therapist</option><option value="front_desk">Front Desk</option><option value="manager">Manager</option></select>
+              <input id="staff-license" class="input" placeholder="License">
+            </div>
+            <button onclick="addStaff()" class="btn btn-primary w-full">+ Add Staff</button>
+          </div>
+          <div id="staff-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== REPORT (§11.10) ==================== -->
+    <div id="page-report" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-lg font-semibold">📊 Daily Report</h2>
+          <button onclick="genReport()" class="btn btn-primary">Generate</button>
+        </div>
+        <div id="rpt-content" class="hidden">
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+            <div class="bg-blue-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-blue-700" id="rpt-ci">0</div><div class="text-sm text-blue-600">Check-ins</div></div>
+            <div class="bg-green-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-green-700" id="rpt-co">0</div><div class="text-sm text-green-600">Check-outs</div></div>
+            <div class="bg-purple-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-purple-700" id="rpt-svc">0</div><div class="text-sm text-purple-600">Services</div></div>
+            <div class="bg-indigo-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-indigo-700" id="rpt-appts">0</div><div class="text-sm text-indigo-600">Appts</div></div>
+            <div class="bg-orange-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-orange-700" id="rpt-noshow">0</div><div class="text-sm text-orange-600">No-shows</div></div>
+            <div class="bg-red-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-red-700" id="rpt-open">0</div><div class="text-sm text-red-600">Open</div></div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div><h3 class="font-semibold mb-2">Staff</h3><div id="rpt-staff"></div></div>
+            <div><h3 class="font-semibold mb-2">Rooms</h3><div id="rpt-rooms"></div></div>
+          </div>
+          <div class="mt-4 text-xs text-gray-400" id="rpt-ts"></div>
+        </div>
+        <p id="rpt-empty" class="text-gray-400 text-center py-8">Click Generate.</p>
+      </div>
+    </div>
+
+    <!-- ==================== EVENTS (§11.11) ==================== -->
+    <div id="page-events" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">📜 Event Audit Log</h2>
+          <button onclick="loadEvents()" class="btn btn-outline btn-sm">↻</button>
+        </div>
+        <div id="ev-list" class="space-y-1 font-mono text-sm"></div>
+        <p id="ev-empty" class="text-gray-400 text-center py-8 hidden">No events.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal-bg hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold" id="modal-title">Edit</h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl cursor-pointer">&times;</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+// Auto-detect API base: works whether served from same host or file://
+const API = (location.protocol === 'file:' ? 'http://127.0.0.1:8000' : window.location.origin) + '/prototype';
+let rooms=[], staff=[], visits=[], tab='ops';
+
+async function api(m,p,b){
+  const o={method:m,headers:{'Content-Type':'application/json'}};
+  if(b)o.body=JSON.stringify(b);
+  const r=await fetch(API+p,o);
+  if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||'Error');}
+  return r.json();
+}
+const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH',p,b), DELETE=p=>api('DELETE',p);
+
+function toast(m,t='ok'){const e=document.getElementById('toast');e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');setTimeout(()=>e.classList.add('hidden'),3000);}
+function openModal(t,h){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=h;document.getElementById('modal').classList.remove('hidden');}
+function closeModal(){document.getElementById('modal').classList.add('hidden');}
+
+const TABS=['ops','patients','appointments','tasks','admin','report','events'];
+function switchTab(t){
+  tab=t;
+  TABS.forEach(x=>{
+    document.getElementById('page-'+x).classList.toggle('hidden',x!==t);
+    const b=document.getElementById('tab-'+x);b.classList.toggle('tab-active',x===t);b.classList.toggle('text-gray-500',x!==t);
+  });
+  if(t==='ops')refreshOps();if(t==='patients')loadPatientsList();if(t==='appointments')loadAppointments();
+  if(t==='tasks')loadTasks();if(t==='admin')refreshAdmin();if(t==='events')loadEvents();if(t==='report')loadReport();
+}
+
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleString();},1000);
+document.getElementById('clock').textContent=new Date().toLocaleString();
+document.getElementById('appt-date').value=new Date().toISOString().slice(0,10);
+
+function sortRooms(r){const o={available:0,cleaning:1,occupied:2,out_of_service:3};return[...r].sort((a,b)=>(o[a.status]||9)-(o[b.status]||9)||a.code.localeCompare(b.code));}
+
+function buildVisits(events){
+  const m={};
+  events.forEach(e=>{
+    const p=e.payload;
+    if(e.event_type==='PATIENT_CHECKIN')m[p.visit_id]={...p};
+    else if(e.event_type==='SERVICE_STARTED'&&m[p.visit_id])Object.assign(m[p.visit_id],{status:'in_service',staff_id:p.staff_id,room_id:p.room_id,service_type:p.service_type,service_start_time:p.service_start_time});
+    else if(e.event_type==='SERVICE_COMPLETED'&&m[p.visit_id])Object.assign(m[p.visit_id],{status:'service_completed',service_end_time:p.service_end_time});
+    else if(e.event_type==='PATIENT_CHECKOUT'&&m[p.visit_id])Object.assign(m[p.visit_id],{status:'checked_out',check_out_time:p.check_out_time});
+  });
+  return Object.values(m);
+}
+
+// ==================== OPS BOARD (consolidated Room Board + actions) ====================
+async function refreshOps(){
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const[br,hr,er,apptR]=await Promise.all([
+      GET('/projections/room-board'),GET('/projections/staff-hours'),GET('/events'),
+      GET('/appointments?date='+today).catch(()=>({appointments:[]}))
+    ]);
+    rooms=br.rooms||[];staff=hr.staff||[];
+    const sorted=sortRooms(rooms);
+    const c={available:0,occupied:0,cleaning:0,out_of_service:0};
+    rooms.forEach(r=>c[r.status]=(c[r.status]||0)+1);
+    document.getElementById('dash-avail').textContent=c.available;
+    document.getElementById('dash-occ').textContent=c.occupied;
+    document.getElementById('dash-clean').textContent=c.cleaning;
+    document.getElementById('dash-oos').textContent=c.out_of_service;
+    const rs=document.getElementById('room-summary');
+    rs.textContent=c.available+'/'+rooms.length+' free';
+    rs.className='text-xs px-2 py-1 rounded '+(c.available>0?'bg-green-100 text-green-700':'bg-red-100 text-red-700');
+
+    visits=buildVisits(er.events||[]);
+    const av=visits.filter(v=>v.status!=='checked_out');
+    document.getElementById('dash-visits').textContent=av.length;
+    document.getElementById('dash-appts').textContent=(apptR.appointments||[]).length;
+
+    // Room Board — consolidated: room status + patient + check-in/out actions inline
+    const be=document.getElementById('room-board'),em=document.getElementById('room-board-empty');
+    if(!sorted.length){be.innerHTML='';em.classList.remove('hidden');}
+    else{em.classList.add('hidden');be.innerHTML=sorted.map(r=>{
+      const v=r.visit_id?visits.find(x=>x.visit_id===r.visit_id):null;
+      const vs=v?v.status:null;
+      let action='';
+      if(r.status==='available') action=`<button onclick="openRoomCheckin('${r.room_id}','${r.code}')" class="btn btn-xs btn-primary w-full mt-2">➕ Check-In Here</button>`;
+      else if(r.status==='occupied'&&r.visit_id){
+        if(vs==='in_service') action=`<button onclick="endSvc('${r.visit_id}')" class="btn btn-xs btn-warning w-full mt-2">⏹ End Service</button>`;
+        else if(vs==='service_completed') action=`<button onclick="openCheckout('${r.visit_id}')" class="btn btn-xs btn-blue w-full mt-2">🚪 Check Out</button>`;
+      }
+      return `<div class="room-card room-card-${r.status} border rounded-lg p-3 ${r.status==='available'?'bg-green-50':r.status==='occupied'?'bg-yellow-50':'bg-white'}">
+        <div class="flex items-center justify-between mb-1"><span class="font-bold">${r.code}</span><span class="badge badge-${r.status}">${r.status}</span></div>
+        <div class="text-xs text-gray-500">${r.name} <span class="text-gray-400">${r.branch||''} ${r.floor||''}</span></div>
+        ${r.patient_name?`<div class="mt-2 text-sm font-medium text-yellow-800">🧑 ${r.patient_name}</div>`:`<div class="mt-1 text-xs text-green-600">✓ Empty</div>`}
+        ${action}
+        <div class="flex gap-1 mt-2">
+          <button onclick="chgRoom('${r.room_id}','available')" class="btn btn-xs ${r.status==='available'?'btn-primary':'btn-outline'}" title="Free">✓</button>
+          <button onclick="chgRoom('${r.room_id}','cleaning')" class="btn btn-xs ${r.status==='cleaning'?'btn-blue':'btn-outline'}" title="Cleaning">🧹</button>
+          <button onclick="chgRoom('${r.room_id}','out_of_service')" class="btn btn-xs ${r.status==='out_of_service'?'btn-danger':'btn-outline'}" title="OOS">✕</button>
+        </div>
+      </div>`;
+    }).join('');}
+
+    // Staff hours
+    const he=document.getElementById('staff-hours'),hm=document.getElementById('staff-hours-empty');
+    if(!staff.length){he.innerHTML='';hm.classList.remove('hidden');}
+    else{hm.classList.add('hidden');he.innerHTML=`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Name</th><th class="pb-2">Done</th><th class="pb-2">Active</th><th class="pb-2">#</th></tr></thead><tbody>${staff.map(s=>`<tr class="border-b border-gray-100"><td class="py-2 font-medium">${s.name}</td><td class="py-2">${s.completed_minutes}m</td><td class="py-2">${s.active_minutes>0?'<span class="text-yellow-600 font-medium">'+s.active_minutes+'m ⏱</span>':'0m'}</td><td class="py-2">${s.sessions_completed}</td></tr>`).join('')}</tbody></table>`;}
+
+    // Active visits
+    const vl=document.getElementById('visits-list'),ve=document.getElementById('visits-empty');
+    if(!av.length){vl.innerHTML='';ve.classList.remove('hidden');}
+    else{ve.classList.add('hidden');vl.innerHTML=`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Patient</th><th class="pb-2">Status</th><th class="pb-2">Room</th><th class="pb-2">Staff</th><th class="pb-2">Service</th><th class="pb-2">Actions</th></tr></thead><tbody>${av.map(v=>{
+      const rc=rooms.find(r=>r.room_id===v.room_id)?.code||'-';
+      const sn=staff.find(s=>s.staff_id===v.staff_id)?.name||'-';
+      let btns='';
+      if(v.status==='checked_in')btns=`<button onclick="openAssignSvc('${v.visit_id}','${v.patient_name}')" class="btn btn-xs btn-primary">▶ Start</button>`;
+      else if(v.status==='in_service')btns=`<button onclick="endSvc('${v.visit_id}')" class="btn btn-xs btn-warning">⏹ End</button>`;
+      else if(v.status==='service_completed')btns=`<button onclick="openCheckout('${v.visit_id}')" class="btn btn-xs btn-blue">🚪 Out</button>`;
+      return`<tr class="border-b border-gray-100"><td class="py-2 font-medium">${v.patient_name}</td><td class="py-2"><span class="badge badge-${v.status}">${v.status}</span></td><td class="py-2">${rc}</td><td class="py-2 text-gray-500">${sn}</td><td class="py-2">${v.service_type||'-'}</td><td class="py-2">${btns}</td></tr>`;
+    }).join('')}</tbody></table>`;}
+  }catch(e){toast('Error: '+e.message,'error');}
+}
+
+// Check-in from room card — with patient search
+function openRoomCheckin(roomId,roomCode){
+  const so=staff.map(s=>`<option value="${s.staff_id}">${s.name} (${s.role})</option>`).join('');
+  openModal('Check-In → '+roomCode,`<div class="space-y-3">
+    <div style="position:relative">
+      <input id="rc-search" class="input" placeholder="Search patient or type new name..." autocomplete="off"
+        oninput="patientAutocomplete(this.value,'rc-results','rc')" onfocus="patientAutocomplete(this.value,'rc-results','rc')">
+      <div id="rc-results" class="absolute z-30 bg-white border rounded-lg shadow-lg w-full mt-1 max-h-48 overflow-y-auto hidden"></div>
+      <input type="hidden" id="rc-patient-id"><input type="hidden" id="rc-patient-name"><input type="hidden" id="rc-patient-ref">
+    </div>
+    <div id="rc-selected" class="text-sm text-gray-500"></div>
+    <select id="rc-staff" class="input">${so}</select>
+    <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option></select>
+    <button onclick="doRoomCheckin('${roomId}')" class="btn btn-primary w-full">✓ Check In & Start</button>
+  </div>`);
+}
+async function doRoomCheckin(roomId){
+  const pid=document.getElementById('rc-patient-id').value||null;
+  const name=document.getElementById('rc-patient-name').value||document.getElementById('rc-search').value.trim();
+  const ref=document.getElementById('rc-patient-ref').value||null;
+  const sid=document.getElementById('rc-staff').value,svc=document.getElementById('rc-svc').value;
+  if(!name)return toast('Name required','error');
+  try{
+    const v=await POST('/portal/checkin',{patient_name:name,patient_ref:ref,patient_id:pid,actor_id:'frontdesk'});
+    await POST('/portal/service/start',{visit_id:v.visit_id,staff_id:sid,room_id:roomId,service_type:svc,actor_id:'therapist'});
+    toast(name+' → room assigned');closeModal();refreshOps();
+  }catch(e){toast(e.message,'error');}
+}
+
+// Assign service from visit
+function openAssignSvc(visitId,name){
+  const so=staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
+  const ro=sortRooms(rooms).filter(r=>r.status==='available').map(r=>`<option value="${r.room_id}">${r.code} — ${r.name}</option>`).join('');
+  openModal('Start Service — '+name,`<div class="space-y-3">
+    <select id="as-staff" class="input">${so}</select>
+    <select id="as-room" class="input">${ro}</select>
+    <select id="as-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option></select>
+    <button onclick="doAssignSvc('${visitId}')" class="btn btn-primary w-full">▶ Start Service</button>
+  </div>`);
+}
+async function doAssignSvc(vid){
+  const si=document.getElementById('as-staff').value,ri=document.getElementById('as-room').value,st=document.getElementById('as-svc').value;
+  if(!si||!ri)return toast('Select staff & room','error');
+  try{await POST('/portal/service/start',{visit_id:vid,staff_id:si,room_id:ri,service_type:st,actor_id:'therapist'});toast('Started');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
+}
+
+async function endSvc(vid){try{await POST('/portal/service/end',{visit_id:vid,actor_id:'therapist'});toast('Service ended');refreshOps();}catch(e){toast(e.message,'error');}}
+
+// Checkout with payment modal
+function openCheckout(vid){
+  openModal('Check Out — Payment',`<div class="space-y-3">
+    <select id="co-ps" class="input"><option value="">No payment info</option><option value="copay_collected">Copay Collected</option><option value="paid">Paid</option><option value="insurance_only">Insurance Only</option><option value="no_charge">No Charge</option></select>
+    <input id="co-amt" type="number" step="0.01" class="input" placeholder="Amount ($)">
+    <select id="co-pm" class="input"><option value="">—</option><option value="cash">Cash</option><option value="card">Card</option><option value="insurance">Insurance</option></select>
+    <button onclick="doCheckout('${vid}',true)" class="btn btn-primary w-full">🚪 Check Out</button>
+    <button onclick="doCheckout('${vid}',false)" class="btn btn-outline w-full text-sm">Skip payment — just check out</button>
+  </div>`);
+}
+async function doCheckout(vid,withPay){
+  const body={visit_id:vid,actor_id:'frontdesk'};
+  if(withPay){
+    const ps=document.getElementById('co-ps').value;if(ps)body.payment_status=ps;
+    const amt=parseFloat(document.getElementById('co-amt').value);if(amt)body.payment_amount=amt;
+    const pm=document.getElementById('co-pm').value;if(pm)body.payment_method=pm;
+  }
+  try{await POST('/portal/checkout',body);toast('Checked out');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
+}
+
+async function quickCheckIn(){
+  const pid=document.getElementById('qi-patient-id').value||null;
+  const name=document.getElementById('qi-patient-name').value||document.getElementById('qi-search').value.trim();
+  const ref=document.getElementById('qi-patient-ref').value||null;
+  if(!name)return toast('Name required','error');
+  try{await POST('/portal/checkin',{patient_name:name,patient_ref:ref,patient_id:pid,actor_id:'frontdesk'});toast(name+' checked in');document.getElementById('qi-search').value='';document.getElementById('qi-patient-id').value='';document.getElementById('qi-patient-name').value='';document.getElementById('qi-patient-ref').value='';refreshOps();}catch(e){toast(e.message,'error');}
+}
+async function chgRoom(id,st){try{await POST('/portal/room-status',{room_id:id,status:st,actor_id:'staff'});toast('Room → '+st);refreshOps();}catch(e){toast(e.message,'error');}}
+
+// Patient autocomplete for check-in flows
+let _acTimer=null;
+function patientAutocomplete(query,resultsId,prefix){
+  clearTimeout(_acTimer);
+  const box=document.getElementById(resultsId);
+  if(!query||query.length<1){box.classList.add('hidden');return;}
+  _acTimer=setTimeout(async()=>{
+    try{
+      const r=await GET('/patients?q='+encodeURIComponent(query));
+      const pts=r.patients||[];
+      if(!pts.length){box.innerHTML='<div class="px-3 py-2 text-sm text-gray-400">No matches — will create as walk-in</div>';box.classList.remove('hidden');return;}
+      box.innerHTML='';
+      pts.forEach(p=>{
+        const row=document.createElement('div');
+        row.className='px-3 py-2 text-sm hover:bg-green-50 cursor-pointer border-b border-gray-100 flex justify-between items-center';
+        row.innerHTML=`<div><span class="font-medium">${p.full_name}</span> <span class="text-gray-400 text-xs">${p.mrn||''}</span></div><span class="text-xs text-gray-400">${p.date_of_birth||''}</span>`;
+        row.addEventListener('mousedown',e=>{
+          e.preventDefault(); // prevent blur from hiding dropdown
+          selectPatient(prefix, p.patient_id, p.full_name, p.mrn||'');
+        });
+        box.appendChild(row);
+      });
+      box.classList.remove('hidden');
+    }catch(e){box.classList.add('hidden');}
+  },200);
+}
+function selectPatient(prefix,pid,name,mrn){
+  document.getElementById(prefix+'-search').value=name+(mrn?' ('+mrn+')':'');
+  document.getElementById(prefix+'-patient-id').value=pid;
+  document.getElementById(prefix+'-patient-name').value=name;
+  document.getElementById(prefix+'-patient-ref').value=mrn;
+  document.getElementById(prefix+'-results').classList.add('hidden');
+  const sel=document.getElementById(prefix+'-selected');
+  if(sel)sel.innerHTML='<span class="text-green-600">✓ '+name+'</span>'+(mrn?' <span class="text-gray-400">'+mrn+'</span>':'');
+}
+// Hide dropdowns on click outside (mousedown so it fires before blur)
+document.addEventListener('click',e=>{
+  document.querySelectorAll('[id$="-results"]').forEach(d=>{
+    if(!d.contains(e.target)&&!e.target.id?.includes('-search'))d.classList.add('hidden');
+  });
+});
+
+// ==================== PATIENTS (§11.1) ====================
+async function loadPatientsList(){
+  try{const r=await GET('/patients');renderPatients(r.patients||[]);}catch(e){toast(e.message,'error');}
+}
+async function searchPatients(){
+  const q=document.getElementById('pt-search').value.trim();
+  if(!q){loadPatientsList();return;}
+  try{const r=await GET('/patients?q='+encodeURIComponent(q));renderPatients(r.patients||[]);}catch(e){toast(e.message,'error');}
+}
+function renderPatients(pts){
+  const el=document.getElementById('patients-list'),em=document.getElementById('patients-empty');
+  if(!pts.length){el.innerHTML='';em.classList.remove('hidden');em.textContent='No patients found.';return;}
+  em.classList.add('hidden');
+  el.innerHTML=`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Name</th><th class="pb-2">MRN</th><th class="pb-2">DOB</th><th class="pb-2">Phone</th><th class="pb-2">Intake</th><th class="pb-2">Consent</th><th class="pb-2">Actions</th></tr></thead><tbody>${pts.map(p=>`<tr class="border-b border-gray-100">
+    <td class="py-2 font-medium">${p.full_name}</td><td class="py-2 text-gray-500">${p.mrn||'-'}</td>
+    <td class="py-2 text-gray-500">${p.date_of_birth||'-'}</td><td class="py-2 text-gray-500">${p.phone||'-'}</td>
+    <td class="py-2"><span class="badge badge-${p.intake_status}">${p.intake_status}</span></td>
+    <td class="py-2"><span class="badge badge-${p.consent_status}">${p.consent_status}</span></td>
+    <td class="py-2"><button onclick="openPatientDetail('${p.patient_id}')" class="btn btn-xs btn-outline">View</button> <button onclick="deletePatient('${p.patient_id}','${p.full_name.replace(/'/g,"\\'")}')" class="btn btn-xs btn-danger">Delete</button></td>
+  </tr>`).join('')}</tbody></table>`;
+}
+function openNewPatient(){
+  openModal('New Patient',`<div class="space-y-3">
+    <div class="grid grid-cols-2 gap-2"><input id="np-fn" class="input" placeholder="First name *"><input id="np-ln" class="input" placeholder="Last name *"></div>
+    <div class="grid grid-cols-2 gap-2"><input id="np-dob" type="date" class="input"><input id="np-mrn" class="input" placeholder="MRN"></div>
+    <div class="grid grid-cols-2 gap-2"><input id="np-phone" class="input" placeholder="Phone"><input id="np-email" class="input" placeholder="Email"></div>
+    <textarea id="np-addr" class="input" placeholder="Address" rows="2"></textarea>
+    <button onclick="createPatient()" class="btn btn-primary w-full">+ Create Patient</button>
+  </div>`);
+}
+async function createPatient(force){
+  const fn=document.getElementById('np-fn').value.trim(),ln=document.getElementById('np-ln').value.trim();
+  if(!fn||!ln)return toast('First & last name required','error');
+  const data={first_name:fn,last_name:ln,date_of_birth:document.getElementById('np-dob').value||null,mrn:document.getElementById('np-mrn').value||null,phone:document.getElementById('np-phone').value||null,email:document.getElementById('np-email').value||null,address:document.getElementById('np-addr').value||null};
+  try{
+    const url='/patients'+(force?'?force=true':'');
+    await POST(url,data);toast('Patient created');closeModal();loadPatientsList();
+  }catch(e){
+    if(e.message.includes('Possible duplicate')&&!force){
+      if(confirm(e.message+'\n\nClick OK to add anyway, Cancel to go back.')){createPatient(true);}
+    }else{toast(e.message,'error');}
+  }
+}
+async function deletePatient(id,name){
+  if(!confirm('Remove patient '+name+'? This hides the patient from active lists.'))return;
+  try{await DELETE('/patients/'+id);toast('Patient removed');loadPatientsList();refreshOps();}catch(e){toast(e.message,'error');}
+}
+async function openPatientDetail(pid){
+  try{
+    const[p,ins,docs]=await Promise.all([GET('/patients/'+pid),GET('/insurance/'+pid),GET('/documents/'+pid)]);
+    const pols=ins.policies||[],docList=docs.documents||[];
+    let h=`<div class="space-y-4">
+      <div class="bg-gray-50 rounded-lg p-4"><div class="font-semibold text-lg">${p.full_name}</div>
+      <div class="text-sm text-gray-500 mt-1">MRN: ${p.mrn||'-'} · DOB: ${p.date_of_birth||'-'} · Phone: ${p.phone||'-'}</div>
+      <div class="flex gap-2 mt-2"><span class="badge badge-${p.intake_status}">Intake: ${p.intake_status}</span><span class="badge badge-${p.consent_status}">Consent: ${p.consent_status}</span></div></div>
+      <div><h4 class="font-semibold mb-2">🏥 Insurance (${pols.length})</h4>`;
+    if(pols.length) h+=pols.map(i=>`<div class="bg-gray-50 rounded p-3 mb-2 text-sm"><div class="font-medium">${i.carrier_name} <span class="badge badge-${i.eligibility_status}">${i.eligibility_status}</span></div><div class="text-gray-500">Member: ${i.member_id||'-'} · Copay: $${i.copay_amount||0} · Visits: ${i.visits_used||0}/${i.visits_authorized||'?'}</div></div>`).join('');
+    else h+='<p class="text-gray-400 text-sm">No insurance on file.</p>';
+    h+=`<button onclick="openAddInsurance('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Insurance</button></div>`;
+    h+=`<div><h4 class="font-semibold mb-2">📄 Documents (${docList.length})</h4>`;
+    if(docList.length) h+=docList.map(d=>`<div class="flex justify-between py-1 text-sm"><span>${d.document_type}_${String(d.sequence_number).padStart(3,'0')}</span><span class="badge badge-${d.status}">${d.status}</span></div>`).join('');
+    else h+='<p class="text-gray-400 text-sm">No documents.</p>';
+    h+=`<button onclick="openAddDoc('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Document</button></div></div>`;
+    openModal('Patient: '+p.full_name,h);
+  }catch(e){toast(e.message,'error');}
+}
+function openAddInsurance(pid){closeModal();openModal('Add Insurance',`<div class="space-y-3">
+  <input id="ai-car" class="input" placeholder="Carrier *"><div class="grid grid-cols-2 gap-2"><input id="ai-mem" class="input" placeholder="Member ID"><input id="ai-grp" class="input" placeholder="Group #"></div>
+  <div class="grid grid-cols-2 gap-2"><input id="ai-cop" type="number" step="0.01" class="input" placeholder="Copay $"><input id="ai-vis" type="number" class="input" placeholder="Visits auth"></div>
+  <button onclick="createIns('${pid}')" class="btn btn-primary w-full">+ Add Policy</button></div>`);}
+async function createIns(pid){const c=document.getElementById('ai-car').value.trim();if(!c)return toast('Carrier required','error');try{await POST('/insurance',{patient_id:pid,carrier_name:c,member_id:document.getElementById('ai-mem').value||null,group_number:document.getElementById('ai-grp').value||null,copay_amount:parseFloat(document.getElementById('ai-cop').value)||null,visits_authorized:parseInt(document.getElementById('ai-vis').value)||null});toast('Insurance added');closeModal();openPatientDetail(pid);}catch(e){toast(e.message,'error');}}
+function openAddDoc(pid){closeModal();openModal('Add Document',`<div class="space-y-3">
+  <select id="ad-type" class="input"><option value="intake">Intake</option><option value="consent">Consent</option><option value="visitsign">Visit Sign</option><option value="insurance_card">Insurance Card</option><option value="attachment">Attachment</option></select>
+  <button onclick="createDoc('${pid}')" class="btn btn-primary w-full">+ Create</button></div>`);}
+async function createDoc(pid){try{await POST('/documents',{patient_id:pid,document_type:document.getElementById('ad-type').value});toast('Document created');closeModal();openPatientDetail(pid);}catch(e){toast(e.message,'error');}}
+
+// ==================== APPOINTMENTS (§11.2) ====================
+async function loadAppointments(){
+  const dt=document.getElementById('appt-date').value;
+  try{
+    const r=await GET('/appointments?date='+dt);const appts=r.appointments||[];
+    const el=document.getElementById('appts-list'),em=document.getElementById('appts-empty');
+    if(!appts.length){el.innerHTML='';em.classList.remove('hidden');}
+    else{em.classList.add('hidden');el.innerHTML=`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Time</th><th class="pb-2">Patient</th><th class="pb-2">Type</th><th class="pb-2">Provider</th><th class="pb-2">Status</th><th class="pb-2">Actions</th></tr></thead><tbody>${appts.map(a=>{
+      let btns='';
+      if(a.status==='scheduled'||a.status==='confirmed')btns=`<button onclick="apptCheckin('${a.appointment_id}','${a.patient_id}')" class="btn btn-xs btn-primary">Check-In</button> <button onclick="apptNoShow('${a.appointment_id}')" class="btn btn-xs btn-danger">No-Show</button> <button onclick="apptCancel('${a.appointment_id}')" class="btn btn-xs btn-outline">Cancel</button>`;
+      return`<tr class="border-b border-gray-100"><td class="py-2">${a.appointment_time||'-'}</td><td class="py-2 font-medium">${a.patient_id.slice(0,8)}…</td><td class="py-2">${a.appointment_type}</td><td class="py-2 text-gray-500">${a.provider_id?a.provider_id.slice(0,8)+'…':'-'}</td><td class="py-2"><span class="badge badge-${a.status}">${a.status}</span></td><td class="py-2">${btns}</td></tr>`;
+    }).join('')}</tbody></table>`;}
+  }catch(e){toast(e.message,'error');}
+}
+function openNewAppointment(){openModal('New Appointment',`<div class="space-y-3">
+  <input id="na-pid" class="input" placeholder="Patient ID *">
+  <input id="na-date" type="date" class="input" value="${document.getElementById('appt-date').value}">
+  <input id="na-time" type="time" class="input">
+  <select id="na-type" class="input"><option value="regular">Regular</option><option value="walk_in">Walk-In</option><option value="follow_up">Follow-Up</option><option value="eval">Eval</option></select>
+  <button onclick="createAppt()" class="btn btn-primary w-full">+ Create</button></div>`);}
+async function createAppt(){const pid=document.getElementById('na-pid').value.trim();if(!pid)return toast('Patient ID required','error');try{await POST('/appointments',{patient_id:pid,appointment_date:document.getElementById('na-date').value,appointment_time:document.getElementById('na-time').value||null,appointment_type:document.getElementById('na-type').value});toast('Appointment created');closeModal();loadAppointments();}catch(e){toast(e.message,'error');}}
+async function apptCheckin(aid,pid){try{const p=await GET('/patients/'+pid).catch(()=>null);const nm=p?p.full_name:'Patient';await POST('/portal/checkin',{patient_name:nm,patient_id:pid,appointment_id:aid,actor_id:'frontdesk'});toast(nm+' checked in');loadAppointments();}catch(e){toast(e.message,'error');}}
+async function apptNoShow(id){try{await POST('/appointments/'+id+'/no-show');toast('No-show');loadAppointments();}catch(e){toast(e.message,'error');}}
+async function apptCancel(id){try{await POST('/appointments/'+id+'/cancel');toast('Cancelled');loadAppointments();}catch(e){toast(e.message,'error');}}
+
+// ==================== TASKS (§11.9) ====================
+async function loadTasks(){
+  const st=document.getElementById('task-filter').value;
+  try{
+    const r=await GET('/tasks'+(st?'?status='+st:'?status=open'));const tasks=r.tasks||[];
+    const el=document.getElementById('tasks-list'),em=document.getElementById('tasks-empty');
+    if(!tasks.length){el.innerHTML='';em.classList.remove('hidden');}
+    else{em.classList.add('hidden');el.innerHTML=`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Title</th><th class="pb-2">Type</th><th class="pb-2">Priority</th><th class="pb-2">Status</th><th class="pb-2">Due</th><th class="pb-2">Actions</th></tr></thead><tbody>${tasks.map(t=>{
+      let btns='';
+      if(t.status==='open')btns=`<button onclick="updTask('${t.task_id}','in_progress')" class="btn btn-xs btn-primary">Start</button>`;
+      if(t.status==='in_progress')btns=`<button onclick="updTask('${t.task_id}','completed')" class="btn btn-xs btn-primary">Done</button> <button onclick="updTask('${t.task_id}','blocked')" class="btn btn-xs btn-danger">Block</button>`;
+      if(t.status==='blocked')btns=`<button onclick="updTask('${t.task_id}','in_progress')" class="btn btn-xs btn-warning">Unblock</button>`;
+      return`<tr class="border-b border-gray-100"><td class="py-2 font-medium">${t.title}</td><td class="py-2 text-gray-500">${t.task_type}</td><td class="py-2"><span class="badge badge-${t.priority}">${t.priority}</span></td><td class="py-2"><span class="badge badge-${t.status}">${t.status}</span></td><td class="py-2 text-gray-500">${t.due_date||'-'}</td><td class="py-2">${btns}</td></tr>`;
+    }).join('')}</tbody></table>`;}
+  }catch(e){toast(e.message,'error');}
+}
+function openNewTask(){openModal('New Task',`<div class="space-y-3">
+  <input id="nt-title" class="input" placeholder="Title *"><textarea id="nt-desc" class="input" placeholder="Description" rows="2"></textarea>
+  <div class="grid grid-cols-2 gap-2">
+    <select id="nt-type" class="input"><option value="general">General</option><option value="eligibility_verification">Eligibility</option><option value="insurance_followup">Insurance Follow-up</option><option value="note_completion">Note Completion</option><option value="claim_followup">Claim Follow-up</option></select>
+    <select id="nt-pri" class="input"><option value="normal">Normal</option><option value="low">Low</option><option value="high">High</option><option value="urgent">Urgent</option></select>
+  </div><input id="nt-due" type="date" class="input">
+  <button onclick="createTask()" class="btn btn-primary w-full">+ Create Task</button></div>`);}
+async function createTask(){const t=document.getElementById('nt-title').value.trim();if(!t)return toast('Title required','error');try{await POST('/tasks',{title:t,description:document.getElementById('nt-desc').value||null,task_type:document.getElementById('nt-type').value,priority:document.getElementById('nt-pri').value,due_date:document.getElementById('nt-due').value||null});toast('Task created');closeModal();loadTasks();}catch(e){toast(e.message,'error');}}
+async function updTask(id,st){try{await PATCH('/tasks/'+id,{status:st});toast('Task → '+st);loadTasks();}catch(e){toast(e.message,'error');}}
+
+// ==================== ADMIN ====================
+async function refreshAdmin(){
+  try{
+    const[br,hr]=await Promise.all([GET('/projections/room-board'),GET('/projections/staff-hours')]);
+    rooms=br.rooms||[];staff=hr.staff||[];
+    document.getElementById('rooms-list').innerHTML=rooms.length?rooms.map(r=>`
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div class="flex items-center gap-2 flex-wrap"><span class="font-bold">${r.code}</span><span>— ${r.name}</span><span class="text-xs text-gray-400">${r.branch||''} ${r.floor||''}</span><span class="badge badge-${r.status}">${r.status}</span></div>
+        <div class="flex gap-1"><button onclick="editRoom('${r.room_id}',\`${r.name}\`,\`${r.code}\`)" class="btn btn-xs btn-outline">✏️</button><button onclick="togRoom('${r.room_id}','${r.status}')" class="btn btn-xs ${r.status==='out_of_service'?'btn-primary':'btn-danger'}">${r.status==='out_of_service'?'✓':'✕'}</button><button onclick="deleteRoom('${r.room_id}','${r.code}')" class="btn btn-xs btn-danger">🗑</button></div>
+      </div>`).join(''):'<p class="text-gray-400 text-center py-4">No rooms.</p>';
+    document.getElementById('staff-list').innerHTML=staff.length?staff.map(s=>`
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div><span class="font-medium">${s.name}</span> <span class="text-gray-500 text-sm">(${s.role})</span></div>
+        <button onclick="editStaff('${s.staff_id}',\`${s.name}\`,'${s.role}')" class="btn btn-xs btn-outline">✏️</button>
+      </div>`).join(''):'<p class="text-gray-400 text-center py-4">No staff.</p>';
+  }catch(e){toast(e.message,'error');}
+}
+async function addRoom(){const n=document.getElementById('room-name').value.trim(),c=document.getElementById('room-code').value.trim(),t=document.getElementById('room-type').value;if(!n||!c)return toast('Name & code required','error');try{await POST('/admin/rooms',{name:n,code:c,room_type:t});toast('Room added');document.getElementById('room-name').value='';document.getElementById('room-code').value='';refreshAdmin();}catch(e){toast(e.message,'error');}}
+function editRoom(id,name,code){openModal('Edit Room',`<div class="space-y-3"><input id="er-name" class="input" value="${name}"><input id="er-code" class="input" value="${code}"><button onclick="saveRoom('${id}')" class="btn btn-primary w-full">Save</button></div>`);}
+async function saveRoom(id){const n=document.getElementById('er-name').value.trim(),c=document.getElementById('er-code').value.trim();if(!n||!c)return toast('Required','error');try{await PATCH('/admin/rooms/'+id,{name:n,code:c});toast('Updated');closeModal();refreshAdmin();}catch(e){toast(e.message,'error');}}
+async function togRoom(id,st){try{await PATCH('/admin/rooms/'+id,{status:st==='out_of_service'?'available':'out_of_service'});toast(st==='out_of_service'?'Activated':'Disabled');refreshAdmin();}catch(e){toast(e.message,'error');}}
+async function deleteRoom(id,code){
+  if(!confirm('Delete room '+code+'?'))return;
+  try{await DELETE('/admin/rooms/'+id);toast('Room deleted');refreshAdmin();refreshOps();}catch(e){toast(e.message,'error');}
+}
+async function addStaff(){const n=document.getElementById('staff-name').value.trim(),r=document.getElementById('staff-role').value,l=document.getElementById('staff-license').value.trim()||null;if(!n)return toast('Name required','error');try{await POST('/admin/staff',{name:n,role:r,license_id:l});toast('Staff added');document.getElementById('staff-name').value='';document.getElementById('staff-license').value='';refreshAdmin();}catch(e){toast(e.message,'error');}}
+function editStaff(id,name,role){openModal('Edit Staff',`<div class="space-y-3"><input id="es-name" class="input" value="${name}"><select id="es-role" class="input"><option ${role==='therapist'?'selected':''}>therapist</option><option ${role==='front_desk'?'selected':''}>front_desk</option><option ${role==='manager'?'selected':''}>manager</option></select><button onclick="saveStaff('${id}')" class="btn btn-primary w-full">Save</button></div>`);}
+async function saveStaff(id){const n=document.getElementById('es-name').value.trim(),r=document.getElementById('es-role').value;if(!n)return toast('Required','error');try{await PATCH('/admin/staff/'+id,{name:n,role:r});toast('Updated');closeModal();refreshAdmin();}catch(e){toast(e.message,'error');}}
+
+// ==================== REPORT ====================
+async function genReport(){try{const r=await POST('/reports/daily/generate',{actor_id:'manager'});showReport(r);toast('Generated');}catch(e){toast(e.message,'error');}}
+async function loadReport(){try{showReport(await GET('/reports/daily'));}catch(e){document.getElementById('rpt-content').classList.add('hidden');document.getElementById('rpt-empty').classList.remove('hidden');}}
+function showReport(r){
+  document.getElementById('rpt-content').classList.remove('hidden');document.getElementById('rpt-empty').classList.add('hidden');
+  document.getElementById('rpt-ci').textContent=r.total_check_ins;document.getElementById('rpt-co').textContent=r.total_check_outs;
+  document.getElementById('rpt-svc').textContent=r.total_services_completed;document.getElementById('rpt-open').textContent=r.open_sessions;
+  document.getElementById('rpt-appts').textContent=r.total_appointments||0;document.getElementById('rpt-noshow').textContent=r.no_shows||0;
+  document.getElementById('rpt-ts').textContent='Generated: '+new Date(r.generated_at).toLocaleString();
+  const sh=r.staff_hours||[];document.getElementById('rpt-staff').innerHTML=sh.length?`<table class="w-full text-sm"><tbody>${sh.map(s=>`<tr class="border-b border-gray-100"><td class="py-1">${s.name}</td><td class="py-1">${s.completed_minutes+s.active_minutes}m</td><td class="py-1">${s.sessions_completed} sess</td></tr>`).join('')}</tbody></table>`:'<p class="text-gray-400">—</p>';
+  const rr=r.room_board_snapshot||[];document.getElementById('rpt-rooms').innerHTML=rr.length?rr.map(x=>`<div class="flex justify-between py-1 text-sm"><span>${x.code} ${x.name}</span><span class="badge badge-${x.status}">${x.status}</span></div>`).join(''):'<p class="text-gray-400">—</p>';
+}
+
+// ==================== EVENTS ====================
+async function loadEvents(){
+  try{
+    const d=await GET('/events');const el=document.getElementById('ev-list'),em=document.getElementById('ev-empty');
+    if(!d.events.length){el.innerHTML='';em.classList.remove('hidden');}
+    else{em.classList.add('hidden');el.innerHTML=[...d.events].reverse().map(e=>`<div class="flex items-start gap-3 py-2 border-b border-gray-100"><span class="text-xs text-gray-400 whitespace-nowrap">${new Date(e.occurred_at).toLocaleTimeString()}</span><span class="font-medium text-xs px-2 py-0.5 rounded bg-gray-100">${e.event_type}</span><span class="text-xs text-gray-500">${e.actor_id}</span></div>`).join('');}
+  }catch(e){toast(e.message,'error');}
+}
+
+setInterval(()=>{if(tab==='ops')refreshOps();},5000);
+refreshOps();
+</script>
+</body>
+</html>

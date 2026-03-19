@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClinicOS — Operations Board</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            clinic: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a', 700: '#15803d', 800: '#166534' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .tab-active { border-bottom: 3px solid #16a34a; color: #166534; font-weight: 600; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-available { background: #dcfce7; color: #166534; }
+    .badge-occupied { background: #fef9c3; color: #854d0e; }
+    .badge-cleaning { background: #e0e7ff; color: #3730a3; }
+    .badge-out_of_service { background: #fee2e2; color: #991b1b; }
+    .badge-checked_in { background: #dbeafe; color: #1e40af; }
+    .badge-in_service { background: #fef9c3; color: #854d0e; }
+    .badge-service_completed { background: #dcfce7; color: #166534; }
+    .badge-checked_out { background: #f3f4f6; color: #374151; }
+    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all 0.15s; min-height: 44px; min-width: 44px; }
+    .btn-primary { background: #16a34a; color: white; }
+    .btn-primary:hover { background: #15803d; }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-outline { border: 1px solid #d1d5db; background: white; }
+    .btn-outline:hover { background: #f9fafb; }
+    .btn-sm { padding: 4px 12px; font-size: 0.875rem; min-height: 36px; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; }
+    .input { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; width: 100%; min-height: 44px; }
+    .input:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+    select.input { appearance: auto; }
+    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 50; animation: slideIn 0.3s; }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div id="app">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🏥</span>
+        <h1 class="text-xl font-bold text-gray-800">ClinicOS</h1>
+        <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">Prototype</span>
+      </div>
+      <div class="text-sm text-gray-500" id="clock"></div>
+    </div>
+    <!-- Tabs -->
+    <div class="max-w-7xl mx-auto px-4 flex gap-1">
+      <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-4 py-3 text-sm tab-active">📊 Dashboard</button>
+      <button onclick="switchTab('portal')" id="tab-portal" class="px-4 py-3 text-sm text-gray-500 hover:text-gray-700">🏥 Patient Portal</button>
+      <button onclick="switchTab('admin')" id="tab-admin" class="px-4 py-3 text-sm text-gray-500 hover:text-gray-700">⚙️ Admin</button>
+      <button onclick="switchTab('report')" id="tab-report" class="px-4 py-3 text-sm text-gray-500 hover:text-gray-700">📋 Daily Report</button>
+      <button onclick="switchTab('events')" id="tab-events" class="px-4 py-3 text-sm text-gray-500 hover:text-gray-700">📜 Event Log</button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- ==================== DASHBOARD ==================== -->
+    <div id="page-dashboard">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Room Board -->
+        <div class="card">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">🚪 Room Board</h2>
+            <button onclick="refreshDashboard()" class="btn btn-outline btn-sm">↻ Refresh</button>
+          </div>
+          <div id="room-board" class="grid grid-cols-2 gap-3"></div>
+          <p id="room-board-empty" class="text-gray-400 text-center py-8 hidden">No rooms configured. Go to Admin → Rooms.</p>
+        </div>
+
+        <!-- Staff Hours -->
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">⏱ Staff Hours (Today)</h2>
+          <div id="staff-hours"></div>
+          <p id="staff-hours-empty" class="text-gray-400 text-center py-8 hidden">No staff configured. Go to Admin → Staff.</p>
+        </div>
+      </div>
+
+      <!-- Today's Visits -->
+      <div class="card mt-6">
+        <h2 class="text-lg font-semibold mb-4">📋 Today's Visits</h2>
+        <div id="visits-list"></div>
+        <p id="visits-empty" class="text-gray-400 text-center py-4 hidden">No visits today.</p>
+      </div>
+    </div>
+
+    <!-- ==================== PATIENT PORTAL ==================== -->
+    <div id="page-portal" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Check-in Form -->
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">➕ Patient Check-In</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
+              <input id="checkin-name" class="input" placeholder="Full name">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">MRN / Reference</label>
+              <input id="checkin-ref" class="input" placeholder="Optional">
+            </div>
+            <button onclick="doCheckIn()" class="btn btn-primary w-full">✓ Check In Patient</button>
+          </div>
+        </div>
+
+        <!-- Service Actions -->
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">🔧 Service Actions</h2>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Select Visit</label>
+              <select id="action-visit" class="input" onchange="onVisitSelect()">
+                <option value="">-- Select a checked-in patient --</option>
+              </select>
+            </div>
+            <div id="action-panel" class="hidden space-y-3">
+              <div id="start-service-panel" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Staff</label>
+                    <select id="action-staff" class="input"></select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                    <select id="action-room" class="input"></select>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                  <select id="action-service-type" class="input">
+                    <option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option>
+                  </select>
+                </div>
+                <button onclick="doStartService()" class="btn btn-primary w-full">▶ Start Service</button>
+              </div>
+              <div id="end-service-panel" class="hidden space-y-3">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm">
+                  <span id="service-info" class="text-yellow-800"></span>
+                </div>
+                <button onclick="doEndService()" class="btn btn-danger w-full">⏹ End Service</button>
+              </div>
+              <div id="checkout-panel" class="hidden">
+                <button onclick="doCheckout()" class="btn btn-outline w-full">🚪 Check Out Patient</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room Status Quick Actions -->
+      <div class="card mt-6">
+        <h2 class="text-lg font-semibold mb-4">🚪 Room Status Quick Change</h2>
+        <div id="room-status-actions" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      </div>
+    </div>
+
+    <!-- ==================== ADMIN ==================== -->
+    <div id="page-admin" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Rooms -->
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">🚪 Rooms</h2>
+          <div class="space-y-3 mb-4">
+            <div class="grid grid-cols-3 gap-2">
+              <input id="room-name" class="input" placeholder="Room name">
+              <input id="room-code" class="input" placeholder="Code (R1)">
+              <select id="room-type" class="input">
+                <option value="treatment">Treatment</option>
+                <option value="evaluation">Evaluation</option>
+                <option value="gym">Gym</option>
+              </select>
+            </div>
+            <button onclick="createRoom()" class="btn btn-primary w-full">+ Add Room</button>
+          </div>
+          <div id="rooms-list" class="space-y-2"></div>
+        </div>
+
+        <!-- Staff -->
+        <div class="card">
+          <h2 class="text-lg font-semibold mb-4">👥 Staff</h2>
+          <div class="space-y-3 mb-4">
+            <div class="grid grid-cols-3 gap-2">
+              <input id="staff-name" class="input" placeholder="Name">
+              <select id="staff-role" class="input">
+                <option value="therapist">Therapist</option>
+                <option value="front_desk">Front Desk</option>
+                <option value="manager">Manager</option>
+              </select>
+              <input id="staff-license" class="input" placeholder="License ID">
+            </div>
+            <button onclick="createStaff()" class="btn btn-primary w-full">+ Add Staff</button>
+          </div>
+          <div id="staff-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== DAILY REPORT ==================== -->
+    <div id="page-report" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-lg font-semibold">📋 Daily Report</h2>
+          <button onclick="generateReport()" class="btn btn-primary">Generate Report</button>
+        </div>
+        <div id="report-content" class="hidden">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-blue-50 rounded-lg p-4 text-center">
+              <div class="text-3xl font-bold text-blue-700" id="rpt-checkins">0</div>
+              <div class="text-sm text-blue-600">Check-ins</div>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4 text-center">
+              <div class="text-3xl font-bold text-green-700" id="rpt-checkouts">0</div>
+              <div class="text-sm text-green-600">Check-outs</div>
+            </div>
+            <div class="bg-purple-50 rounded-lg p-4 text-center">
+              <div class="text-3xl font-bold text-purple-700" id="rpt-services">0</div>
+              <div class="text-sm text-purple-600">Services</div>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4 text-center">
+              <div class="text-3xl font-bold text-red-700" id="rpt-open">0</div>
+              <div class="text-sm text-red-600">Open Sessions</div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h3 class="font-semibold mb-2">Staff Hours</h3>
+              <div id="rpt-staff-hours"></div>
+            </div>
+            <div>
+              <h3 class="font-semibold mb-2">Room Snapshot</h3>
+              <div id="rpt-room-snapshot"></div>
+            </div>
+          </div>
+          <div class="mt-4 text-xs text-gray-400" id="rpt-generated-at"></div>
+        </div>
+        <p id="report-empty" class="text-gray-400 text-center py-8">Click "Generate Report" to create today's summary.</p>
+      </div>
+    </div>
+
+    <!-- ==================== EVENT LOG ==================== -->
+    <div id="page-events" class="hidden">
+      <div class="card">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">📜 Event Log</h2>
+          <button onclick="loadEvents()" class="btn btn-outline btn-sm">↻ Refresh</button>
+        </div>
+        <div id="events-list" class="space-y-1 font-mono text-sm"></div>
+        <p id="events-empty" class="text-gray-400 text-center py-8 hidden">No events recorded yet.</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const API = 'http://127.0.0.1:8000/prototype';
+
+// ---- State ----
+let rooms = [], staff = [], visits = [], currentTab = 'dashboard';
+
+// ---- API helpers ----
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'API error');
+  }
+  return res.json();
+}
+const GET = (p) => api('GET', p);
+const POST = (p, b) => api('POST', p, b);
+const PATCH = (p, b) => api('PATCH', p, b);
+
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.className = `toast ${type === 'error' ? 'bg-red-600' : 'bg-clinic-600'}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+// ---- Tab switching ----
+function switchTab(tab) {
+  currentTab = tab;
+  ['dashboard', 'portal', 'admin', 'report', 'events'].forEach(t => {
+    document.getElementById('page-' + t).classList.toggle('hidden', t !== tab);
+    document.getElementById('tab-' + t).classList.toggle('tab-active', t === tab);
+    if (t !== tab) document.getElementById('tab-' + t).classList.add('text-gray-500');
+    else document.getElementById('tab-' + t).classList.remove('text-gray-500');
+  });
+  if (tab === 'dashboard') refreshDashboard();
+  if (tab === 'portal') refreshPortal();
+  if (tab === 'admin') refreshAdmin();
+  if (tab === 'events') loadEvents();
+  if (tab === 'report') loadReport();
+}
+
+// ---- Clock ----
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleString();
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ==================== DASHBOARD ====================
+async function refreshDashboard() {
+  try {
+    const [boardRes, hoursRes, eventsRes] = await Promise.all([
+      GET('/projections/room-board'),
+      GET('/projections/staff-hours'),
+      GET('/events'),
+    ]);
+    rooms = boardRes.rooms || [];
+    const staffHours = hoursRes.staff || [];
+
+    // Room board
+    const boardEl = document.getElementById('room-board');
+    const emptyEl = document.getElementById('room-board-empty');
+    if (rooms.length === 0) {
+      boardEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+    } else {
+      emptyEl.classList.add('hidden');
+      boardEl.innerHTML = rooms.map(r => `
+        <div class="border rounded-lg p-3 ${r.status === 'occupied' ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-gray-200'}">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-semibold text-sm">${r.code}</span>
+            <span class="badge badge-${r.status}">${r.status}</span>
+          </div>
+          <div class="text-xs text-gray-500">${r.name}</div>
+          ${r.patient_name ? `<div class="mt-2 text-sm font-medium text-yellow-800">🧑 ${r.patient_name}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    // Staff hours
+    const hoursEl = document.getElementById('staff-hours');
+    const hoursEmpty = document.getElementById('staff-hours-empty');
+    if (staffHours.length === 0) {
+      hoursEl.innerHTML = '';
+      hoursEmpty.classList.remove('hidden');
+    } else {
+      hoursEmpty.classList.add('hidden');
+      hoursEl.innerHTML = `
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-gray-500 border-b">
+            <th class="pb-2">Name</th><th class="pb-2">Role</th><th class="pb-2">Completed</th><th class="pb-2">Active</th><th class="pb-2">Sessions</th>
+          </tr></thead>
+          <tbody>
+            ${staffHours.map(s => `
+              <tr class="border-b border-gray-100">
+                <td class="py-2 font-medium">${s.name}</td>
+                <td class="py-2 text-gray-500">${s.role}</td>
+                <td class="py-2">${s.completed_minutes}m</td>
+                <td class="py-2">${s.active_minutes > 0 ? `<span class="text-yellow-600 font-medium">${s.active_minutes}m ⏱</span>` : '0m'}</td>
+                <td class="py-2">${s.sessions_completed}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    // Visits from events
+    const allEvents = eventsRes.events || [];
+    const checkins = allEvents.filter(e => e.event_type === 'PATIENT_CHECKIN');
+    const visitsEl = document.getElementById('visits-list');
+    const visitsEmpty = document.getElementById('visits-empty');
+    if (checkins.length === 0) {
+      visitsEl.innerHTML = '';
+      visitsEmpty.classList.remove('hidden');
+    } else {
+      visitsEmpty.classList.add('hidden');
+      visitsEl.innerHTML = `
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-gray-500 border-b">
+            <th class="pb-2">Patient</th><th class="pb-2">Status</th><th class="pb-2">Check-in</th><th class="pb-2">Service</th>
+          </tr></thead>
+          <tbody>
+            ${checkins.map(e => {
+              const p = e.payload;
+              const status = p.status || 'checked_in';
+              return `<tr class="border-b border-gray-100">
+                <td class="py-2 font-medium">${p.patient_name}</td>
+                <td class="py-2"><span class="badge badge-${status}">${status}</span></td>
+                <td class="py-2 text-gray-500">${new Date(p.check_in_time).toLocaleTimeString()}</td>
+                <td class="py-2">${p.service_type || '-'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  } catch (e) {
+    toast('Failed to load dashboard: ' + e.message, 'error');
+  }
+}
+
+// ==================== ADMIN ====================
+async function refreshAdmin() {
+  try {
+    const [boardRes, hoursRes] = await Promise.all([
+      GET('/projections/room-board'),
+      GET('/projections/staff-hours'),
+    ]);
+    rooms = boardRes.rooms || [];
+    staff = hoursRes.staff || [];
+
+    document.getElementById('rooms-list').innerHTML = rooms.map(r => `
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div>
+          <span class="font-medium">${r.code}</span> — ${r.name}
+          <span class="badge badge-${r.status} ml-2">${r.status}</span>
+        </div>
+        <span class="text-xs text-gray-400">${r.room_id.slice(0, 8)}...</span>
+      </div>
+    `).join('') || '<p class="text-gray-400 text-center py-4">No rooms yet.</p>';
+
+    document.getElementById('staff-list').innerHTML = staff.map(s => `
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+        <div>
+          <span class="font-medium">${s.name}</span>
+          <span class="text-gray-500 text-sm ml-1">(${s.role})</span>
+        </div>
+        <span class="text-xs text-gray-400">${s.staff_id.slice(0, 8)}...</span>
+      </div>
+    `).join('') || '<p class="text-gray-400 text-center py-4">No staff yet.</p>';
+  } catch (e) {
+    toast('Failed to load admin data: ' + e.message, 'error');
+  }
+}
+
+async function createRoom() {
+  const name = document.getElementById('room-name').value.trim();
+  const code = document.getElementById('room-code').value.trim();
+  const room_type = document.getElementById('room-type').value;
+  if (!name || !code) return toast('Name and code required', 'error');
+  try {
+    await POST('/admin/rooms', { name, code, room_type });
+    toast('Room created');
+    document.getElementById('room-name').value = '';
+    document.getElementById('room-code').value = '';
+    refreshAdmin();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function createStaff() {
+  const name = document.getElementById('staff-name').value.trim();
+  const role = document.getElementById('staff-role').value;
+  const license_id = document.getElementById('staff-license').value.trim() || null;
+  if (!name) return toast('Name required', 'error');
+  try {
+    await POST('/admin/staff', { name, role, license_id });
+    toast('Staff created');
+    document.getElementById('staff-name').value = '';
+    document.getElementById('staff-license').value = '';
+    refreshAdmin();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== PORTAL ====================
+async function refreshPortal() {
+  try {
+    const [boardRes, hoursRes, eventsRes] = await Promise.all([
+      GET('/projections/room-board'),
+      GET('/projections/staff-hours'),
+      GET('/events'),
+    ]);
+    rooms = boardRes.rooms || [];
+    staff = hoursRes.staff || [];
+
+    // Build visit state from events
+    visits = buildVisitState(eventsRes.events || []);
+
+    // Populate visit selector (show active visits)
+    const sel = document.getElementById('action-visit');
+    const activeVisits = visits.filter(v => v.status !== 'checked_out');
+    sel.innerHTML = '<option value="">-- Select patient --</option>' +
+      activeVisits.map(v => `<option value="${v.visit_id}">${v.patient_name} (${v.status})</option>`).join('');
+
+    // Populate staff/room selectors
+    document.getElementById('action-staff').innerHTML =
+      staff.map(s => `<option value="${s.staff_id}">${s.name}</option>`).join('');
+    const availableRooms = rooms.filter(r => r.status === 'available');
+    document.getElementById('action-room').innerHTML =
+      availableRooms.map(r => `<option value="${r.room_id}">${r.code} — ${r.name}</option>`).join('');
+
+    // Room status quick actions
+    document.getElementById('room-status-actions').innerHTML = rooms.map(r => `
+      <div class="border rounded-lg p-3">
+        <div class="font-semibold text-sm mb-2">${r.code} <span class="badge badge-${r.status}">${r.status}</span></div>
+        <select onchange="changeRoomStatus('${r.room_id}', this.value)" class="input text-sm">
+          <option value="" disabled selected>Change...</option>
+          <option value="available">Available</option>
+          <option value="occupied">Occupied</option>
+          <option value="cleaning">Cleaning</option>
+          <option value="out_of_service">Out of Service</option>
+        </select>
+      </div>
+    `).join('') || '<p class="col-span-4 text-gray-400 text-center py-4">No rooms configured.</p>';
+
+    onVisitSelect();
+  } catch (e) {
+    toast('Failed to load portal: ' + e.message, 'error');
+  }
+}
+
+function buildVisitState(events) {
+  const map = {};
+  events.forEach(e => {
+    const p = e.payload;
+    if (e.event_type === 'PATIENT_CHECKIN') {
+      map[p.visit_id] = { ...p };
+    } else if (e.event_type === 'SERVICE_STARTED' && map[p.visit_id]) {
+      Object.assign(map[p.visit_id], { status: 'in_service', staff_id: p.staff_id, room_id: p.room_id, service_type: p.service_type, service_start_time: p.service_start_time });
+    } else if (e.event_type === 'SERVICE_COMPLETED' && map[p.visit_id]) {
+      Object.assign(map[p.visit_id], { status: 'service_completed', service_end_time: p.service_end_time });
+    } else if (e.event_type === 'PATIENT_CHECKOUT' && map[p.visit_id]) {
+      Object.assign(map[p.visit_id], { status: 'checked_out', check_out_time: p.check_out_time });
+    }
+  });
+  return Object.values(map);
+}
+
+function onVisitSelect() {
+  const visitId = document.getElementById('action-visit').value;
+  const panel = document.getElementById('action-panel');
+  const startPanel = document.getElementById('start-service-panel');
+  const endPanel = document.getElementById('end-service-panel');
+  const checkoutPanel = document.getElementById('checkout-panel');
+
+  if (!visitId) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+
+  const visit = visits.find(v => v.visit_id === visitId);
+  if (!visit) return;
+
+  startPanel.classList.toggle('hidden', visit.status !== 'checked_in');
+  endPanel.classList.toggle('hidden', visit.status !== 'in_service');
+  checkoutPanel.classList.toggle('hidden', visit.status !== 'service_completed');
+
+  if (visit.status === 'in_service') {
+    const staffName = staff.find(s => s.staff_id === visit.staff_id)?.name || 'Unknown';
+    const roomCode = rooms.find(r => r.room_id === visit.room_id)?.code || 'Unknown';
+    document.getElementById('service-info').textContent =
+      `🔵 In service: ${visit.service_type} with ${staffName} in ${roomCode} (started ${new Date(visit.service_start_time).toLocaleTimeString()})`;
+  }
+}
+
+async function doCheckIn() {
+  const name = document.getElementById('checkin-name').value.trim();
+  const ref = document.getElementById('checkin-ref').value.trim() || null;
+  if (!name) return toast('Patient name required', 'error');
+  try {
+    await POST('/portal/checkin', { patient_name: name, patient_ref: ref, actor_id: 'frontdesk' });
+    toast(`${name} checked in`);
+    document.getElementById('checkin-name').value = '';
+    document.getElementById('checkin-ref').value = '';
+    refreshPortal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function doStartService() {
+  const visit_id = document.getElementById('action-visit').value;
+  const staff_id = document.getElementById('action-staff').value;
+  const room_id = document.getElementById('action-room').value;
+  const service_type = document.getElementById('action-service-type').value;
+  if (!visit_id || !staff_id || !room_id) return toast('Select visit, staff, and room', 'error');
+  try {
+    await POST('/portal/service/start', { visit_id, staff_id, room_id, service_type, actor_id: 'therapist' });
+    toast('Service started');
+    refreshPortal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function doEndService() {
+  const visit_id = document.getElementById('action-visit').value;
+  if (!visit_id) return;
+  try {
+    await POST('/portal/service/end', { visit_id, actor_id: 'therapist' });
+    toast('Service ended');
+    refreshPortal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function doCheckout() {
+  const visit_id = document.getElementById('action-visit').value;
+  if (!visit_id) return;
+  try {
+    await POST('/portal/checkout', { visit_id, actor_id: 'frontdesk' });
+    toast('Patient checked out');
+    refreshPortal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function changeRoomStatus(roomId, status) {
+  if (!status) return;
+  try {
+    await POST('/portal/room-status', { room_id: roomId, status, actor_id: 'staff' });
+    toast(`Room status → ${status}`);
+    refreshPortal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ==================== REPORT ====================
+async function generateReport() {
+  try {
+    const report = await POST('/reports/daily/generate', { actor_id: 'manager' });
+    displayReport(report);
+    toast('Report generated');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadReport() {
+  try {
+    const report = await GET('/reports/daily');
+    displayReport(report);
+  } catch (e) {
+    document.getElementById('report-content').classList.add('hidden');
+    document.getElementById('report-empty').classList.remove('hidden');
+  }
+}
+
+function displayReport(r) {
+  document.getElementById('report-content').classList.remove('hidden');
+  document.getElementById('report-empty').classList.add('hidden');
+  document.getElementById('rpt-checkins').textContent = r.total_check_ins;
+  document.getElementById('rpt-checkouts').textContent = r.total_check_outs;
+  document.getElementById('rpt-services').textContent = r.total_services_completed;
+  document.getElementById('rpt-open').textContent = r.open_sessions;
+  document.getElementById('rpt-generated-at').textContent = `Generated: ${new Date(r.generated_at).toLocaleString()}`;
+
+  const sh = r.staff_hours || [];
+  document.getElementById('rpt-staff-hours').innerHTML = sh.length ? `
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Staff</th><th class="pb-2">Minutes</th><th class="pb-2">Sessions</th></tr></thead>
+      <tbody>${sh.map(s => `<tr class="border-b border-gray-100"><td class="py-2">${s.name}</td><td class="py-2">${s.completed_minutes + s.active_minutes}m</td><td class="py-2">${s.sessions_completed}</td></tr>`).join('')}</tbody>
+    </table>` : '<p class="text-gray-400">No staff data</p>';
+
+  const rs = r.room_board_snapshot || [];
+  document.getElementById('rpt-room-snapshot').innerHTML = rs.length ? rs.map(r => `
+    <div class="flex items-center justify-between py-1 text-sm">
+      <span>${r.code} ${r.name}</span>
+      <span class="badge badge-${r.status}">${r.status}</span>
+    </div>
+  `).join('') : '<p class="text-gray-400">No room data</p>';
+}
+
+// ==================== EVENTS ====================
+async function loadEvents() {
+  try {
+    const data = await GET('/events');
+    const el = document.getElementById('events-list');
+    const empty = document.getElementById('events-empty');
+    if (data.events.length === 0) {
+      el.innerHTML = '';
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      el.innerHTML = data.events.map(e => `
+        <div class="flex items-start gap-3 py-2 border-b border-gray-100">
+          <span class="text-xs text-gray-400 whitespace-nowrap">${new Date(e.occurred_at).toLocaleTimeString()}</span>
+          <span class="font-medium text-xs px-2 py-0.5 rounded bg-gray-100">${e.event_type}</span>
+          <span class="text-xs text-gray-500">actor: ${e.actor_id}</span>
+        </div>
+      `).join('');
+    }
+  } catch (e) { toast('Failed to load events: ' + e.message, 'error'); }
+}
+
+// ---- Auto-refresh ----
+setInterval(() => {
+  if (currentTab === 'dashboard') refreshDashboard();
+}, 5000);
+
+// ---- Init ----
+refreshDashboard();
+</script>
+
+</body>
+</html>

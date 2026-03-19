@@ -1,0 +1,366 @@
+"""API routes backed by SQLite database — aligned with PRD v2.0."""
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.schemas.prototype import (
+    AppointmentCreate,
+    AppointmentUpdate,
+    ClinicalNoteCreate,
+    ClinicalNoteSign,
+    ClinicalNoteUpdate,
+    DailyReportGenerate,
+    DocumentCreate,
+    DocumentSign,
+    DocumentUpdate,
+    InsurancePolicyCreate,
+    InsurancePolicyUpdate,
+    PatientCheckIn,
+    PatientCheckout,
+    PatientCreate,
+    PatientUpdate,
+    RoomCreate,
+    RoomStatusChange,
+    RoomUpdate,
+    ServiceEnd,
+    ServiceStart,
+    StaffCreate,
+    StaffUpdate,
+    TaskCreate,
+    TaskUpdate,
+)
+from app.services import db_service
+
+router = APIRouter(prefix="/prototype", tags=["prototype"])
+
+
+# ==================== ADMIN ====================
+
+@router.post("/admin/rooms")
+async def create_room(payload: RoomCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_room(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.patch("/admin/rooms/{room_id}")
+async def update_room(room_id: str, payload: RoomUpdate, db: AsyncSession = Depends(get_db)):
+    room = await db_service.update_room(db, room_id=room_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+@router.delete("/admin/rooms/{room_id}")
+async def delete_room(room_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db_service.delete_room(db, room_id=room_id, actor_id="admin")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not result:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return {"deleted": True, "room": result}
+
+
+@router.post("/admin/staff")
+async def create_staff(payload: StaffCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_staff(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.patch("/admin/staff/{staff_id}")
+async def update_staff(staff_id: str, payload: StaffUpdate, db: AsyncSession = Depends(get_db)):
+    staff = await db_service.update_staff(db, staff_id=staff_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    return staff
+
+
+@router.delete("/admin/staff/{staff_id}")
+async def delete_staff(staff_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db_service.delete_staff(db, staff_id=staff_id, actor_id="admin")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not result:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    return {"deleted": True, "staff": result}
+
+
+@router.delete("/portal/visits/{visit_id}")
+async def delete_visit(visit_id: str, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db_service.delete_visit(db, visit_id=visit_id, actor_id="admin")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not result:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return {"deleted": True, "visit": result}
+
+
+# ==================== PORTAL ====================
+
+@router.post("/portal/checkin")
+async def patient_checkin(payload: PatientCheckIn, db: AsyncSession = Depends(get_db)):
+    return await db_service.patient_checkin(
+        db, actor_id=payload.actor_id,
+        patient_name=payload.patient_name,
+        patient_ref=payload.patient_ref,
+        patient_id=payload.patient_id,
+        appointment_id=payload.appointment_id,
+    )
+
+
+@router.post("/portal/service/start")
+async def service_start(payload: ServiceStart, db: AsyncSession = Depends(get_db)):
+    try:
+        visit = await db_service.service_start(
+            db, visit_id=payload.visit_id, actor_id=payload.actor_id,
+            staff_id=payload.staff_id, room_id=payload.room_id,
+            service_type=payload.service_type,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit, staff, or room not found")
+    return visit
+
+
+@router.post("/portal/service/end")
+async def service_end(payload: ServiceEnd, db: AsyncSession = Depends(get_db)):
+    visit = await db_service.service_end(db, visit_id=payload.visit_id, actor_id=payload.actor_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or service not started")
+    return visit
+
+
+@router.post("/portal/checkout")
+async def patient_checkout(payload: PatientCheckout, db: AsyncSession = Depends(get_db)):
+    visit = await db_service.patient_checkout(
+        db, visit_id=payload.visit_id, actor_id=payload.actor_id,
+        payment_status=payload.payment_status,
+        payment_amount=payload.payment_amount,
+        payment_method=payload.payment_method,
+    )
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return visit
+
+
+@router.post("/portal/room-status")
+async def change_room_status(payload: RoomStatusChange, db: AsyncSession = Depends(get_db)):
+    room = await db_service.change_room_status(
+        db, room_id=payload.room_id, actor_id=payload.actor_id, status=payload.status,
+    )
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+# ==================== PROJECTIONS ====================
+
+@router.get("/projections/room-board")
+async def get_room_board(db: AsyncSession = Depends(get_db)):
+    return {"rooms": await db_service.get_room_board(db)}
+
+
+@router.get("/projections/staff-hours")
+async def get_staff_hours(db: AsyncSession = Depends(get_db)):
+    return {"staff": await db_service.get_staff_hours(db)}
+
+
+# ==================== REPORTS ====================
+
+@router.post("/reports/daily/generate")
+async def generate_daily_report(payload: DailyReportGenerate, db: AsyncSession = Depends(get_db)):
+    return await db_service.generate_daily_report(db, actor_id=payload.actor_id, report_date=payload.date)
+
+
+@router.get("/reports/daily")
+async def get_daily_report(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    report = await db_service.get_daily_report(db, report_date=date)
+    if not report:
+        raise HTTPException(status_code=404, detail="No report generated for requested date")
+    return report
+
+
+# ==================== EVENTS ====================
+
+@router.get("/events")
+async def list_events(db: AsyncSession = Depends(get_db)):
+    return await db_service.get_events(db)
+
+
+# ==================== PATIENTS (§11.1) ====================
+
+@router.post("/patients")
+async def create_patient(payload: PatientCreate, force: bool = False, db: AsyncSession = Depends(get_db)):
+    try:
+        return await db_service.create_patient(db, actor_id="admin", data=payload.model_dump(), force=force)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.get("/patients")
+async def list_patients(q: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    if q:
+        return {"patients": await db_service.search_patients(db, query=q)}
+    return {"patients": await db_service.list_patients(db)}
+
+
+@router.get("/patients/{patient_id}")
+async def get_patient(patient_id: str, db: AsyncSession = Depends(get_db)):
+    patient = await db_service.get_patient(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+
+@router.patch("/patients/{patient_id}")
+async def update_patient(patient_id: str, payload: PatientUpdate, db: AsyncSession = Depends(get_db)):
+    patient = await db_service.update_patient(db, patient_id=patient_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return patient
+
+
+@router.delete("/patients/{patient_id}")
+async def delete_patient(patient_id: str, db: AsyncSession = Depends(get_db)):
+    patient = await db_service.delete_patient(db, patient_id=patient_id, actor_id="admin")
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {"deleted": True, "patient": patient}
+
+
+# ==================== APPOINTMENTS (§11.2) ====================
+
+@router.post("/appointments")
+async def create_appointment(payload: AppointmentCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_appointment(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.get("/appointments")
+async def list_appointments(date: Optional[str] = None, patient_id: Optional[str] = None,
+                            provider_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    return {"appointments": await db_service.list_appointments(db, date=date, patient_id=patient_id, provider_id=provider_id)}
+
+
+@router.patch("/appointments/{appointment_id}")
+async def update_appointment(appointment_id: str, payload: AppointmentUpdate, db: AsyncSession = Depends(get_db)):
+    appt = await db_service.update_appointment(db, appointment_id=appointment_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return appt
+
+
+@router.post("/appointments/{appointment_id}/cancel")
+async def cancel_appointment(appointment_id: str, reason: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    appt = await db_service.cancel_appointment(db, appointment_id=appointment_id, actor_id="admin", reason=reason)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return appt
+
+
+@router.post("/appointments/{appointment_id}/no-show")
+async def mark_no_show(appointment_id: str, db: AsyncSession = Depends(get_db)):
+    appt = await db_service.mark_no_show(db, appointment_id=appointment_id, actor_id="admin")
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return appt
+
+
+# ==================== CLINICAL NOTES (§11.6) ====================
+
+@router.post("/notes")
+async def create_note(payload: ClinicalNoteCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_note(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.get("/notes")
+async def list_notes(visit_id: Optional[str] = None, patient_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    return {"notes": await db_service.list_notes(db, visit_id=visit_id, patient_id=patient_id)}
+
+
+@router.patch("/notes/{note_id}")
+async def update_note(note_id: str, payload: ClinicalNoteUpdate, db: AsyncSession = Depends(get_db)):
+    note = await db_service.update_note(db, note_id=note_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.post("/notes/{note_id}/sign")
+async def sign_note(note_id: str, payload: ClinicalNoteSign, db: AsyncSession = Depends(get_db)):
+    note = await db_service.sign_note(db, note_id=note_id, actor_id=payload.actor_id)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+# ==================== INSURANCE (§11.7) ====================
+
+@router.post("/insurance")
+async def create_insurance_policy(payload: InsurancePolicyCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_insurance_policy(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.get("/insurance/{patient_id}")
+async def list_insurance_policies(patient_id: str, db: AsyncSession = Depends(get_db)):
+    return {"policies": await db_service.list_insurance_policies(db, patient_id=patient_id)}
+
+
+@router.patch("/insurance/{policy_id}/update")
+async def update_insurance_policy(policy_id: str, payload: InsurancePolicyUpdate, db: AsyncSession = Depends(get_db)):
+    policy = await db_service.update_insurance_policy(db, policy_id=policy_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not policy:
+        raise HTTPException(status_code=404, detail="Insurance policy not found")
+    return policy
+
+
+# ==================== DOCUMENTS (§11.4) ====================
+
+@router.post("/documents")
+async def create_document(payload: DocumentCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_document(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.get("/documents/{patient_id}")
+async def list_documents(patient_id: str, document_type: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    return {"documents": await db_service.list_documents(db, patient_id=patient_id, document_type=document_type)}
+
+
+@router.patch("/documents/{document_id}/update")
+async def update_document(document_id: str, payload: DocumentUpdate, db: AsyncSession = Depends(get_db)):
+    doc = await db_service.update_document(db, document_id=document_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
+@router.post("/documents/{document_id}/sign")
+async def sign_document(document_id: str, payload: DocumentSign, db: AsyncSession = Depends(get_db)):
+    doc = await db_service.sign_document(db, document_id=document_id, actor_id=payload.actor_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
+# ==================== TASKS (§11.9) ====================
+
+@router.post("/tasks")
+async def create_task(payload: TaskCreate, db: AsyncSession = Depends(get_db)):
+    return await db_service.create_task(db, actor_id="admin", data=payload.model_dump())
+
+
+@router.get("/tasks")
+async def list_tasks(patient_id: Optional[str] = None, assignee_id: Optional[str] = None,
+                     status: Optional[str] = None, task_type: Optional[str] = None,
+                     db: AsyncSession = Depends(get_db)):
+    return {"tasks": await db_service.list_tasks(db, patient_id=patient_id, assignee_id=assignee_id, status=status, task_type=task_type)}
+
+
+@router.patch("/tasks/{task_id}")
+async def update_task(task_id: str, payload: TaskUpdate, db: AsyncSession = Depends(get_db)):
+    task = await db_service.update_task(db, task_id=task_id, actor_id="admin", updates=payload.model_dump(exclude_none=True))
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task

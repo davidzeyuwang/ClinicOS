@@ -1,8 +1,17 @@
 """Database configuration and session management."""
+import os
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = "sqlite+aiosqlite:///./clinicos.db"
+_raw = os.getenv("DATABASE_URL", "")
+if _raw.startswith("postgres://"):
+    _raw = _raw.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _raw.startswith("postgresql://") and "+asyncpg" not in _raw:
+    _raw = _raw.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+DATABASE_URL = _raw if _raw else "sqlite+aiosqlite:///./clinicos.db"
+_is_postgres = DATABASE_URL.startswith("postgresql")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -13,13 +22,13 @@ class Base(DeclarativeBase):
 
 
 async def get_db():
-    """FastAPI dependency that yields a DB session."""
     async with async_session() as session:
         yield session
 
 
 async def init_db():
-    """Create all tables on startup."""
-    async with engine.begin() as conn:
-        from app.models.tables import Base as _  # noqa: F401 — ensure models are imported
-        await conn.run_sync(Base.metadata.create_all)
+    """Create tables on startup. SQLite only — Supabase uses schema.sql."""
+    if not _is_postgres:
+        async with engine.begin() as conn:
+            from app.models.tables import Base as _  # noqa: F401
+            await conn.run_sync(Base.metadata.create_all)

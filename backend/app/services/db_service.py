@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, update, or_, func
+from sqlalchemy import select, update, or_, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import (
@@ -47,6 +47,25 @@ def _serialize_payload(payload: dict) -> dict:
         else:
             result[k] = v
     return result
+
+
+async def reset_demo_data(db: AsyncSession) -> None:
+    """Clear local demo/test data so UI automation starts from a known state."""
+    for model in (
+        DailyReport,
+        Task,
+        Document,
+        InsurancePolicy,
+        ClinicalNote,
+        Visit,
+        Appointment,
+        Patient,
+        Staff,
+        Room,
+        EventLog,
+    ):
+        await db.execute(delete(model))
+    await db.commit()
 
 
 # ==================== ROOMS ====================

@@ -40,6 +40,15 @@ else:
 router = APIRouter(prefix="/prototype", tags=["prototype"])
 
 
+@router.post("/test/reset")
+async def reset_test_data(db: AsyncSession = Depends(get_db)):
+    """Reset local demo data for browser automation. Disabled on Supabase."""
+    if _IS_SUPABASE:
+        raise HTTPException(status_code=403, detail="Test reset is disabled outside local SQLite mode")
+    await db_service.reset_demo_data(db)
+    return {"ok": True}
+
+
 # ==================== ADMIN ====================
 
 @router.post("/admin/rooms")

@@ -80,13 +80,13 @@
       </div>
     </div>
     <div class="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
-      <button onclick="switchTab('ops')" id="tab-ops" class="px-4 py-3 text-sm whitespace-nowrap tab-active">🏥 Ops Board</button>
-      <button onclick="switchTab('patients')" id="tab-patients" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">👤 Patients</button>
-      <button onclick="switchTab('appointments')" id="tab-appointments" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📅 Appointments</button>
-      <button onclick="switchTab('tasks')" id="tab-tasks" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📋 Tasks</button>
-      <button onclick="switchTab('admin')" id="tab-admin" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">⚙️ Admin</button>
-      <button onclick="switchTab('report')" id="tab-report" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📊 Report</button>
-      <button onclick="switchTab('events')" id="tab-events" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📜 Events</button>
+      <button onclick="switchTab('ops')" id="tab-ops" data-testid="tab-ops" class="px-4 py-3 text-sm whitespace-nowrap tab-active">🏥 Ops Board</button>
+      <button onclick="switchTab('patients')" id="tab-patients" data-testid="tab-patients" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">👤 Patients</button>
+      <button onclick="switchTab('appointments')" id="tab-appointments" data-testid="tab-appointments" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📅 Appointments</button>
+      <button onclick="switchTab('tasks')" id="tab-tasks" data-testid="tab-tasks" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📋 Tasks</button>
+      <button onclick="switchTab('admin')" id="tab-admin" data-testid="tab-admin" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">⚙️ Admin</button>
+      <button onclick="switchTab('report')" id="tab-report" data-testid="tab-report" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📊 Report</button>
+      <button onclick="switchTab('events')" id="tab-events" data-testid="tab-events" class="px-4 py-3 text-sm whitespace-nowrap text-gray-500">📜 Events</button>
     </div>
   </header>
   <main class="max-w-7xl mx-auto px-4 py-6">
@@ -183,26 +183,26 @@
           <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
             <div class="text-sm font-medium text-gray-600">Add Room</div>
             <div class="grid grid-cols-3 gap-2">
-              <input id="room-name" class="input" placeholder="Name">
-              <input id="room-code" class="input" placeholder="Code">
-              <select id="room-type" class="input"><option value="treatment">Treatment</option><option value="evaluation">Evaluation</option><option value="gym">Gym</option></select>
+              <input id="room-name" data-testid="room-name-input" class="input" placeholder="Name">
+              <input id="room-code" data-testid="room-code-input" class="input" placeholder="Code">
+              <select id="room-type" data-testid="room-type-input" class="input"><option value="treatment">Treatment</option><option value="evaluation">Evaluation</option><option value="gym">Gym</option></select>
             </div>
-            <button onclick="addRoom()" class="btn btn-primary w-full">+ Add Room</button>
+            <button onclick="addRoom()" data-testid="add-room-button" class="btn btn-primary w-full">+ Add Room</button>
           </div>
-          <div id="rooms-list" class="space-y-2"></div>
+          <div id="rooms-list" data-testid="rooms-list" class="space-y-2"></div>
         </div>
         <div class="card">
           <h2 class="text-lg font-semibold mb-4">👥 Staff</h2>
           <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
             <div class="text-sm font-medium text-gray-600">Add Staff</div>
             <div class="grid grid-cols-3 gap-2">
-              <input id="staff-name" class="input" placeholder="Name">
-              <select id="staff-role" class="input"><option value="therapist">Therapist</option><option value="front_desk">Front Desk</option><option value="manager">Manager</option></select>
-              <input id="staff-license" class="input" placeholder="License">
+              <input id="staff-name" data-testid="staff-name-input" class="input" placeholder="Name">
+              <select id="staff-role" data-testid="staff-role-input" class="input"><option value="therapist">Therapist</option><option value="front_desk">Front Desk</option><option value="manager">Manager</option></select>
+              <input id="staff-license" data-testid="staff-license-input" class="input" placeholder="License">
             </div>
-            <button onclick="addStaff()" class="btn btn-primary w-full">+ Add Staff</button>
+            <button onclick="addStaff()" data-testid="add-staff-button" class="btn btn-primary w-full">+ Add Staff</button>
           </div>
-          <div id="staff-list" class="space-y-2"></div>
+          <div id="staff-list" data-testid="staff-list" class="space-y-2"></div>
         </div>
       </div>
     </div>
@@ -212,9 +212,9 @@
       <div class="card">
         <div class="flex items-center justify-between mb-6">
           <h2 class="text-lg font-semibold">📊 Daily Report</h2>
-          <button onclick="genReport()" class="btn btn-primary">Generate</button>
+          <button onclick="genReport()" data-testid="generate-report-button" class="btn btn-primary">Generate</button>
         </div>
-        <div id="rpt-content" class="hidden">
+        <div id="rpt-content" data-testid="report-content" class="hidden">
           <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
             <div class="bg-blue-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-blue-700" id="rpt-ci">0</div><div class="text-sm text-blue-600">Check-ins</div></div>
             <div class="bg-green-50 rounded-lg p-4 text-center"><div class="text-3xl font-bold text-green-700" id="rpt-co">0</div><div class="text-sm text-green-600">Check-outs</div></div>
@@ -240,7 +240,7 @@
           <h2 class="text-lg font-semibold">📜 Event Audit Log</h2>
           <button onclick="loadEvents()" class="btn btn-outline btn-sm">↻</button>
         </div>
-        <div id="ev-list" class="space-y-1 font-mono text-sm"></div>
+        <div id="ev-list" data-testid="events-list" class="space-y-1 font-mono text-sm"></div>
         <p id="ev-empty" class="text-gray-400 text-center py-8 hidden">No events.</p>
       </div>
     </div>
@@ -257,7 +257,7 @@
     <div id="modal-body"></div>
   </div>
 </div>
-<div id="toast" class="toast hidden"></div>
+<div id="toast" data-testid="toast" class="toast hidden"></div>
 
 <script>
 // Auto-detect API base: works whether served from same host or file://
@@ -336,16 +336,16 @@ async function refreshOps(){
     if(!sorted.length){be.innerHTML='';em.classList.remove('hidden');}
     else{em.classList.add('hidden');be.innerHTML=sorted.map(r=>{
       let action='';
-      if(r.status==='available') action=`<button onclick="openRoomCheckin('${r.room_id}','${r.code}')" class="btn btn-xs btn-primary w-full mt-2">➕ Check-In Here</button>`;
+      if(r.status==='available') action=`<button data-testid="room-checkin-${r.code}" onclick="openRoomCheckin('${r.room_id}','${r.code}')" class="btn btn-xs btn-primary w-full mt-2">➕ Check-In Here</button>`;
       else if(r.status==='occupied'&&r.visit_id){
-        if(r.visit_status==='in_service') action=`<button onclick="endSvc('${r.visit_id}')" class="btn btn-xs btn-warning w-full mt-2">⏹ End Service</button>`;
-        else if(r.visit_status==='service_completed') action=`<button onclick="openCheckout('${r.visit_id}')" class="btn btn-xs btn-blue w-full mt-2">🚪 Check Out</button>`;
-        else if(r.visit_status==='checked_in') action=`<button onclick="openAssignSvc('${r.visit_id}','${(r.patient_name||'').replace(/'/g,"\\'")}')" class="btn btn-xs btn-primary w-full mt-2">▶ Start Service</button>`;
+        if(r.visit_status==='in_service') action=`<button data-testid="room-end-service-${r.code}" onclick="endSvc('${r.visit_id}')" class="btn btn-xs btn-warning w-full mt-2">⏹ End Service</button>`;
+        else if(r.visit_status==='service_completed') action=`<button data-testid="room-checkout-${r.code}" onclick="openCheckout('${r.visit_id}')" class="btn btn-xs btn-blue w-full mt-2">🚪 Check Out</button>`;
+        else if(r.visit_status==='checked_in') action=`<button data-testid="room-start-service-${r.code}" onclick="openAssignSvc('${r.visit_id}','${(r.patient_name||'').replace(/'/g,"\\'")}')" class="btn btn-xs btn-primary w-full mt-2">▶ Start Service</button>`;
       }
       const patientHtml=r.status==='occupied'&&r.patient_name
         ?`<div class="mt-2 text-sm font-semibold text-yellow-800">🧑 ${r.patient_name}</div>${r.service_type?`<div class="text-xs text-yellow-600 mt-0.5">${r.service_type}</div>`:''}`
         :`<div class="mt-1 text-xs text-green-600">✓ Empty</div>`;
-      return `<div class="room-card room-card-${r.status} border rounded-lg p-3 ${r.status==='available'?'bg-green-50':r.status==='occupied'?'bg-yellow-50':'bg-white'}">
+      return `<div data-testid="room-card-${r.code}" class="room-card room-card-${r.status} border rounded-lg p-3 ${r.status==='available'?'bg-green-50':r.status==='occupied'?'bg-yellow-50':'bg-white'}">
         <div class="flex items-center justify-between mb-1"><span class="font-bold">${r.code}</span><span class="badge badge-${r.status}">${r.status}</span></div>
         <div class="text-xs text-gray-500">${r.name} <span class="text-gray-400">${r.branch||''} ${r.floor||''}</span></div>
         ${patientHtml}
@@ -623,12 +623,12 @@ async function refreshAdmin(){
     const[br,hr]=await Promise.all([GET('/projections/room-board'),GET('/projections/staff-hours')]);
     rooms=br.rooms||[];staff=hr.staff||[];
     document.getElementById('rooms-list').innerHTML=rooms.length?rooms.map(r=>`
-      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+      <div data-testid="room-list-item-${r.code}" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
         <div class="flex items-center gap-2 flex-wrap"><span class="font-bold">${r.code}</span><span>— ${r.name}</span><span class="text-xs text-gray-400">${r.branch||''} ${r.floor||''}</span><span class="badge badge-${r.status}">${r.status}</span></div>
         <div class="flex gap-1"><button onclick="editRoom('${r.room_id}',\`${r.name}\`,\`${r.code}\`)" class="btn btn-xs btn-outline">✏️</button><button onclick="togRoom('${r.room_id}','${r.status}')" class="btn btn-xs ${r.status==='out_of_service'?'btn-primary':'btn-danger'}">${r.status==='out_of_service'?'✓':'✕'}</button><button onclick="deleteRoom('${r.room_id}','${r.code}')" class="btn btn-xs btn-danger">🗑</button></div>
       </div>`).join(''):'<p class="text-gray-400 text-center py-4">No rooms.</p>';
     document.getElementById('staff-list').innerHTML=staff.length?staff.map(s=>`
-      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+      <div data-testid="staff-list-item-${s.name.replace(/[^a-zA-Z0-9_-]/g,'-')}" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
         <div><span class="font-medium">${s.name}</span> <span class="text-gray-500 text-sm">(${s.role})</span></div>
         <button onclick="editStaff('${s.staff_id}',\`${s.name}\`,'${s.role}')" class="btn btn-xs btn-outline">✏️</button>
       </div>`).join(''):'<p class="text-gray-400 text-center py-4">No staff.</p>';

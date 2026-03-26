@@ -77,3 +77,22 @@ cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+## UI Harness
+
+ClinicOS includes a Playwright-based browser harness for catching UI regressions that only show up through clicking flows.
+
+Install:
+
+```bash
+./scripts/install-playwright.sh
+```
+
+Run:
+
+```bash
+./scripts/test-ui.sh
+```
+
+Details:
+- `docs/workflow/HARNESS.md`

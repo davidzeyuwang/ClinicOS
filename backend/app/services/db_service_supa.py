@@ -45,6 +45,14 @@ def _serialize(payload: dict) -> dict:
     return result
 
 
+def _with_full_name(patient: dict) -> dict:
+    """Inject full_name so the frontend doesn't need to concatenate."""
+    if patient and "full_name" not in patient:
+        patient = dict(patient)
+        patient["full_name"] = f"{patient.get('first_name', '')} {patient.get('last_name', '')}".strip()
+    return patient
+
+
 # ==================== ROOMS ====================
 
 async def create_room(db, actor_id: str, data: dict) -> dict:
@@ -262,12 +270,13 @@ async def create_patient(db, actor_id: str, data: dict, force: bool = False) -> 
     }
     result = await supa.insert("patients", patient)
     await _append_event("PATIENT_CREATED", actor_id, {"patient_id": result["patient_id"]})
-    return result
+    return _with_full_name(result)
 
 
 async def list_patients(db) -> list:
     supa = get_supabase()
-    return await supa.select("patients", {"active": True})
+    rows = await supa.select("patients", {"active": True})
+    return [_with_full_name(p) for p in rows]
 
 
 async def search_patients(db, query: str) -> list:
@@ -283,13 +292,13 @@ async def search_patients(db, query: str) -> list:
     }
     r = await client.get(url, params=params)
     r.raise_for_status()
-    return r.json()
+    return [_with_full_name(p) for p in r.json()]
 
 
 async def get_patient(db, patient_id: str) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("patients", {"patient_id": patient_id})
-    return rows[0] if rows else None
+    return _with_full_name(rows[0]) if rows else None
 
 
 async def update_patient(db, patient_id: str, actor_id: str, updates: dict) -> Optional[dict]:
@@ -299,7 +308,7 @@ async def update_patient(db, patient_id: str, actor_id: str, updates: dict) -> O
     if not result:
         return None
     await _append_event("PATIENT_UPDATED", actor_id, {"patient_id": patient_id})
-    return result
+    return _with_full_name(result)
 
 
 async def delete_patient(db, patient_id: str, actor_id: str) -> Optional[dict]:
@@ -309,7 +318,7 @@ async def delete_patient(db, patient_id: str, actor_id: str) -> Optional[dict]:
         return None
     await supa.update("patients", "patient_id", patient_id, {"active": False, "updated_at": _utc_now()})
     await _append_event("PATIENT_DELETED", actor_id, {"patient_id": patient_id})
-    return rows[0]
+    return _with_full_name(rows[0])
 
 
 # ==================== APPOINTMENTS ====================

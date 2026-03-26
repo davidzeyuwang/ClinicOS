@@ -101,18 +101,6 @@
         <div class="bg-blue-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-blue-700" id="dash-visits">0</div><div class="text-xs text-blue-600">Active Visits</div></div>
         <div class="bg-purple-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-purple-700" id="dash-appts">0</div><div class="text-xs text-purple-600">Today Appts</div></div>
       </div>
-      <div class="card mb-6">
-        <div class="flex items-center gap-3 flex-wrap">
-          <h2 class="text-base font-semibold whitespace-nowrap">➕ Quick Check-In</h2>
-          <div style="position:relative;max-width:280px;width:100%">
-            <input id="qi-search" class="input" placeholder="Search patient or type new name..." autocomplete="off"
-              oninput="patientAutocomplete(this.value,'qi-results','qi')" onfocus="patientAutocomplete(this.value,'qi-results','qi')">
-            <div id="qi-results" class="absolute z-30 bg-white border rounded-lg shadow-lg w-full mt-1 max-h-48 overflow-y-auto hidden"></div>
-            <input type="hidden" id="qi-patient-id"><input type="hidden" id="qi-patient-name"><input type="hidden" id="qi-patient-ref">
-          </div>
-          <button onclick="quickCheckIn()" class="btn btn-primary btn-sm">✓ Check In</button>
-        </div>
-      </div>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2 card">
           <div class="flex items-center justify-between mb-4">
@@ -456,13 +444,6 @@ async function doCheckout(vid,withPay){
   try{await POST('/portal/checkout',body);toast('Checked out');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
 }
 
-async function quickCheckIn(){
-  const pid=document.getElementById('qi-patient-id').value||null;
-  const name=document.getElementById('qi-patient-name').value||document.getElementById('qi-search').value.trim();
-  const ref=document.getElementById('qi-patient-ref').value||null;
-  if(!name)return toast('Name required','error');
-  try{await POST('/portal/checkin',{patient_name:name,patient_ref:ref,patient_id:pid,actor_id:'frontdesk'});toast(name+' checked in');document.getElementById('qi-search').value='';document.getElementById('qi-patient-id').value='';document.getElementById('qi-patient-name').value='';document.getElementById('qi-patient-ref').value='';refreshOps();}catch(e){toast(e.message,'error');}
-}
 async function chgRoom(id,st){try{await POST('/portal/room-status',{room_id:id,status:st,actor_id:'staff'});toast('Room → '+st);refreshOps();}catch(e){toast(e.message,'error');}}
 
 // Patient autocomplete for check-in flows

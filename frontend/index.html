@@ -342,7 +342,7 @@ async function refreshOps(){
         else if(r.visit_status==='service_completed') action=`<button onclick="openCheckout('${r.visit_id}')" class="btn btn-xs btn-blue w-full mt-2">🚪 Check Out</button>`;
         else if(r.visit_status==='checked_in') action=`<button onclick="openAssignSvc('${r.visit_id}','${(r.patient_name||'').replace(/'/g,"\\'")}')" class="btn btn-xs btn-primary w-full mt-2">▶ Start Service</button>`;
       }
-      const patientHtml=r.patient_name
+      const patientHtml=r.status==='occupied'&&r.patient_name
         ?`<div class="mt-2 text-sm font-semibold text-yellow-800">🧑 ${r.patient_name}</div>${r.service_type?`<div class="text-xs text-yellow-600 mt-0.5">${r.service_type}</div>`:''}`
         :`<div class="mt-1 text-xs text-green-600">✓ Empty</div>`;
       return `<div class="room-card room-card-${r.status} border rounded-lg p-3 ${r.status==='available'?'bg-green-50':r.status==='occupied'?'bg-yellow-50':'bg-white'}">

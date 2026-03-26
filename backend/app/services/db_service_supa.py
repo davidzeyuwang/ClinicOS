@@ -5,6 +5,7 @@ Active when SUPABASE_URL + SUPABASE_SERVICE_KEY env vars are set.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -110,7 +111,43 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 
 async def get_room_board(db) -> list:
     supa = get_supabase()
-    return await supa.select("rooms", {"active": True})
+    import httpx
+    client = supa._client
+
+    # Fetch rooms and active visits in parallel
+    rooms_url = f"{supa._url}/rest/v1/rooms"
+    visits_url = f"{supa._url}/rest/v1/visits"
+
+    rooms_r, visits_r = await asyncio.gather(
+        client.get(rooms_url, params={"select": "*", "active": "eq.true"}),
+        client.get(visits_url, params={
+            "select": "visit_id,patient_id,patient_name,service_type,status,staff_id,room_id",
+            "status": "neq.checked_out",
+            "room_id": "not.is.null",
+        }),
+    )
+    rooms_r.raise_for_status()
+    visits_r.raise_for_status()
+
+    rooms = rooms_r.json()
+    active_visits = {v["room_id"]: v for v in visits_r.json() if v.get("room_id")}
+
+    for room in rooms:
+        v = active_visits.get(room["room_id"])
+        if v:
+            room["visit_id"] = v["visit_id"]
+            room["patient_id"] = v["patient_id"]
+            room["patient_name"] = v["patient_name"]
+            room["service_type"] = v["service_type"]
+            room["visit_status"] = v["status"]
+        else:
+            room["visit_id"] = None
+            room["patient_id"] = None
+            room["patient_name"] = None
+            room["service_type"] = None
+            room["visit_status"] = None
+
+    return rooms
 
 
 # ==================== STAFF ====================

@@ -30,6 +30,9 @@ if not _IS_SUPABASE:
         async with engine.begin() as conn:
             from app.models.tables import Base as _  # noqa
             await conn.run_sync(Base.metadata.create_all)
+        from app.services.db_service import ensure_default_demo_staff
+        async with async_session() as session:
+            await ensure_default_demo_staff(session)
 
 # ── Supabase REST helper ───────────────────────────────────────────────────────
 class SupabaseClient:
@@ -101,3 +104,6 @@ async def init_db():
         async with engine.begin() as conn:
             from app.models.tables import Base as _  # noqa
             await conn.run_sync(Base.metadata.create_all)
+        from app.services.db_service import ensure_default_demo_staff
+        async with async_session() as session:
+            await ensure_default_demo_staff(session)

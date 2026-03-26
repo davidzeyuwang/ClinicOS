@@ -23,12 +23,12 @@ test.describe("ClinicOS UI harness", () => {
     await expectToast(page, "Room added");
     await expect(page.getByTestId("room-list-item-R1")).toContainText("Room 1");
 
-    await page.getByTestId("staff-name-input").fill("Alice PT");
+    await page.getByTestId("staff-name-input").fill("Bob OT");
     await page.getByTestId("staff-role-input").selectOption("therapist");
-    await page.getByTestId("staff-license-input").fill("PT-001");
+    await page.getByTestId("staff-license-input").fill("OT-002");
     await page.getByTestId("add-staff-button").click();
     await expectToast(page, "Staff added");
-    await expect(page.getByTestId("staff-list")).toContainText("Alice PT");
+    await expect(page.getByTestId("staff-list")).toContainText("Bob OT");
   });
 
   test("ops board walk-in flow can be completed end-to-end", async ({ page }) => {
@@ -38,11 +38,6 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByTestId("room-code-input").fill("R1");
     await page.getByTestId("add-room-button").click();
     await expectToast(page, "Room added");
-
-    await page.getByTestId("staff-name-input").fill("Alice PT");
-    await page.getByTestId("staff-role-input").selectOption("therapist");
-    await page.getByTestId("add-staff-button").click();
-    await expectToast(page, "Staff added");
 
     await openTab(page, "tab-ops");
     await page.getByTestId("room-checkin-R1").click();
@@ -72,11 +67,6 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByTestId("room-code-input").fill("R1");
     await page.getByTestId("add-room-button").click();
     await expectToast(page, "Room added");
-
-    await page.getByTestId("staff-name-input").fill("Alice PT");
-    await page.getByTestId("staff-role-input").selectOption("therapist");
-    await page.getByTestId("add-staff-button").click();
-    await expectToast(page, "Staff added");
 
     await openTab(page, "tab-ops");
     await page.getByTestId("room-checkin-R1").click();

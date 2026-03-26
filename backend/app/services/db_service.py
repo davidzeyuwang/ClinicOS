@@ -14,6 +14,12 @@ from app.models.tables import (
 )
 
 
+DEFAULT_STAFF = (
+    {"name": "Alice PT", "role": "therapist", "license_id": "PT-001"},
+    {"name": "Front Desk", "role": "front_desk", "license_id": None},
+)
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -65,6 +71,28 @@ async def reset_demo_data(db: AsyncSession) -> None:
         EventLog,
     ):
         await db.execute(delete(model))
+    await db.commit()
+    await ensure_default_demo_staff(db)
+
+
+async def ensure_default_demo_staff(db: AsyncSession) -> None:
+    """Seed default local staff so demo flows work without manual setup."""
+    existing = await db.execute(select(Staff.staff_id).limit(1))
+    if existing.scalar_one_or_none():
+        return
+
+    now = _utc_now()
+    for item in DEFAULT_STAFF:
+        member = Staff(
+            staff_id=_new_id(),
+            name=item["name"],
+            role=item["role"],
+            license_id=item["license_id"],
+            active=True,
+            updated_at=now,
+        )
+        db.add(member)
+        await _append_event(db, "STAFF_CREATED", "system_seed", _staff_to_dict(member))
     await db.commit()
 
 

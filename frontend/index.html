@@ -310,8 +310,8 @@ function buildVisits(events){
 async function refreshOps(){
   try{
     const today=new Date().toISOString().slice(0,10);
-    const[br,hr,er,apptR]=await Promise.all([
-      GET('/projections/room-board'),GET('/projections/staff-hours'),GET('/events'),
+    const[br,hr,avR,apptR]=await Promise.all([
+      GET('/projections/room-board'),GET('/projections/staff-hours'),GET('/projections/active-visits'),
       GET('/appointments?date='+today).catch(()=>({appointments:[]}))
     ]);
     rooms=br.rooms||[];staff=hr.staff||[];
@@ -326,8 +326,8 @@ async function refreshOps(){
     rs.textContent=c.available+'/'+rooms.length+' free';
     rs.className='text-xs px-2 py-1 rounded '+(c.available>0?'bg-green-100 text-green-700':'bg-red-100 text-red-700');
 
-    visits=buildVisits(er.events||[]);
-    const av=visits.filter(v=>v.status!=='checked_out');
+    visits=avR.visits||[];
+    const av=visits;
     document.getElementById('dash-visits').textContent=av.length;
     document.getElementById('dash-appts').textContent=(apptR.appointments||[]).length;
 

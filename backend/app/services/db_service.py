@@ -343,8 +343,20 @@ async def get_room_board(db: AsyncSession) -> list:
             "status": room.status,
             "patient_name": visit.patient_name if visit else None,
             "visit_id": visit.visit_id if visit else None,
+            "visit_status": visit.status if visit else None,
+            "service_type": visit.service_type if visit else None,
+            "staff_id": visit.staff_id if visit else None,
         })
     return board
+
+
+async def get_active_visits(db: AsyncSession) -> list:
+    result = await db.execute(
+        select(Visit).where(
+            Visit.status.in_(["checked_in", "in_service", "service_completed"])
+        ).order_by(Visit.check_in_time)
+    )
+    return [_visit_to_dict(v) for v in result.scalars().all()]
 
 
 def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:

@@ -284,6 +284,12 @@ async def delete_visit(db, visit_id: str, actor_id: str) -> Optional[dict]:
     return visit
 
 
+async def get_active_visits(db) -> list:
+    supa = get_supabase()
+    rows = await supa.select("visits", {})
+    return [v for v in rows if v.get("status") in ("checked_in", "in_service", "service_completed")]
+
+
 # ==================== PATIENTS ====================
 
 async def create_patient(db, actor_id: str, data: dict, force: bool = False) -> dict:

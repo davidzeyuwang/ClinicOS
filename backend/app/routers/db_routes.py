@@ -167,6 +167,11 @@ async def get_room_board(db: AsyncSession = Depends(get_db)):
     return {"rooms": await db_service.get_room_board(db)}
 
 
+@router.get("/projections/active-visits")
+async def get_active_visits(db: AsyncSession = Depends(get_db)):
+    return {"visits": await db_service.get_active_visits(db)}
+
+
 @router.get("/projections/staff-hours")
 async def get_staff_hours(db: AsyncSession = Depends(get_db)):
     return {"staff": await db_service.get_staff_hours(db)}

@@ -2,6 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, _IS_SUPABASE
@@ -153,6 +154,9 @@ async def patient_checkout(payload: PatientCheckout, db: AsyncSession = Depends(
         payment_status=payload.payment_status,
         payment_amount=payload.payment_amount,
         payment_method=payload.payment_method,
+        copay_collected=payload.copay_collected,
+        wd_verified=payload.wd_verified,
+        patient_signed=payload.patient_signed,
     )
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
@@ -179,6 +183,11 @@ async def get_room_board(db: AsyncSession = Depends(get_db)):
 @router.get("/projections/active-visits")
 async def get_active_visits(db: AsyncSession = Depends(get_db)):
     return {"visits": await db_service.get_active_visits(db)}
+
+
+@router.get("/projections/daily-summary")
+async def get_daily_summary(date: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    return await db_service.get_daily_summary(db, date=date)
 
 
 @router.get("/projections/staff-hours")
@@ -247,6 +256,28 @@ async def delete_patient(patient_id: str, db: AsyncSession = Depends(get_db)):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return {"deleted": True, "patient": patient}
+
+
+@router.get("/patients/{patient_id}/visits")
+async def get_patient_visits(patient_id: str, db: AsyncSession = Depends(get_db)):
+    return {"visits": await db_service.get_patient_visits(db, patient_id=patient_id)}
+
+
+@router.get("/patients/{patient_id}/sign-sheet.pdf")
+async def get_patient_sign_sheet(patient_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate a printable individual sign sheet PDF (个人签字表) for a patient."""
+    from app.services import pdf_service
+    patient = await db_service.get_patient(db, patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    visits = await db_service.get_patient_visits(db, patient_id=patient_id)
+    policies = await db_service.list_insurance_policies(db, patient_id=patient_id)
+    pdf_bytes = pdf_service.generate_sign_sheet(patient, visits, policies)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="sign_sheet_{patient_id[:8]}.pdf"'},
+    )
 
 
 # ==================== APPOINTMENTS (§11.2) ====================

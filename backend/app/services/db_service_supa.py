@@ -254,7 +254,9 @@ async def service_end(db, visit_id: str, actor_id: str) -> Optional[dict]:
 
 
 async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Optional[str] = None,
-                           payment_amount: Optional[float] = None, payment_method: Optional[str] = None) -> Optional[dict]:
+                           payment_amount: Optional[float] = None, payment_method: Optional[str] = None,
+                           copay_collected: Optional[float] = None, wd_verified: bool = False,
+                           patient_signed: bool = False) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -265,6 +267,9 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
         "payment_status": payment_status or "pending",
         "payment_amount": payment_amount,
         "payment_method": payment_method,
+        "copay_collected": copay_collected,
+        "wd_verified": wd_verified,
+        "patient_signed": patient_signed,
     }
     result = await supa.update("visits", "visit_id", visit_id, updates)
     await _append_event("PATIENT_CHECKED_OUT", actor_id, {"visit_id": visit_id, **updates})
@@ -288,6 +293,51 @@ async def get_active_visits(db) -> list:
     supa = get_supabase()
     rows = await supa.select("visits", {})
     return [v for v in rows if v.get("status") in ("checked_in", "in_service", "service_completed")]
+
+
+async def get_patient_visits(db, patient_id: str) -> list:
+    """All visits for a patient, newest first."""
+    supa = get_supabase()
+    rows = await supa.select("visits", {"patient_id": patient_id})
+    return sorted(rows, key=lambda v: v.get("check_in_time") or "", reverse=True)
+
+
+async def get_daily_summary(db, date: Optional[str] = None) -> dict:
+    """Summary of all visits for a given date with copay totals."""
+    from datetime import datetime, timezone
+    target_date = date or datetime.now(timezone.utc).date().isoformat()
+    supa = get_supabase()
+    all_visits = await supa.select("visits", {})
+    today_visits = [
+        v for v in all_visits
+        if (v.get("check_in_time") or "")[:10] == target_date
+    ]
+    checked_out = [v for v in today_visits if v.get("status") == "checked_out"]
+    active = [v for v in today_visits if v.get("status") in ("checked_in", "in_service", "service_completed")]
+    copay_total = sum((v.get("copay_collected") or 0) for v in checked_out)
+    payment_total = sum((v.get("payment_amount") or 0) for v in checked_out if v.get("payment_amount"))
+
+    by_service: dict = {}
+    for v in today_visits:
+        svc = v.get("service_type") or "unknown"
+        by_service[svc] = by_service.get(svc, 0) + 1
+
+    all_staff = await supa.select("staff", {})
+    staff_map = {s["staff_id"]: s["name"] for s in all_staff}
+
+    for v in today_visits:
+        v["staff_name"] = staff_map.get(v.get("staff_id"), "-")
+
+    return {
+        "date": target_date,
+        "total_check_ins": len(today_visits),
+        "total_checked_out": len(checked_out),
+        "active_visits": len(active),
+        "copay_total": round(float(copay_total), 2),
+        "payment_total": round(float(payment_total), 2),
+        "by_service_type": by_service,
+        "visits": sorted(today_visits, key=lambda v: v.get("check_in_time") or ""),
+    }
 
 
 # ==================== PATIENTS ====================

@@ -283,7 +283,10 @@ async def service_end(db: AsyncSession, visit_id: str, actor_id: str) -> Optiona
 async def patient_checkout(db: AsyncSession, visit_id: str, actor_id: str,
                            payment_status: Optional[str] = None,
                            payment_amount: Optional[float] = None,
-                           payment_method: Optional[str] = None) -> Optional[dict]:
+                           payment_method: Optional[str] = None,
+                           copay_collected: Optional[float] = None,
+                           wd_verified: bool = False,
+                           patient_signed: bool = False) -> Optional[dict]:
     visit = await db.get(Visit, visit_id)
     if not visit:
         return None
@@ -298,6 +301,10 @@ async def patient_checkout(db: AsyncSession, visit_id: str, actor_id: str,
         visit.payment_amount = payment_amount
     if payment_method:
         visit.payment_method = payment_method
+    if copay_collected is not None:
+        visit.copay_collected = copay_collected
+    visit.wd_verified = wd_verified
+    visit.patient_signed = patient_signed
 
     # Update linked appointment
     if visit.appointment_id:
@@ -359,6 +366,9 @@ def _visit_to_dict(visit: Visit) -> dict:
         "payment_status": visit.payment_status,
         "payment_amount": visit.payment_amount,
         "payment_method": visit.payment_method,
+        "copay_collected": visit.copay_collected,
+        "wd_verified": visit.wd_verified,
+        "patient_signed": visit.patient_signed,
     }
 
 
@@ -404,6 +414,53 @@ async def get_active_visits(db: AsyncSession) -> list:
         ).order_by(Visit.check_in_time)
     )
     return [_visit_to_dict(v) for v in result.scalars().all()]
+
+
+async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
+    """All visits for a patient, newest first."""
+    result = await db.execute(
+        select(Visit).where(Visit.patient_id == patient_id).order_by(Visit.check_in_time.desc())
+    )
+    return [_visit_to_dict(v) for v in result.scalars().all()]
+
+
+async def get_daily_summary(db: AsyncSession, date: Optional[str] = None) -> dict:
+    """Summary of all visits for a given date with copay totals."""
+    target_date = date or _utc_now().date().isoformat()
+    all_visits = (await db.execute(select(Visit))).scalars().all()
+    today_visits = [
+        v for v in all_visits
+        if v.check_in_time and _ensure_utc(v.check_in_time).date().isoformat() == target_date
+    ]
+    checked_out = [v for v in today_visits if v.status == "checked_out"]
+    active = [v for v in today_visits if v.status in ("checked_in", "in_service", "service_completed")]
+    copay_total = sum((v.copay_collected or 0) for v in checked_out)
+    payment_total = sum((v.payment_amount or 0) for v in checked_out if v.payment_amount)
+
+    by_service: dict = {}
+    for v in today_visits:
+        svc = v.service_type or "unknown"
+        by_service[svc] = by_service.get(svc, 0) + 1
+
+    all_staff_result = await db.execute(select(Staff).where(Staff.active == True))
+    staff_map = {s.staff_id: s.name for s in all_staff_result.scalars().all()}
+
+    return {
+        "date": target_date,
+        "total_check_ins": len(today_visits),
+        "total_checked_out": len(checked_out),
+        "active_visits": len(active),
+        "copay_total": round(copay_total, 2),
+        "payment_total": round(payment_total, 2),
+        "by_service_type": by_service,
+        "visits": [
+            {
+                **_visit_to_dict(v),
+                "staff_name": staff_map.get(v.staff_id, "-") if v.staff_id else "-",
+            }
+            for v in sorted(today_visits, key=lambda x: x.check_in_time or _utc_now())
+        ],
+    }
 
 
 def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:

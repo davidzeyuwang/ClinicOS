@@ -209,9 +209,29 @@
 
     <!-- ==================== REPORT (§11.10) ==================== -->
     <div id="page-report" class="hidden">
+      <div class="card mb-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 class="text-lg font-semibold">📊 Daily Summary</h2>
+          <div class="flex gap-2 items-center">
+            <input id="sum-date" type="date" class="input" style="max-width:160px" value="" onchange="loadDailySummary()">
+            <button onclick="loadDailySummary()" class="btn btn-outline btn-sm">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="sum-stats" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 hidden">
+          <div class="bg-blue-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-blue-700" id="sum-ci">0</div><div class="text-xs text-blue-600">Check-ins</div></div>
+          <div class="bg-green-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-green-700" id="sum-co">0</div><div class="text-xs text-green-600">Checked Out</div></div>
+          <div class="bg-yellow-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-yellow-700" id="sum-act">0</div><div class="text-xs text-yellow-600">Still Active</div></div>
+          <div class="bg-emerald-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-emerald-700" id="sum-copay">$0</div><div class="text-xs text-emerald-600">Total Copay CC</div></div>
+          <div class="bg-purple-50 rounded-lg p-3 text-center"><div class="text-2xl font-bold text-purple-700" id="sum-pay">$0</div><div class="text-xs text-purple-600">Total Payment</div></div>
+        </div>
+        <div id="sum-table-wrap" class="hidden">
+          <table class="w-full text-sm" id="sum-table"></table>
+        </div>
+        <p id="sum-empty" class="text-gray-400 text-center py-4">Select a date to view summary.</p>
+      </div>
       <div class="card">
         <div class="flex items-center justify-between mb-6">
-          <h2 class="text-lg font-semibold">📊 Daily Report</h2>
+          <h2 class="text-lg font-semibold">📋 Ops Report (Snapshot)</h2>
           <button onclick="genReport()" data-testid="generate-report-button" class="btn btn-primary">Generate</button>
         </div>
         <div id="rpt-content" data-testid="report-content" class="hidden">
@@ -428,20 +448,51 @@ async function endSvc(vid){try{await POST('/portal/service/end',{visit_id:vid,ac
 
 // Checkout with payment modal
 function openCheckout(vid){
-  openModal('Check Out — Payment',`<div class="space-y-3">
-    <select id="co-ps" class="input"><option value="">No payment info</option><option value="copay_collected">Copay Collected</option><option value="paid">Paid</option><option value="insurance_only">Insurance Only</option><option value="no_charge">No Charge</option></select>
-    <input id="co-amt" type="number" step="0.01" class="input" placeholder="Amount ($)">
-    <select id="co-pm" class="input"><option value="">—</option><option value="cash">Cash</option><option value="card">Card</option><option value="insurance">Insurance</option></select>
-    <button onclick="doCheckout('${vid}',true)" class="btn btn-primary w-full">🚪 Check Out</button>
-    <button onclick="doCheckout('${vid}',false)" class="btn btn-outline w-full text-sm">Skip payment — just check out</button>
+  openModal('Check Out — Payment & Signature',`<div class="space-y-3">
+    <div class="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">Complete payment & WD verification before checking out.</div>
+    <div class="grid grid-cols-2 gap-2">
+      <div>
+        <label class="text-xs text-gray-500 block mb-1">Copay Collected (CC) $</label>
+        <input id="co-cc" type="number" step="0.01" class="input" placeholder="0.00">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 block mb-1">Payment Method</label>
+        <select id="co-pm" class="input"><option value="">—</option><option value="cash">Cash</option><option value="card">Card</option><option value="insurance">Insurance</option><option value="no_charge">No Charge</option></select>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div>
+        <label class="text-xs text-gray-500 block mb-1">Payment Status</label>
+        <select id="co-ps" class="input"><option value="">No payment info</option><option value="copay_collected">Copay Collected</option><option value="paid">Paid in Full</option><option value="insurance_only">Insurance Only</option><option value="no_charge">No Charge</option></select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 block mb-1">Additional Amount $</label>
+        <input id="co-amt" type="number" step="0.01" class="input" placeholder="0.00">
+      </div>
+    </div>
+    <div class="flex gap-4 mt-1">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="co-wd" class="w-5 h-5 accent-green-600">
+        <span class="text-sm font-medium">✓ WD Verified</span>
+      </label>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" id="co-signed" class="w-5 h-5 accent-blue-600">
+        <span class="text-sm font-medium">✍ Patient Signed</span>
+      </label>
+    </div>
+    <button onclick="doCheckout('${vid}')" class="btn btn-primary w-full">🚪 Check Out</button>
+    <button onclick="doCheckout('${vid}',true)" class="btn btn-outline w-full text-sm">Skip — just check out</button>
   </div>`);
 }
-async function doCheckout(vid,withPay){
+async function doCheckout(vid,skipAll){
   const body={visit_id:vid,actor_id:'frontdesk'};
-  if(withPay){
+  if(!skipAll){
+    const cc=parseFloat(document.getElementById('co-cc').value);if(!isNaN(cc)&&cc>0)body.copay_collected=cc;
     const ps=document.getElementById('co-ps').value;if(ps)body.payment_status=ps;
-    const amt=parseFloat(document.getElementById('co-amt').value);if(amt)body.payment_amount=amt;
+    const amt=parseFloat(document.getElementById('co-amt').value);if(!isNaN(amt)&&amt>0)body.payment_amount=amt;
     const pm=document.getElementById('co-pm').value;if(pm)body.payment_method=pm;
+    body.wd_verified=document.getElementById('co-wd').checked;
+    body.patient_signed=document.getElementById('co-signed').checked;
   }
   try{await POST('/portal/checkout',body);toast('Checked out');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
 }
@@ -539,16 +590,29 @@ async function deletePatient(id,name){
 }
 async function openPatientDetail(pid){
   try{
-    const[p,ins,docs]=await Promise.all([GET('/patients/'+pid),GET('/insurance/'+pid),GET('/documents/'+pid)]);
-    const pols=ins.policies||[],docList=docs.documents||[];
+    const[p,ins,docs,visR]=await Promise.all([GET('/patients/'+pid),GET('/insurance/'+pid),GET('/documents/'+pid),GET('/patients/'+pid+'/visits')]);
+    const pols=ins.policies||[],docList=docs.documents||[],visList=visR.visits||[];
     let h=`<div class="space-y-4">
       <div class="bg-gray-50 rounded-lg p-4"><div class="font-semibold text-lg">${p.full_name}</div>
       <div class="text-sm text-gray-500 mt-1">MRN: ${p.mrn||'-'} · DOB: ${p.date_of_birth||'-'} · Phone: ${p.phone||'-'}</div>
       <div class="flex gap-2 mt-2"><span class="badge badge-${p.intake_status}">Intake: ${p.intake_status}</span><span class="badge badge-${p.consent_status}">Consent: ${p.consent_status}</span></div></div>
       <div><h4 class="font-semibold mb-2">🏥 Insurance (${pols.length})</h4>`;
-    if(pols.length) h+=pols.map(i=>`<div class="bg-gray-50 rounded p-3 mb-2 text-sm"><div class="font-medium">${i.carrier_name} <span class="badge badge-${i.eligibility_status}">${i.eligibility_status}</span></div><div class="text-gray-500">Member: ${i.member_id||'-'} · Copay: $${i.copay_amount||0} · Visits: ${i.visits_used||0}/${i.visits_authorized||'?'}</div></div>`).join('');
+    if(pols.length) h+=pols.map(i=>`<div class="bg-gray-50 rounded p-3 mb-2 text-sm"><div class="font-medium">${i.carrier_name} <span class="text-xs text-gray-400">${i.priority||'primary'}</span> <span class="badge badge-${i.eligibility_status}">${i.eligibility_status}</span></div><div class="text-gray-500">Member: ${i.member_id||'-'} · Copay: $${i.copay_amount||0} · Visits: ${i.visits_used||0}/${i.visits_authorized||'?'}</div></div>`).join('');
     else h+='<p class="text-gray-400 text-sm">No insurance on file.</p>';
     h+=`<button onclick="openAddInsurance('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Insurance</button></div>`;
+    // Visit history
+    const totCopay=visList.filter(v=>v.status==='checked_out').reduce((s,v)=>s+(v.copay_collected||0),0);
+    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-blue">📄 Download Sign Sheet PDF</a></div>`;
+    if(visList.length){
+      h+=`<div class="text-xs text-gray-500 mb-1">Total copay collected: <strong>$${totCopay.toFixed(2)}</strong></div>`;
+      h+=`<table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1">Date</th><th class="pb-1">Service</th><th class="pb-1">Status</th><th class="pb-1">CC</th><th class="pb-1">WD</th><th class="pb-1">Signed</th></tr></thead><tbody>`;
+      visList.forEach(v=>{
+        const dt=v.check_in_time?new Date(v.check_in_time).toLocaleDateString():'-';
+        h+=`<tr class="border-b border-gray-100"><td class="py-1">${dt}</td><td class="py-1">${v.service_type||'-'}</td><td class="py-1"><span class="badge badge-${v.status}">${v.status}</span></td><td class="py-1">${v.copay_collected!=null?'$'+Number(v.copay_collected).toFixed(2):'-'}</td><td class="py-1 text-center">${v.wd_verified?'✓':''}</td><td class="py-1 text-center">${v.patient_signed?'✓':''}</td></tr>`;
+      });
+      h+='</tbody></table>';
+    }else h+='<p class="text-gray-400 text-sm">No visit history.</p>';
+    h+='</div>';
     h+=`<div><h4 class="font-semibold mb-2">📄 Documents (${docList.length})</h4>`;
     if(docList.length) h+=docList.map(d=>`<div class="flex justify-between py-1 text-sm"><span>${d.document_type}_${String(d.sequence_number).padStart(3,'0')}</span><span class="badge badge-${d.status}">${d.status}</span></div>`).join('');
     else h+='<p class="text-gray-400 text-sm">No documents.</p>';
@@ -648,7 +712,35 @@ async function saveStaff(id){const n=document.getElementById('es-name').value.tr
 
 // ==================== REPORT ====================
 async function genReport(){try{const r=await POST('/reports/daily/generate',{actor_id:'manager'});showReport(r);toast('Generated');}catch(e){toast(e.message,'error');}}
-async function loadReport(){try{showReport(await GET('/reports/daily'));}catch(e){document.getElementById('rpt-content').classList.add('hidden');document.getElementById('rpt-empty').classList.remove('hidden');}}
+async function loadReport(){
+  // Load both daily summary and ops report
+  const today=new Date().toISOString().slice(0,10);
+  if(!document.getElementById('sum-date').value)document.getElementById('sum-date').value=today;
+  loadDailySummary();
+  try{showReport(await GET('/reports/daily'));}catch(e){document.getElementById('rpt-content').classList.add('hidden');document.getElementById('rpt-empty').classList.remove('hidden');}
+}
+async function loadDailySummary(){
+  const dt=document.getElementById('sum-date').value;
+  if(!dt)return;
+  try{
+    const s=await GET('/projections/daily-summary'+(dt?'?date='+dt:''));
+    document.getElementById('sum-stats').classList.remove('hidden');
+    document.getElementById('sum-table-wrap').classList.remove('hidden');
+    document.getElementById('sum-empty').classList.add('hidden');
+    document.getElementById('sum-ci').textContent=s.total_check_ins;
+    document.getElementById('sum-co').textContent=s.total_checked_out;
+    document.getElementById('sum-act').textContent=s.active_visits;
+    document.getElementById('sum-copay').textContent='$'+(s.copay_total||0).toFixed(2);
+    document.getElementById('sum-pay').textContent='$'+(s.payment_total||0).toFixed(2);
+    const visits=s.visits||[];
+    const t=document.getElementById('sum-table');
+    if(!visits.length){t.innerHTML='<tr><td class="py-4 text-gray-400 text-center" colspan="7">No visits for this date.</td></tr>';return;}
+    t.innerHTML=`<thead><tr class="text-left text-gray-500 border-b text-xs"><th class="pb-2">Patient</th><th class="pb-2">Service</th><th class="pb-2">Staff</th><th class="pb-2">Status</th><th class="pb-2">CC $</th><th class="pb-2">WD</th><th class="pb-2">Signed</th></tr></thead><tbody>${visits.map(v=>{
+      const cc=v.copay_collected!=null?'$'+Number(v.copay_collected).toFixed(2):'-';
+      return`<tr class="border-b border-gray-100 text-sm"><td class="py-1.5 font-medium">${v.patient_name}</td><td class="py-1.5">${v.service_type||'-'}</td><td class="py-1.5 text-gray-500">${v.staff_name||'-'}</td><td class="py-1.5"><span class="badge badge-${v.status}">${v.status}</span></td><td class="py-1.5">${cc}</td><td class="py-1.5 text-center">${v.wd_verified?'✓':''}</td><td class="py-1.5 text-center">${v.patient_signed?'✓':''}</td></tr>`;
+    }).join('')}</tbody>`;
+  }catch(e){toast('Summary error: '+e.message,'error');}
+}
 function showReport(r){
   document.getElementById('rpt-content').classList.remove('hidden');document.getElementById('rpt-empty').classList.add('hidden');
   document.getElementById('rpt-ci').textContent=r.total_check_ins;document.getElementById('rpt-co').textContent=r.total_check_outs;

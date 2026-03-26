@@ -141,6 +141,9 @@ class PatientCheckout(BaseModel):
     payment_status: Optional[PaymentStatus] = None
     payment_amount: Optional[float] = None
     payment_method: Optional[PaymentMethod] = None
+    copay_collected: Optional[float] = None
+    wd_verified: bool = False
+    patient_signed: bool = False
     actor_id: str
 
 

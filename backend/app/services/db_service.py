@@ -318,7 +318,7 @@ def _visit_to_dict(visit: Visit) -> dict:
 # ==================== PROJECTIONS ====================
 
 async def get_room_board(db: AsyncSession) -> list:
-    rooms_result = await db.execute(select(Room).order_by(Room.code))
+    rooms_result = await db.execute(select(Room).where(Room.active == True).order_by(Room.code))
     rooms = rooms_result.scalars().all()
 
     today = _utc_now().date().isoformat()
@@ -360,7 +360,7 @@ async def get_staff_hours(db: AsyncSession) -> list:
     now = _utc_now()
     today = now.date().isoformat()
 
-    staff_result = await db.execute(select(Staff).order_by(Staff.name))
+    staff_result = await db.execute(select(Staff).where(Staff.active == True).order_by(Staff.name))
     all_staff = staff_result.scalars().all()
 
     visits_result = await db.execute(select(Visit).where(Visit.staff_id.isnot(None)))
@@ -645,6 +645,7 @@ async def search_patients(db: AsyncSession, query: str) -> list:
     pattern = f"%{query}%"
     result = await db.execute(
         select(Patient).where(
+            Patient.active == True,
             or_(
                 Patient.first_name.ilike(pattern),
                 Patient.last_name.ilike(pattern),

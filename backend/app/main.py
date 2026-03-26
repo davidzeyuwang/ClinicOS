@@ -60,6 +60,20 @@ async def root():
 async def health_check():
     return {"status": "ok", "version": "0.3.0"}
 
+@app.get("/debug-db")
+async def debug_db():
+    """Diagnose DB connectivity — remove after debugging."""
+    import traceback
+    from app.database import DATABASE_URL, _is_postgres, engine
+    try:
+        async with engine.connect() as conn:
+            from sqlalchemy import text
+            result = await conn.execute(text("SELECT 1"))
+            return {"status": "ok", "db_type": "postgres" if _is_postgres else "sqlite", "url_prefix": DATABASE_URL[:40]}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()[-500:]}
+
+
 
 # Serve frontend static files at /ui/*
 if FRONTEND_DIR.is_dir():

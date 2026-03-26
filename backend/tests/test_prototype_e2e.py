@@ -210,12 +210,18 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "payment_status": "copay_collected",
             "payment_amount": 30.0,
             "payment_method": "card",
+            "copay_collected": 25.0,
+            "wd_verified": True,
+            "patient_signed": True,
             "actor_id": "frontdesk-1",
         },
     )
     assert co["status"] == "checked_out"
     assert co["payment_status"] == "copay_collected"
     assert co["payment_amount"] == 30.0
+    assert co["copay_collected"] == 25.0
+    assert co["wd_verified"] is True
+    assert co["patient_signed"] is True
 
     # ==================== TASK (§11.9) ====================
     task1 = post_json(
@@ -271,3 +277,26 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
         "DAILY_REPORT_GENERATED",
     }
     assert expected_types.issubset(event_types)
+
+    # ==================== PATIENT VISITS ENDPOINT ====================
+    visits_resp = get_json(client, f"/patients/{p1['patient_id']}/visits")
+    assert "visits" in visits_resp
+    assert len(visits_resp["visits"]) >= 1
+    v_rec = visits_resp["visits"][0]
+    assert v_rec["copay_collected"] == 25.0
+    assert v_rec["wd_verified"] is True
+    assert v_rec["patient_signed"] is True
+
+    # ==================== DAILY SUMMARY ENDPOINT ====================
+    today = date.today().isoformat()
+    summary = get_json(client, f"/projections/daily-summary?date={today}")
+    assert summary["date"] == today
+    assert summary["total_check_ins"] >= 1
+    assert summary["total_checked_out"] >= 1
+    assert summary["copay_total"] >= 25.0
+
+    # ==================== SIGN-SHEET PDF ENDPOINT ====================
+    pdf_resp = client.get(f"/prototype/patients/{p1['patient_id']}/sign-sheet.pdf")
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"] == "application/pdf"
+    assert pdf_resp.content[:4] == b"%PDF"

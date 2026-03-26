@@ -1,8 +1,9 @@
 # Clinic OS — Product Roadmap
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-26
 
 > **Canonical PRD:** `PRD/003-clinic-os-prd-v2.md` (v2.0) — all module scope, phasing, and tool migration strategy are defined there.
+> **Form Field Gap Analysis:** `PRD/004-form-field-gap-analysis.md` — field-by-field diff between actual paper forms and current ClinicOS implementation (updated 2026-03-26).
 
 ## Vision
 
@@ -26,9 +27,12 @@ Long-term this becomes:
 | Auth + RBAC | N/A (new capability) | §11.11 | 🔲 Not started |
 | Patient Master File | Scattered records across paper/Notability | §11.1 | 🔲 Not started |
 | Appointment Management | PracticeMate only, no unified view | §11.2 | 🔲 Not started |
-| Front Desk Operations Board (签到 + 房间/资源板) | Paper sign sheet (⑧) + Google Sheets (⑨) + Manual tally (⑱) | §11.3 | 🔲 Not started |
-| Visit Management | Manual tracking | §11.5 | 🔲 Not started |
+| Front Desk Operations Board (签到 + 房间/资源板) | Paper sign sheet (⑧) + Google Sheets (⑨) + Manual tally (⑱) | §11.3 | ⚠️ Prototype done, gaps remain |
+| Visit Management | Manual tracking | §11.5 | ⚠️ Prototype done, copay/signature fields missing |
+| **Insurance Policy Fields (P0)** | 个人签字表表头 — Member ID, Deductible, OOP, Copay, Visits | §11.7 + PRD-004 §2.1 | 🔲 Not started |
+| **Copay Collection + WD Verified per Visit (P0)** | 每次就诊实收共付额（CC字段）+免赔额核实（WD） | PRD-004 §2.2 | 🔲 Not started |
 | Clinical Note (basic status) | EHR notes, Notability | §11.6 | 🔲 Not started |
+| **Multi-modality Treatment Record (P1)** | 个人诊疗记录表 — 每次就诊多个治疗项目 | PRD-004 §2.4 | 🔲 Not started |
 | Document / Signature Archive (basic) | Notability 手工归档 | §11.4 | 🔲 Not started |
 | Task Management (basic) | Asana (②③) | §11.9 | 🔲 Not started |
 | Dashboard (basic) | Manual tallying (⑱) | §11.10 | 🔲 Not started |
@@ -55,7 +59,9 @@ Definition of done:
 
 | Module | Replaces | PRD § | Status |
 |---|---|---|---|
-| Insurance / Eligibility | Portal queries (④), Notability ledger (⑤) | §11.7 | 🔲 Not started |
+| Insurance / Eligibility | Portal queries (④), Notability ledger (⑤) | §11.7 + PRD-004 §2.7 | 🔲 Not started |
+| **Eligibility Verification Workflow (替代 Asana)** | asana insurance inquiry list — 5-question SOP, by year, per patient | PRD-004 §2.7 | 🔲 Not started |
+| **Digital Signature Archive (替代 Notability)** | 签字总表 — 317+ patient notebooks | PRD-004 §2.6 | 🔲 Not started |
 | Claim / Billing State Machine | Manual claim entry (⑪⑫) | §11.8 | 🔲 Not started |
 | Denial / AR Queue | Manual comparison (⑬–⑰) | §11.8 | 🔲 Not started |
 | Billing Dashboard | Manual reconciliation | §11.10 | 🔲 Not started |

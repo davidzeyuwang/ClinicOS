@@ -351,9 +351,9 @@ async function refreshOps(){
         ${patientHtml}
         ${action}
         <div class="flex gap-1 mt-2">
-          <button onclick="chgRoom('${r.room_id}','available')" class="btn btn-xs ${r.status==='available'?'btn-primary':'btn-outline'}" title="Free">✓</button>
-          <button onclick="chgRoom('${r.room_id}','cleaning')" class="btn btn-xs ${r.status==='cleaning'?'btn-blue':'btn-outline'}" title="Cleaning">🧹</button>
-          <button onclick="chgRoom('${r.room_id}','out_of_service')" class="btn btn-xs ${r.status==='out_of_service'?'btn-danger':'btn-outline'}" title="OOS">✕</button>
+          <button onclick="chgRoom('${r.room_id}','available')" class="btn btn-xs ${r.status==='available'?'btn-primary':'btn-outline'}" title="Free" ${r.status==='occupied'?'disabled style="opacity:0.35;cursor:not-allowed;"':''}>✓</button>
+          <button onclick="chgRoom('${r.room_id}','cleaning')" class="btn btn-xs ${r.status==='cleaning'?'btn-blue':'btn-outline'}" title="Cleaning" ${r.status==='occupied'?'disabled style="opacity:0.35;cursor:not-allowed;"':''}>🧹</button>
+          <button onclick="chgRoom('${r.room_id}','out_of_service')" class="btn btn-xs ${r.status==='out_of_service'?'btn-danger':'btn-outline'}" title="OOS" ${r.status==='occupied'?'disabled style="opacity:0.35;cursor:not-allowed;"':''}>✕</button>
         </div>
       </div>`;
     }).join('');}

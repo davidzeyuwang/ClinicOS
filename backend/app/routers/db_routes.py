@@ -1,10 +1,10 @@
-"""API routes backed by SQLite database — aligned with PRD v2.0."""
+"""API routes — dispatches to Supabase REST or SQLite based on env."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db, _IS_SUPABASE
 from app.schemas.prototype import (
     AppointmentCreate,
     AppointmentUpdate,
@@ -31,7 +31,11 @@ from app.schemas.prototype import (
     TaskCreate,
     TaskUpdate,
 )
-from app.services import db_service
+
+if _IS_SUPABASE:
+    from app.services import db_service_supa as db_service
+else:
+    from app.services import db_service
 
 router = APIRouter(prefix="/prototype", tags=["prototype"])
 

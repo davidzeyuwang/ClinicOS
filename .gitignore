@@ -17,3 +17,4 @@ node_modules/
 # local editor workspace file
 backend/tests/OpenClawAI.code-workspace
 .openclaw-global/
+.vercel

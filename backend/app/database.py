@@ -1,38 +1,103 @@
-"""Database configuration and session management."""
+"""
+Database layer.
+- In production (Supabase): uses REST API via httpx (HTTPS only, Vercel-safe)
+- Locally: falls back to SQLite via SQLAlchemy for development
+"""
 import os
+from typing import Optional, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+_IS_SUPABASE = bool(_SUPABASE_URL and _SUPABASE_KEY)
 
-_raw = os.getenv("DATABASE_URL", "")
-if _raw.startswith("postgres://"):
-    _raw = _raw.replace("postgres://", "postgresql+psycopg://", 1)
-elif _raw.startswith("postgresql://") and "+psycopg" not in _raw and "+asyncpg" not in _raw:
-    _raw = _raw.replace("postgresql://", "postgresql+psycopg://", 1)
-elif _raw.startswith("postgresql+asyncpg://"):
-    _raw = _raw.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+# ── Local SQLite path (dev only) ──────────────────────────────────────────────
+if not _IS_SUPABASE:
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+    from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = _raw if _raw else "sqlite+aiosqlite:///./clinicos.db"
-_is_postgres = DATABASE_URL.startswith("postgresql")
+    DATABASE_URL = "sqlite+aiosqlite:///./clinicos.db"
+    engine = create_async_engine(DATABASE_URL, echo=False)
+    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# psycopg3 accepts sslmode via connect_args
-_connect_args = {"sslmode": "require"} if _is_postgres else {}
+    class Base(DeclarativeBase):
+        pass
 
-engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async def get_db():
+        async with async_session() as session:
+            yield session
+
+    async def init_db():
+        async with engine.begin() as conn:
+            from app.models.tables import Base as _  # noqa
+            await conn.run_sync(Base.metadata.create_all)
+
+# ── Supabase REST helper ───────────────────────────────────────────────────────
+class SupabaseClient:
+    """Minimal async Supabase REST client using httpx."""
+
+    def __init__(self):
+        import httpx
+        self._url = _SUPABASE_URL.rstrip("/")
+        self._headers = {
+            "apikey": _SUPABASE_KEY,
+            "Authorization": f"Bearer {_SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        self._client = httpx.AsyncClient(headers=self._headers, timeout=10)
+
+    async def select(self, table: str, filters: dict = None, limit: int = 1000) -> list:
+        params = {"select": "*", "limit": limit}
+        if filters:
+            for k, v in filters.items():
+                params[k] = f"eq.{v}"
+        r = await self._client.get(f"{self._url}/rest/v1/{table}", params=params)
+        r.raise_for_status()
+        return r.json()
+
+    async def insert(self, table: str, data: dict) -> dict:
+        r = await self._client.post(f"{self._url}/rest/v1/{table}", json=data)
+        r.raise_for_status()
+        result = r.json()
+        return result[0] if isinstance(result, list) else result
+
+    async def update(self, table: str, pk_col: str, pk_val: str, data: dict) -> dict:
+        params = {pk_col: f"eq.{pk_val}"}
+        r = await self._client.patch(f"{self._url}/rest/v1/{table}", params=params, json=data)
+        r.raise_for_status()
+        result = r.json()
+        return result[0] if isinstance(result, list) and result else data
+
+    async def delete(self, table: str, pk_col: str, pk_val: str) -> None:
+        params = {pk_col: f"eq.{pk_val}"}
+        r = await self._client.delete(f"{self._url}/rest/v1/{table}", params=params)
+        r.raise_for_status()
+
+    async def rpc(self, func: str, params: dict = None) -> Any:
+        r = await self._client.post(f"{self._url}/rest/v1/rpc/{func}", json=params or {})
+        r.raise_for_status()
+        return r.json()
 
 
-class Base(DeclarativeBase):
-    pass
+# Singleton
+_supa: Optional["SupabaseClient"] = None
 
+def get_supabase() -> "SupabaseClient":
+    global _supa
+    if _supa is None:
+        _supa = SupabaseClient()
+    return _supa
 
+# ── Compat shim: get_db yields None in Supabase mode (not used) ──────────────
 async def get_db():
-    async with async_session() as session:
-        yield session
-
+    if _IS_SUPABASE:
+        yield None
+    else:
+        async with async_session() as session:
+            yield session
 
 async def init_db():
-    if not _is_postgres:
+    if not _IS_SUPABASE:
         async with engine.begin() as conn:
-            from app.models.tables import Base as _  # noqa: F401
+            from app.models.tables import Base as _  # noqa
             await conn.run_sync(Base.metadata.create_all)

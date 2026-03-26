@@ -13,7 +13,10 @@ elif _raw.startswith("postgresql://") and "+asyncpg" not in _raw:
 DATABASE_URL = _raw if _raw else "sqlite+aiosqlite:///./clinicos.db"
 _is_postgres = DATABASE_URL.startswith("postgresql")
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+# asyncpg requires ssl=True for Supabase pooler connections
+_connect_args = {"ssl": "require"} if _is_postgres else {}
+
+engine = create_async_engine(DATABASE_URL, echo=False, connect_args=_connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

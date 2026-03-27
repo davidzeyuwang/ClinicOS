@@ -448,8 +448,15 @@ async function endSvc(vid){try{await POST('/portal/service/end',{visit_id:vid,ac
 
 // Checkout with payment modal
 function openCheckout(vid){
+  // Get visit data to extract patient_id for PDF download
+  const visit = visits.find(v => v.visit_id === vid);
+  const patientId = visit ? visit.patient_id : null;
+  const downloadPdfBtn = patientId ? 
+    `<a href="${API}/patients/${patientId}/sign-sheet.pdf" target="_blank" class="btn btn-outline w-full text-sm mb-2">📄 Download Sign Sheet PDF</a>` : '';
+  
   openModal('Check Out — Payment & Signature',`<div class="space-y-3">
     <div class="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">Complete payment & WD verification before checking out.</div>
+    ${downloadPdfBtn}
     <div class="grid grid-cols-2 gap-2">
       <div>
         <label class="text-xs text-gray-500 block mb-1">Copay Collected (CC) $</label>

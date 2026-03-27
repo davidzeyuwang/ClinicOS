@@ -106,12 +106,12 @@ def generate_sign_sheet(patient, visits, policies):
     # ---- Visit Table ----
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 6, "Visit Records (WHO did WHAT WHEN WHERE)", ln=True, fill=True)
+    pdf.cell(0, 6, "Visit Records", ln=True, fill=True)
     pdf.ln(1)
 
-    # col widths mm: Date/Time | Service | Staff(WHO) | Room(WHERE) | CC | WD | Signed | Check-Out
-    W = [32, 20, 30, 20, 18, 10, 14, 29]
-    HEADERS = ["Date/Time", "Service", "Staff (WHO)", "Room", "Copay CC", "WD", "Sign", "Check-Out"]
+    # col widths mm: Date/Time | Service | Room | CC | WD | Signed | Check-Out
+    W = [38, 28, 28, 20, 12, 14, 33]
+    HEADERS = ["Date/Time", "Service", "Room", "Copay CC", "WD", "Sign", "Check-Out"]
     pdf.set_fill_color(210, 220, 210)
     pdf.set_font("Helvetica", "B", 7.5)
     for i, h in enumerate(HEADERS):
@@ -122,14 +122,12 @@ def generate_sign_sheet(patient, visits, policies):
     alt = False
     for v in visits:
         status   = str(v.get("status") or "")
-        # WHEN: Include time with date
+        # Date/Time with checkin time
         checkin_time = _fmt_dt(v.get("check_in_time"), "%m/%d %H:%M")
-        # WHAT: Service type
-        svc      = str(v.get("service_type") or "-")[:10]
-        # WHO: Staff name
-        staff    = str(v.get("staff_name") or v.get("staff_id") or "-")[:15]
-        # WHERE: Room
-        room     = str(v.get("room_name") or v.get("room_code") or "-")[:10]
+        # Service type
+        svc      = str(v.get("service_type") or "-")[:12]
+        # Room
+        room     = str(v.get("room_name") or v.get("room_code") or "-")[:12]
         
         if status == "checked_out":
             cc       = _money(v.get("copay_collected"))
@@ -138,7 +136,7 @@ def generate_sign_sheet(patient, visits, policies):
             checkout = _fmt_dt(v.get("check_out_time"), "%m/%d %H:%M")
         else:
             cc = wd = signed = ""
-            checkout = ("(" + status + ")")[:14]
+            checkout = ("(" + status + ")")[:16]
 
         if alt:
             pdf.set_fill_color(248, 252, 248)
@@ -146,10 +144,10 @@ def generate_sign_sheet(patient, visits, policies):
             pdf.set_fill_color(255, 255, 255)
         alt = not alt
 
-        row = [checkin_time, svc, staff, room, cc, wd, signed, checkout]
+        row = [checkin_time, svc, room, cc, wd, signed, checkout]
         for i, cell in enumerate(row):
             pdf.cell(W[i], 5.5, str(cell), border=1, fill=True,
-                     align="C" if i in (4, 5, 6) else "L")
+                     align="C" if i in (3, 4, 5) else "L")
         pdf.ln()
 
     # ---- Totals ----
@@ -158,9 +156,9 @@ def generate_sign_sheet(patient, visits, policies):
     pdf.set_fill_color(210, 225, 210)
     pdf.set_font("Helvetica", "B", 8)
     label = "Total Visits: %d  |  Checked Out: %d" % (len(visits), len(checked_out))
-    pdf.cell(sum(W[:3]), 5.5, label, border=1, fill=True)
-    pdf.cell(W[3], 5.5, _money(total_copay) if total_copay else "-", border=1, fill=True, align="C")
-    pdf.cell(W[4] + W[5] + W[6], 5.5, "", border=1, fill=True)
+    pdf.cell(sum(W[:2]), 5.5, label, border=1, fill=True)
+    pdf.cell(W[2], 5.5, _money(total_copay) if total_copay else "-", border=1, fill=True, align="C")
+    pdf.cell(W[3] + W[4] + W[5] + W[6], 5.5, "", border=1, fill=True)
     pdf.ln(8)
 
     # ---- Signature ----

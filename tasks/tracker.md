@@ -1,8 +1,10 @@
 # ClinicOS Task Tracker — Master Board
 
-**Last Updated:** 2026-03-15
+**Last Updated:** 2026-03-27
 
 ## Active Milestone: M1 — Operations Board
+
+**M1 Scope Clarification:** Patient management, staff management, room management, check-in, check-out, sign-sheet PDF generation, and daily report aggregation. Appointment/insurance/tasking beyond this core flow are tracked as post-M1 or secondary scope.
 
 ### Task Summary
 | Status | Count |
@@ -40,3 +42,4 @@ _(none yet)_
 | Date | Change | By |
 |---|---|---|
 | 2026-03-15 | Initialized tracker from PRD-002 task board | Manager |
+| 2026-03-27 | Clarified M1 as operations core: patient/staff/room/check-in/check-out/PDF/report | Manager |

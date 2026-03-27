@@ -1,6 +1,6 @@
 # Clinic OS — Product Roadmap
 
-**Last Updated:** 2026-03-26
+**Last Updated:** 2026-03-27
 
 > **Canonical PRD:** `PRD/003-clinic-os-prd-v2.md` (v2.0) — all module scope, phasing, and tool migration strategy are defined there.
 > **Form Field Gap Analysis:** `PRD/004-form-field-gap-analysis.md` — field-by-field diff between actual paper forms and current ClinicOS implementation (updated 2026-03-26).
@@ -25,35 +25,47 @@ Long-term this becomes:
 |---|---|---|---|
 | Event Log System + Compliance Audit Log | Foundation for everything | §9, §11.11 | 🔲 Not started |
 | Auth + RBAC | N/A (new capability) | §11.11 | 🔲 Not started |
-| Patient Master File | Scattered records across paper/Notability | §11.1 | 🔲 Not started |
-| Appointment Management | PracticeMate only, no unified view | §11.2 | 🔲 Not started |
-| Front Desk Operations Board (签到 + 房间/资源板) | Paper sign sheet (⑧) + Google Sheets (⑨) + Manual tally (⑱) | §11.3 | ⚠️ Prototype done, gaps remain |
-| Visit Management | Manual tracking | §11.5 | ⚠️ Prototype done, copay/signature fields missing |
+| Patient Master File | Scattered records across paper/Notability | §11.1 | ⚠️ M1 core in progress |
+| Appointment Management | PracticeMate only, no unified view | §11.2 | 🔲 Deferred after M1 core |
+| Front Desk Operations Board (签到 + 房间/资源板) | Paper sign sheet (⑧) + Google Sheets (⑨) + Manual tally (⑱) | §11.3 | ⚠️ M1 core in progress |
+| Visit Management | Manual tracking | §11.5 | ⚠️ M1 core in progress |
 | **Insurance Policy Fields (P0)** | 个人签字表表头 — Member ID, Deductible, OOP, Copay, Visits | §11.7 + PRD-004 §2.1 | 🔲 Not started |
 | **Copay Collection + WD Verified per Visit (P0)** | 每次就诊实收共付额（CC字段）+免赔额核实（WD） | PRD-004 §2.2 | 🔲 Not started |
-| Clinical Note (basic status) | EHR notes, Notability | §11.6 | 🔲 Not started |
+| Clinical Note (basic status) | EHR notes, Notability | §11.6 | 🔲 Deferred after M1 core |
 | **Multi-modality Treatment Record (P1)** | 个人诊疗记录表 — 每次就诊多个治疗项目 | PRD-004 §2.4 | 🔲 Not started |
-| Document / Signature Archive (basic) | Notability 手工归档 | §11.4 | 🔲 Not started |
-| Task Management (basic) | Asana (②③) | §11.9 | 🔲 Not started |
-| Dashboard (basic) | Manual tallying (⑱) | §11.10 | 🔲 Not started |
+| Document / Signature Archive (basic) | Notability 手工归档 | §11.4 | ⚠️ M1 PDF/sign flow in progress |
+| Task Management (basic) | Asana (②③) | §11.9 | 🔲 Deferred after M1 core |
+| Dashboard (basic) | Manual tallying (⑱) | §11.10 | ⚠️ M1 daily report in progress |
 
 #### Milestone 1 — Operations Board (first build target)
 Scope:
+- Patient management: create/search/view patient records needed for front-desk flow
 - Admin portal: room management (create/edit/active status), staff management (create/edit/role/active status)
 - User portal: patient check-in workflow with check-in time, service type, service start time, service end/check-out time, room status updates
-- Real-time aggregate: per-staff working hours and active session counters
+- Checkout flow: copay capture, WD verification, patient-signed visit confirmation
+- Sign sheet PDF: generate printable per-patient sign sheet from structured visit history
 - Daily reporting: auto-generate day-end report and persist all event + projection data
 
 Deliverables:
-- Event contracts for room, staff, check-in/out, service timing, and room status change
-- Read models for room board, staff-hour aggregates, and daily summary report
-- API + UI slices for admin and user portal workflows
+- Event contracts for patient, room, staff, check-in/out, service timing, payment/sign-off, and room status change
+- Read models for room board, visit history, staff-hour aggregates, sign-sheet PDF source data, and daily summary report
+- API + UI slices for patient management, admin setup, check-in/check-out, and daily operations workflows
+- Backend and browser E2E coverage for the M1 golden path
 - Daily report persistence job (scheduled + manual re-run)
 
 Definition of done:
-- Front desk and therapists can complete full visit lifecycle without paper
-- Manager can see real-time staff hours and room occupancy
+- Front desk can manage patients, staff, and rooms needed for daily flow without paper trackers
+- Front desk and therapists can complete check-in, room assignment, service, and check-out without paper
+- Printable sign-sheet PDF can be generated from ClinicOS visit data for in-clinic signing workflow
+- Manager can see real-time staff hours, room occupancy, and end-of-day aggregation
 - End-of-day report is generated, saved, and reproducible from event log
+
+Out of scope for M1:
+- Eligibility workflow / Asana replacement
+- Insurance portal operations beyond basic stored policy fields
+- Appointment-first workflow as the primary entry point
+- Claim submission, EOB reconciliation, denial handling, and posting correction
+- Full clinical note workflow beyond basic status support
 
 ### Phase 2 — 后台保险与 Claim 流程打通 (Insurance + Billing)
 

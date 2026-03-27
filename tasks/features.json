@@ -1,0 +1,110 @@
+[
+  {
+    "id": "M1-BE-01",
+    "title": "PostgreSQL event_log + core events",
+    "description": "SQLAlchemy models for event_log table and core event types (ROOM_CREATED, STAFF_CREATED, PATIENT_CHECKED_IN, SERVICE_STARTED, SERVICE_ENDED, PATIENT_CHECKED_OUT). DB-agnostic (SQLite local, Supabase prod).",
+    "phase": 4,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [],
+    "verify": "cd backend && python -m pytest tests/ -k 'event_log or core_events' -q --tb=short",
+    "verify_manual": "POST /prototype/portal/checkin → GET /prototype/events → event appears in list",
+    "passes": false
+  },
+  {
+    "id": "M1-BE-02",
+    "title": "DB-backed projections (room-board, staff-hours, daily-report)",
+    "description": "Projection tables rebuilt from event_log. Endpoints: GET /prototype/projections/room-board, GET /prototype/projections/staff-hours, POST /prototype/reports/daily/generate.",
+    "phase": 4,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": ["M1-BE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'projection or room_board or staff_hours or daily_report' -q --tb=short",
+    "verify_manual": "Run full E2E flow → GET /prototype/projections/room-board → all rooms visible with correct status",
+    "passes": false
+  },
+  {
+    "id": "M1-BE-03",
+    "title": "Auth + RBAC guards",
+    "description": "JWT-based auth with role enforcement. Roles: admin, front_desk, provider. Guards on admin-only routes (/prototype/admin/*). Login endpoint returns JWT.",
+    "phase": 4,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": ["M1-BE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'auth or rbac or login' -q --tb=short",
+    "verify_manual": "Call /prototype/admin/rooms without token → 401. With admin token → 200.",
+    "passes": false
+  },
+  {
+    "id": "M1-FE-01",
+    "title": "Admin portal UI (room/staff CRUD)",
+    "description": "Admin tab: create/edit rooms and staff. Calls /prototype/admin/rooms and /prototype/admin/staff. Shows current room list and staff roster.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P0",
+    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "verify": "cd backend && python -m pytest tests/ -k 'admin_portal or room_crud or staff_crud' -q --tb=short",
+    "verify_manual": "Open UI → Admin tab → create room 'Room 1' → appears in room board",
+    "passes": false
+  },
+  {
+    "id": "M1-FE-02",
+    "title": "User portal — visit lifecycle flow",
+    "description": "Front desk tab: patient check-in → service start (assign room + provider) → service end → checkout. Each step calls the matching API and updates visible state.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P0",
+    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "verify": "cd backend && python -m pytest tests/ -k 'visit_lifecycle or checkin or checkout' -q --tb=short",
+    "verify_manual": "Check in patient → start service → end service → checkout → patient gone from active list",
+    "passes": false
+  },
+  {
+    "id": "M1-FE-03",
+    "title": "Live dashboard — room board + staff hours",
+    "description": "Dashboard tab: real-time room occupancy board and staff hours worked today. Auto-refreshes every 30s. Data from GET /prototype/projections/room-board and /staff-hours.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": ["M1-FE-01", "M1-FE-02"],
+    "verify": "cd backend && python -m pytest tests/ -k 'dashboard or live_board' -q --tb=short",
+    "verify_manual": "Start service in Room 1 → dashboard shows Room 1 as occupied within 30s",
+    "passes": false
+  },
+  {
+    "id": "M1-QA-01",
+    "title": "API + flow tests (happy path + failure cases)",
+    "description": "pytest E2E coverage: full visit lifecycle, admin CRUD, edge cases (double check-in, checkout without service end, invalid room). All tests pass against local SQLite.",
+    "phase": 5,
+    "owner": "tester",
+    "priority": "P0",
+    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "verify": "cd backend && python -m pytest tests/test_prototype_e2e.py -v --tb=short",
+    "verify_manual": "pytest output shows 0 failures, covers checkin/service/checkout/admin flows",
+    "passes": false
+  },
+  {
+    "id": "M1-COMP-01",
+    "title": "PHI/logging/RBAC compliance audit",
+    "description": "Verify: no PHI in log output, RBAC enforced on all admin endpoints, all write operations produce audit event, event_log is append-only (no UPDATE/DELETE).",
+    "phase": 5,
+    "owner": "compliance",
+    "priority": "P0",
+    "depends_on": ["M1-BE-03"],
+    "verify": "cd backend && python -m pytest tests/ -k 'compliance or phi or audit' -q --tb=short",
+    "verify_manual": "Run server with DEBUG logging → grep logs for patient names/DOBs → none found",
+    "passes": false
+  },
+  {
+    "id": "M1-REV-01",
+    "title": "Final code review + go/no-go",
+    "description": "Reviewer (SDE-B) checks: event-sourcing invariants upheld, no business logic in routers, all endpoints have schema validation, test coverage adequate. Produces BLOCKER/NON-BLOCKER/SUGGESTION comments.",
+    "phase": 5,
+    "owner": "reviewer",
+    "priority": "P0",
+    "depends_on": ["M1-QA-01", "M1-COMP-01"],
+    "verify": "manual — reviewer produces review doc with zero BLOCKERs",
+    "verify_manual": "Reviewer doc at tasks/M1-REV-01-review.md with verdict: APPROVED",
+    "passes": false
+  }
+]

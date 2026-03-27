@@ -56,16 +56,16 @@
 2. ✅ **PLAN-02:** Investigate and fix checkout failure - **TESTED**
 3. ✅ **PLAN-03:** Add PDF download button to checkout modal - **IMPLEMENTED**
 
-### Phase 2: Multiple Treatments Frontend (P1)
-4. ✅ **PLAN-04:** Add treatment list display on active visits
-5. ✅ **PLAN-05:** Add treatment button + modal
-6. ✅ **PLAN-06:** Show treatments in checkout modal
-7. ✅ **PLAN-07:** Enable treatment editing (duration, notes)
+### Phase 2: Multiple Treatments Frontend (P1) ✅ COMPLETE
+4. ✅ **PLAN-04:** Add treatment list display on active visits - **TESTED**
+5. ✅ **PLAN-05:** Add treatment button + modal - **TESTED**
+6. ✅ **PLAN-06:** Show treatments in checkout modal - **TESTED**
+7. ✅ **PLAN-07:** Enable treatment editing (duration, notes) - **TESTED**
 
-### Phase 3: Treatment Records Page (P1)
-8. ✅ **PLAN-08:** Create Treatment Records tab/page
-9. ✅ **PLAN-09:** Add date/patient/staff filters
-10. ✅ **PLAN-10:** Display treatment table with all fields
+### Phase 3: Treatment Records Page (P1) ✅ COMPLETE
+8. ✅ **PLAN-08:** Create Treatment Records tab/page - **DEPLOYED**
+9. ✅ **PLAN-09:** Add date/patient/staff filters - **DEPLOYED**
+10. ✅ **PLAN-10:** Display treatment table with all fields - **DEPLOYED**
 
 ### Phase 4: Selective PDF (P2)
 11. ✅ **PLAN-11:** Add checkboxes to visit history in patient modal
@@ -81,13 +81,13 @@
 | PLAN-01: Fix PDF format | ✅ DONE | tester | pdf_service.py |
 | PLAN-02: Fix checkout failure | ✅ DONE | tester | db_routes.py, index.html |
 | PLAN-03: PDF btn in checkout | ✅ DONE | tester | index.html |
-| PLAN-04: Treatment display | 🟡 TODO | tester | index.html |
-| PLAN-05: Add treatment modal | 🟡 TODO | tester | index.html |
-| PLAN-06: Checkout treatments | 🟡 TODO | tester | index.html |
-| PLAN-07: Edit treatments | 🟡 TODO | tester | index.html |
-| PLAN-08: Treatment Records tab | 🟡 TODO | tester | index.html |
-| PLAN-09: Treatment filters | 🟡 TODO | tester | index.html |
-| PLAN-10: Treatment table | 🟡 TODO | tester | index.html |
+| PLAN-04: Treatment display | ✅ DONE | tester | index.html |
+| PLAN-05: Add treatment modal | ✅ DONE | tester | index.html |
+| PLAN-06: Checkout treatments | ✅ DONE | tester | index.html |
+| PLAN-07: Edit treatments | ✅ DONE | tester | index.html |
+| PLAN-08: Treatment Records tab | ✅ DONE | tester | index.html |
+| PLAN-09: Treatment filters | ✅ DONE | tester | index.html |
+| PLAN-10: Treatment table | ✅ DONE | tester | index.html |
 | PLAN-11: Visit checkboxes | 🟡 TODO | tester | index.html |
 | PLAN-12: PDF w/ visit_ids | 🟡 TODO | tester | db_routes.py, pdf_service.py |
 | PLAN-13: Selected PDF button | 🟡 TODO | tester | index.html |

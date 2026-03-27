@@ -693,3 +693,189 @@ async def get_daily_report(db, report_date: Optional[str] = None) -> Optional[di
     today = report_date or _date.today().isoformat()
     rows = await supa.select("daily_reports", {"report_date": today})
     return rows[-1] if rows else None
+
+
+# ===================== TREATMENTS (PRD-005) =====================
+
+async def add_treatment(
+    db,
+    visit_id: str,
+    modality: str,
+    actor_id: str,
+    therapist_id: Optional[str] = None,
+    duration_minutes: Optional[int] = 30,
+    notes: Optional[str] = None
+) -> dict:
+    """Add a treatment modality to a visit."""
+    supa = get_supabase()
+    
+    # Verify visit exists and is active
+    visits = await supa.select("visits", {"visit_id": visit_id})
+    if not visits:
+        raise ValueError(f"Visit {visit_id} not found")
+    visit = visits[0]
+    if visit.get("status") not in ("checked_in", "in_service", "service_completed"):
+        raise ValueError(f"Cannot add treatment to visit with status {visit.get('status')}")
+    
+    treatment = {
+        "treatment_id": _new_id(),
+        "visit_id": visit_id,
+        "modality": modality,
+        "therapist_id": therapist_id or actor_id,
+        "duration_minutes": duration_minutes,
+        "notes": notes,
+        "started_at": _utc_now(),
+        "created_at": _utc_now(),
+        "updated_at": _utc_now(),
+    }
+    
+    result = await supa.insert("visit_treatments", treatment)
+    
+    await _append_event("TREATMENT_ADDED", actor_id, {
+        "treatment_id": treatment["treatment_id"],
+        "visit_id": visit_id,
+        "modality": modality,
+        "therapist_id": therapist_id,
+        "duration_minutes": duration_minutes,
+    })
+    
+    return result
+
+
+async def update_treatment(
+    db,
+    treatment_id: str,
+    actor_id: str,
+    duration_minutes: Optional[int] = None,
+    notes: Optional[str] = None
+) -> dict:
+    """Update treatment duration and notes."""
+    supa = get_supabase()
+    
+    treatments = await supa.select("visit_treatments", {"treatment_id": treatment_id})
+    if not treatments:
+        raise ValueError(f"Treatment {treatment_id} not found")
+    
+    updates = {"updated_at": _utc_now()}
+    payload_updates = {}
+    
+    if duration_minutes is not None:
+        updates["duration_minutes"] = duration_minutes
+        payload_updates["duration_minutes"] = duration_minutes
+    if notes is not None:
+        updates["notes"] = notes
+        payload_updates["notes"] = notes
+    
+    result = await supa.update("visit_treatments", {"treatment_id": treatment_id}, updates)
+    
+    await _append_event("TREATMENT_UPDATED", actor_id, {
+        "treatment_id": treatment_id,
+        "updates": payload_updates,
+    })
+    
+    return result
+
+
+async def delete_treatment(db, treatment_id: str, actor_id: str) -> dict:
+    """Soft delete a treatment."""
+    supa = get_supabase()
+    
+    treatments = await supa.select("visit_treatments", {"treatment_id": treatment_id})
+    if not treatments:
+        raise ValueError(f"Treatment {treatment_id} not found")
+    
+    treatment = treatments[0]
+    
+    await _append_event("TREATMENT_DELETED", actor_id, {
+        "treatment_id": treatment_id,
+        "visit_id": treatment.get("visit_id"),
+    })
+    
+    await supa.delete("visit_treatments", {"treatment_id": treatment_id})
+    
+    return {"deleted": True, "treatment_id": treatment_id}
+
+
+async def list_visit_treatments(db, visit_id: str) -> list:
+    """List all treatments for a visit."""
+    supa = get_supabase()
+    
+    treatments = await supa.select("visit_treatments", {"visit_id": visit_id})
+    
+    # Enrich with therapist names
+    enriched = []
+    for t in treatments:
+        if t.get("therapist_id"):
+            staff_rows = await supa.select("staff", {"staff_id": t["therapist_id"]})
+            if staff_rows:
+                t["therapist_name"] = staff_rows[0].get("name")
+        enriched.append(t)
+    
+    return enriched
+
+
+async def list_treatment_records(
+    db,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+    modality: Optional[str] = None
+) -> list:
+    """Query treatment records with filters."""
+    supa = get_supabase()
+    
+    # Get all treatments first
+    treatments = await supa.select("visit_treatments", {})
+    
+    # Filter and enrich
+    enriched = []
+    for t in treatments:
+        # Get visit details
+        visit_rows = await supa.select("visits", {"visit_id": t["visit_id"]})
+        if not visit_rows:
+            continue
+        visit = visit_rows[0]
+        
+        # Apply filters
+        if date_from and visit.get("check_in_time", "") < date_from:
+            continue
+        if date_to and visit.get("check_in_time", "") > date_to + " 23:59:59":
+            continue
+        if patient_id and visit.get("patient_id") != patient_id:
+            continue
+        if staff_id and t.get("therapist_id") != staff_id:
+            continue
+        if modality and t.get("modality") != modality:
+            continue
+        
+        # Enrich with related data
+        t["visit_date"] = visit.get("check_in_time")
+        t["visit_status"] = visit.get("status")
+        
+        # Get patient name
+        if visit.get("patient_id"):
+            patient_rows = await supa.select("patients", {"patient_id": visit["patient_id"]})
+            if patient_rows:
+                p = patient_rows[0]
+                t["patient_name"] = f"{p.get('first_name', '')} {p.get('last_name', '')}"
+        
+        # Get room name
+        if visit.get("room_id"):
+            room_rows = await supa.select("rooms", {"room_id": visit["room_id"]})
+            if room_rows:
+                t["room_name"] = room_rows[0].get("name")
+                t["room_code"] = room_rows[0].get("code")
+        
+        # Get therapist name
+        if t.get("therapist_id"):
+            staff_rows = await supa.select("staff", {"staff_id": t["therapist_id"]})
+            if staff_rows:
+                t["therapist_name"] = staff_rows[0].get("name")
+        
+        enriched.append(t)
+    
+    # Sort by visit date descending
+    enriched.sort(key=lambda x: x.get("visit_date", ""), reverse=True)
+    
+    return enriched

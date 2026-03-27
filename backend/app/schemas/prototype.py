@@ -256,6 +256,33 @@ class DailyReportGenerate(BaseModel):
     date: Optional[str] = Field(default=None, description="YYYY-MM-DD. Defaults to today UTC")
 
 
+# ==================== TREATMENT (§PRD-005) ====================
+
+class TreatmentAdd(BaseModel):
+    """Add a treatment modality to an active visit."""
+    visit_id: str
+    modality: str = Field(description="PT, OT, Eval, E-stim, Massage, Cupping, Acupuncture, etc.")
+    therapist_id: Optional[str] = None
+    duration_minutes: Optional[int] = Field(default=30, ge=1, le=480)
+    notes: Optional[str] = None
+    actor_id: str
+
+
+class TreatmentUpdate(BaseModel):
+    """Update treatment details (duration, notes)."""
+    duration_minutes: Optional[int] = Field(default=None, ge=1, le=480)
+    notes: Optional[str] = None
+
+
+class TreatmentRecordsFilter(BaseModel):
+    """Query filters for treatment records."""
+    date_from: Optional[str] = Field(default=None, description="YYYY-MM-DD")
+    date_to: Optional[str] = Field(default=None, description="YYYY-MM-DD")
+    patient_id: Optional[str] = None
+    staff_id: Optional[str] = None  # therapist
+    modality: Optional[str] = None
+
+
 # ==================== EVENT ====================
 
 class EventEnvelope(BaseModel):

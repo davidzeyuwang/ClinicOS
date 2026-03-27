@@ -125,7 +125,7 @@ class Visit(Base):
     patient_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="checked_in")
     check_in_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    service_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    service_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # Legacy single service - will be deprecated
     service_start_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     service_end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     check_out_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -138,6 +138,24 @@ class Visit(Base):
     copay_collected: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # actual copay amount collected at desk
     wd_verified: Mapped[bool] = mapped_column(Boolean, default=False)  # WD (waived deductible / verified date) checked
     patient_signed: Mapped[bool] = mapped_column(Boolean, default=False)  # patient signed at checkout
+
+
+# ==================== VISIT TREATMENTS (§11.5 - Multiple Modalities) ====================
+
+class VisitTreatment(Base):
+    """Treatment modalities within a visit - supports multiple concurrent treatments."""
+    __tablename__ = "visit_treatments"
+
+    treatment_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    visit_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    modality: Mapped[str] = mapped_column(String(64), nullable=False)  # PT, OT, Eval, E-stim, Massage, Cupping, etc.
+    therapist_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # Can differ from visit.staff_id
+    duration_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 
 
 # ==================== CLINICAL NOTE (§11.6) ====================

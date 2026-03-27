@@ -106,5 +106,66 @@
     "verify": "manual — reviewer produces review doc with zero BLOCKERs",
     "verify_manual": "Reviewer doc at tasks/M1-REV-01-review.md with verdict: APPROVED",
     "passes": false
+  },
+  {
+    "id": "PRD005-BE-01",
+    "title": "Multiple treatments per visit — backend",
+    "description": "visit_treatments table, 5 API endpoints (add/update/delete/list/filter), event logging (TREATMENT_ADDED/UPDATED/DELETED). Supports multiple modalities per visit with different therapists and durations.",
+    "phase": 4,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [],
+    "verify": "cd backend && python -m pytest tests/test_treatments.py -q",
+    "verify_manual": "POST /visits/{id}/treatments/add → GET /visits/{id}/treatments → list includes added treatment",
+    "passes": true
+  },
+  {
+    "id": "PRD005-FE-01",
+    "title": "Multiple treatments UI — active visits",
+    "description": "Add treatment button on active visit cards, treatment list with edit/delete, add treatment modal with modality dropdown and duration input.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": ["PRD005-BE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'treatment_ui' -q",
+    "verify_manual": "Open active visit → click Add Treatment → select E-stim → save → treatment appears in list",
+    "passes": false
+  },
+  {
+    "id": "PRD005-FE-02",
+    "title": "Treatment records page",
+    "description": "New Treatment Records tab with filters (date range, patient, staff, modality). Table shows patient, date, modality, therapist, duration, room. Export to CSV.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P2",
+    "depends_on": ["PRD005-BE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'treatment_records_page' -q",
+    "verify_manual": "Open Treatment Records tab → filter by date range → table shows matching treatments",
+    "passes": false
+  },
+  {
+    "id": "PRD005-FE-03",
+    "title": "Enhanced checkout with treatment summary",
+    "description": "Checkout modal shows read-only treatment summary table before completion. Checkbox to 'Generate PDF for patient signature'. PDF includes all treatments in visit history.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": ["PRD005-BE-01", "PRD005-FE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'checkout_treatments' -q",
+    "verify_manual": "Checkout patient → see treatment summary → check 'Generate PDF' → PDF downloaded with all treatments",
+    "passes": false
+  },
+  {
+    "id": "PRD005-FE-04",
+    "title": "Selective PDF generation",
+    "description": "Patient detail modal shows checkboxes next to each visit. 'Download Selected Visits PDF' button generates PDF for only checked visits. Uses ?visit_ids=x,y,z query param.",
+    "phase": 4,
+    "owner": "frontend-engineer",
+    "priority": "P2",
+    "depends_on": ["PRD005-BE-01"],
+    "verify": "cd backend && python -m pytest tests/ -k 'selective_pdf' -q",
+    "verify_manual": "Open patient detail → check 2 visits → Download Selected PDF → PDF contains only those 2 visits",
+    "passes": false
   }
 ]
+

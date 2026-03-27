@@ -365,3 +365,443 @@ Before any feature ships, the following must be in place:
 6. **No PHI in non-compliant tools** (Asana, Notion, Slack, etc. unless BAA)
 7. **Financial records retained 7+ years**
 8. **Credential management** — no shared accounts, password manager required
+
+# Current Software Landscape & Claim Infrastructure
+
+## 1. Overview
+
+The clinic currently operates on a fragmented stack of multiple tools and systems that together form an unofficial “operating system” for daily operations, insurance workflows, and revenue cycle management (RCM).
+
+These systems are loosely integrated (mostly manual), leading to inefficiencies, data inconsistency, and compliance risks.
+
+---
+
+## 2. System Categorization
+
+The current tools can be grouped into five layers:
+
+1. Core Medical & Billing Systems (RCM Core)
+2. Insurance Workflow Management
+3. Patient Long-Term Records
+4. Daily Operations & Scheduling
+5. External Insurance Data Sources
+
+---
+
+## 3. Core Medical & Claim Systems (RCM Core)
+
+### 3.1 Office Ally (Clearinghouse)
+
+**Role:**
+- Primary claim submission system
+- Payment processing
+- EOB (Explanation of Benefits) delivery
+
+**Responsibilities:**
+- Submit claims to insurance providers
+- Receive payment data
+- Provide EOB summaries
+- Support limited auto-posting
+
+**Key Insight:**
+This is the **financial backbone** of the clinic. All revenue flows through this system.
+
+---
+
+### 3.2 PracticeMate (Office Ally PMS)
+
+**Role:**
+- Practice management system (PMS)
+- Appointment scheduling
+- Billing interface
+
+**Used for:**
+- Creating appointments
+- Managing patients
+- Entering claim data
+- Viewing claim status
+
+---
+
+### 3.3 EHR (Office Ally EHR)
+
+**Role:**
+- Doctor notes
+- Clinical documentation
+- CPT / diagnosis input
+
+**Characteristics:**
+- Used exclusively by doctors
+- Required for compliant billing
+- Not integrated with operational tools
+
+---
+
+### 3.4 Claim Flow (Current)
+
+```
+
+Appointment (PracticeMate)
+→ Doctor Notes (EHR)
+→ Claim Creation (PracticeMate)
+→ Submission (Office Ally)
+→ Insurance Processing
+→ EOB Returned (Office Ally)
+→ Manual Reconciliation
+
+```
+
+---
+
+## 4. External Insurance Systems
+
+### 4.1 Insurance Provider Portals
+
+Examples:
+- Aetna
+- UnitedHealthcare
+- Availity
+
+**Used for:**
+- Eligibility verification
+- Claim status tracking
+- Detailed EOB retrieval
+- Denial reason analysis
+
+---
+
+### 4.2 Critical Observation
+
+There are **two sources of truth for claims:**
+
+| Source | Description |
+|------|------------|
+| Office Ally | Simplified EOB |
+| Insurance Portal | Full, detailed EOB |
+
+---
+
+### 4.3 Current Reconciliation Process
+
+```
+
+Office Ally EOB
+↓
+Mismatch detected
+↓
+Manual login to portal
+↓
+Compare data manually
+↓
+Fix posting or resubmit claim
+
+```
+
+This is fully manual and highly error-prone.
+
+---
+
+## 5. Insurance Workflow Management
+
+### 5.1 Asana (Workflow Engine)
+
+**Role:**
+Insurance verification pipeline management
+
+---
+
+### 5.2 Board Structure
+
+```
+
+TO DO → DOING → REPLY → APPOINTMENT
+
+```
+
+---
+
+### 5.3 Task Structure
+
+Each task represents:
+- One patient
+- One insurance verification process
+
+Contains:
+- Patient info
+- Insurance details
+- Notes
+- Status
+
+---
+
+### 5.4 Observed Issues
+
+- Not HIPAA-compliant
+- Stores PHI without proper controls
+- No audit logs
+- No role-based access
+- No integration with billing systems
+
+---
+
+## 6. Patient Long-Term Records
+
+### 6.1 Notability
+
+**Role:**
+Patient-level long-term tracking (unofficial database)
+
+---
+
+### 6.2 Data Stored
+
+- Insurance usage (visit counts)
+- Remaining benefits
+- Preferences
+- Notes across staff
+- Historical summaries
+
+---
+
+### 6.3 Collaboration Model
+
+- Shared across front desk, insurance staff, and backend
+- Requires shared account for synchronization
+- Uses different pen colors to represent roles
+
+---
+
+### 6.4 Critical Issues
+
+- No user identity tracking
+- No audit logs
+- No access control
+- No structured data
+- Cannot scale
+
+**Key Insight:**
+Notability is functioning as a **collaborative database without any database features.**
+
+---
+
+## 7. Daily Operations Systems
+
+---
+
+### 7.1 Daily Sign-in Sheet (Paper)
+
+**Role:**
+Primary daily operational record
+
+---
+
+### 7.1.1 Data Captured
+
+- Patient name
+- Service performed
+- Staff
+- Time
+- Payment
+
+---
+
+### 7.1.2 Issues
+
+- Paper-based
+- Single-writer limitation
+- Requires manual transcription
+- No real-time visibility
+- No audit trail
+
+---
+
+### 7.2 Google Spreadsheet (Room Management)
+
+**Role:**
+Real-time room allocation board
+
+---
+
+### 7.2.1 Data Captured
+
+- Room usage
+- Patient assignment
+- Service type
+- Timestamp updates
+
+---
+
+### 7.2.2 Issues
+
+- Overwrites historical data
+- No time-series tracking
+- No audit logs
+- Weak permission control
+
+---
+
+## 8. Full System Relationship
+
+```
+
+Asana
+↓
+(Insurance Workflow)
+
+Notability
+↓
+(Patient Long-term Data)
+
+PracticeMate
+↓
+(Appointments & Billing Entry)
+
+EHR
+↓
+(Doctor Notes)
+
+Office Ally
+↓
+(Claim Submission & EOB)
+
+Insurance Portals
+↓
+(True Claim Data)
+
+Google Sheet
+↓
+(Room Tracking)
+
+Paper Sign-in
+↓
+(Daily Operations)
+
+```
+
+---
+
+## 9. Core Problems Summary
+
+---
+
+### 9.1 System Fragmentation
+
+Patient data is distributed across:
+- Asana
+- Notability
+- Paper sheets
+- Google Sheets
+- PracticeMate
+- EHR
+
+---
+
+### 9.2 Redundant Data Entry
+
+Same data is manually copied across multiple systems.
+
+---
+
+### 9.3 Lack of System Integration
+
+No automated data flow between:
+- Insurance → Appointment
+- Appointment → Check-in
+- Check-in → Billing
+- Billing → Reconciliation
+
+---
+
+### 9.4 Collaboration Failure
+
+- No multi-user support
+- No identity tracking
+- No audit logs
+
+---
+
+### 9.5 Compliance Risks
+
+| System | Risk |
+|------|------|
+| Asana | PHI exposure |
+| Notability | Shared account |
+| Google Sheets | Weak access control |
+| Paper | Physical exposure |
+
+---
+
+### 9.6 Revenue Cycle Inefficiency
+
+- Manual claim correction
+- Manual EOB comparison
+- No automated denial analysis
+
+---
+
+## 10. Strategic Insight
+
+The clinic is currently operating on:
+
+```
+
+A manually stitched system composed of:
+
+* Workflow tool (Asana)
+* Note-taking app (Notability)
+* Spreadsheet (Google Sheets)
+* Paper records
+* Billing system (Office Ally)
+* External portals
+
+```
+
+This is effectively an **unofficial operating system** without structure, auditability, or automation.
+
+---
+
+## 11. Opportunity Areas
+
+---
+
+### 11.1 Claim & EOB Automation (Highest Value)
+
+- Dual-source reconciliation
+- Denial reason automation
+- Auto-posting correction
+
+---
+
+### 11.2 Patient Ledger System
+
+- Replace Notability
+- Structured data
+- Multi-user collaboration
+- Audit logs
+
+---
+
+### 11.3 Insurance Workflow Engine
+
+- Replace Asana
+- Automated eligibility verification
+- Integrated workflow tracking
+
+---
+
+## 12. Conclusion
+
+The current system is not a single platform but a collection of disconnected tools.
+
+The opportunity is to build:
+
+**A unified Clinic Operating System (Clinic OS)**
+
+that integrates:
+- Workflow
+- Patient records
+- Billing
+- Insurance
+- Operations
+
+into a single, auditable, and automated platform.

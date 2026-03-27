@@ -106,29 +106,35 @@ def generate_sign_sheet(patient, visits, policies):
     # ---- Visit Table ----
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 6, "Visit Records", ln=True, fill=True)
+    pdf.cell(0, 6, "Visit Records (WHO did WHAT WHEN WHERE)", ln=True, fill=True)
     pdf.ln(1)
 
-    # col widths mm: Date | Service | Staff | CC | WD | Signed | Check-Out
-    W = [28, 22, 38, 22, 12, 16, 35]
-    HEADERS = ["Date", "Service", "Staff / Provider", "Copay CC", "WD", "Signed", "Check-Out"]
+    # col widths mm: Date/Time | Service | Staff(WHO) | Room(WHERE) | CC | WD | Signed | Check-Out
+    W = [32, 20, 30, 20, 18, 10, 14, 29]
+    HEADERS = ["Date/Time", "Service", "Staff (WHO)", "Room", "Copay CC", "WD", "Sign", "Check-Out"]
     pdf.set_fill_color(210, 220, 210)
-    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_font("Helvetica", "B", 7.5)
     for i, h in enumerate(HEADERS):
         pdf.cell(W[i], 6, h, border=1, fill=True, align="C")
     pdf.ln()
 
-    pdf.set_font("Helvetica", "", 8)
+    pdf.set_font("Helvetica", "", 7.5)
     alt = False
     for v in visits:
         status   = str(v.get("status") or "")
-        date_str = _fmt_date(v.get("check_in_time"))
-        svc      = str(v.get("service_type") or "-")[:12]
-        staff    = str(v.get("staff_name") or v.get("staff_id") or "-")[:20]
+        # WHEN: Include time with date
+        checkin_time = _fmt_dt(v.get("check_in_time"), "%m/%d %H:%M")
+        # WHAT: Service type
+        svc      = str(v.get("service_type") or "-")[:10]
+        # WHO: Staff name
+        staff    = str(v.get("staff_name") or v.get("staff_id") or "-")[:15]
+        # WHERE: Room
+        room     = str(v.get("room_name") or v.get("room_code") or "-")[:10]
+        
         if status == "checked_out":
             cc       = _money(v.get("copay_collected"))
-            wd       = "Yes" if v.get("wd_verified") else ""
-            signed   = "Yes" if v.get("patient_signed") else ""
+            wd       = "Y" if v.get("wd_verified") else ""
+            signed   = "Y" if v.get("patient_signed") else ""
             checkout = _fmt_dt(v.get("check_out_time"), "%m/%d %H:%M")
         else:
             cc = wd = signed = ""
@@ -140,10 +146,10 @@ def generate_sign_sheet(patient, visits, policies):
             pdf.set_fill_color(255, 255, 255)
         alt = not alt
 
-        row = [date_str, svc, staff, cc, wd, signed, checkout]
+        row = [checkin_time, svc, staff, room, cc, wd, signed, checkout]
         for i, cell in enumerate(row):
             pdf.cell(W[i], 5.5, str(cell), border=1, fill=True,
-                     align="C" if i in (3, 4, 5) else "L")
+                     align="C" if i in (4, 5, 6) else "L")
         pdf.ln()
 
     # ---- Totals ----

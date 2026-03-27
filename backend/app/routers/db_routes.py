@@ -31,6 +31,9 @@ from app.schemas.prototype import (
     StaffUpdate,
     TaskCreate,
     TaskUpdate,
+    TreatmentAdd,
+    TreatmentUpdate,
+    TreatmentRecordsFilter,
 )
 
 if _IS_SUPABASE:
@@ -413,3 +416,74 @@ async def update_task(task_id: str, payload: TaskUpdate, db: AsyncSession = Depe
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+# ==================== TREATMENTS (PRD-005) ====================
+
+@router.post("/visits/{visit_id}/treatments/add")
+async def add_treatment_to_visit(visit_id: str, payload: TreatmentAdd, db: AsyncSession = Depends(get_db)):
+    """Add a treatment modality to an active visit."""
+    try:
+        return await db_service.add_treatment(
+            db,
+            visit_id=visit_id,
+            modality=payload.modality,
+            actor_id=payload.actor_id,
+            therapist_id=payload.therapist_id,
+            duration_minutes=payload.duration_minutes,
+            notes=payload.notes
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/visits/{visit_id}/treatments")
+async def get_visit_treatments(visit_id: str, db: AsyncSession = Depends(get_db)):
+    """List all treatments for a visit."""
+    return {"treatments": await db_service.list_visit_treatments(db, visit_id=visit_id)}
+
+
+@router.patch("/visits/{visit_id}/treatments/{treatment_id}/update")
+async def update_treatment(visit_id: str, treatment_id: str, payload: TreatmentUpdate, db: AsyncSession = Depends(get_db)):
+    """Update treatment duration and notes."""
+    try:
+        return await db_service.update_treatment(
+            db,
+            treatment_id=treatment_id,
+            actor_id="admin",  # TODO: get from auth context
+            duration_minutes=payload.duration_minutes,
+            notes=payload.notes
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/visits/{visit_id}/treatments/{treatment_id}/delete")
+async def delete_treatment(visit_id: str, treatment_id: str, db: AsyncSession = Depends(get_db)):
+    """Remove a treatment from a visit."""
+    try:
+        return await db_service.delete_treatment(db, treatment_id=treatment_id, actor_id="admin")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/treatment-records")
+async def get_treatment_records(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+    modality: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Query all treatments with filters."""
+    return {
+        "treatments": await db_service.list_treatment_records(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            patient_id=patient_id,
+            staff_id=staff_id,
+            modality=modality
+        )
+    }

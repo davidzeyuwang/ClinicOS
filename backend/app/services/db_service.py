@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import (
     Appointment, ClinicalNote, DailyReport, Document, EventLog,
-    InsurancePolicy, Patient, Room, Staff, Task, Visit,
+    InsurancePolicy, Patient, Room, Staff, Task, Visit, VisitTreatment,
 )
 
 
@@ -417,11 +417,33 @@ async def get_active_visits(db: AsyncSession) -> list:
 
 
 async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
-    """All visits for a patient, newest first."""
+    """All visits for a patient, newest first. Includes room and staff names for PDF."""
     result = await db.execute(
         select(Visit).where(Visit.patient_id == patient_id).order_by(Visit.check_in_time.desc())
     )
-    return [_visit_to_dict(v) for v in result.scalars().all()]
+    visits = result.scalars().all()
+    
+    # Enrich with room and staff names for PDF generation
+    enriched = []
+    for v in visits:
+        visit_dict = _visit_to_dict(v)
+        
+        # Add staff name (WHO)
+        if v.staff_id:
+            staff = await db.get(Staff, v.staff_id)
+            if staff:
+                visit_dict["staff_name"] = staff.name
+        
+        # Add room name (WHERE)
+        if v.room_id:
+            room = await db.get(Room, v.room_id)
+            if room:
+                visit_dict["room_name"] = room.name
+                visit_dict["room_code"] = room.code
+        
+        enriched.append(visit_dict)
+    
+    return enriched
 
 
 async def get_daily_summary(db: AsyncSession, date: Optional[str] = None) -> dict:
@@ -1176,3 +1198,200 @@ async def list_tasks(db: AsyncSession, patient_id: Optional[str] = None,
     query = query.order_by(Task.priority.desc(), Task.created_at.desc())
     result = await db.execute(query)
     return [_task_to_dict(t) for t in result.scalars().all()]
+
+
+# ===================== TREATMENTS (PRD-005) =====================
+
+async def add_treatment(
+    db: AsyncSession,
+    visit_id: str,
+    modality: str,
+    actor_id: str,
+    therapist_id: Optional[str] = None,
+    duration_minutes: Optional[int] = 30,
+    notes: Optional[str] = None
+) -> dict:
+    """Add a treatment modality to a visit."""
+    # Verify visit exists and is active
+    visit_result = await db.execute(select(Visit).where(Visit.visit_id == visit_id))
+    visit = visit_result.scalar_one_or_none()
+    if not visit:
+        raise ValueError(f"Visit {visit_id} not found")
+    if visit.status not in ("checked_in", "in_service", "service_completed"):
+        raise ValueError(f"Cannot add treatment to visit with status {visit.status}")
+    
+    treatment = VisitTreatment(
+        treatment_id=_new_id(),
+        visit_id=visit_id,
+        modality=modality,
+        therapist_id=therapist_id or actor_id,
+        duration_minutes=duration_minutes,
+        notes=notes,
+        started_at=_utc_now(),
+        created_at=_utc_now(),
+        updated_at=_utc_now(),
+    )
+    db.add(treatment)
+    
+    await _append_event(db, "TREATMENT_ADDED", actor_id, {
+        "treatment_id": treatment.treatment_id,
+        "visit_id": visit_id,
+        "modality": modality,
+        "therapist_id": therapist_id,
+        "duration_minutes": duration_minutes,
+    })
+    
+    await db.commit()
+    return _treatment_to_dict(treatment)
+
+
+async def update_treatment(
+    db: AsyncSession,
+    treatment_id: str,
+    actor_id: str,
+    duration_minutes: Optional[int] = None,
+    notes: Optional[str] = None
+) -> dict:
+    """Update treatment duration and notes."""
+    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
+    treatment = result.scalar_one_or_none()
+    if not treatment:
+        raise ValueError(f"Treatment {treatment_id} not found")
+    
+    updates = {}
+    if duration_minutes is not None:
+        treatment.duration_minutes = duration_minutes
+        updates["duration_minutes"] = duration_minutes
+    if notes is not None:
+        treatment.notes = notes
+        updates["notes"] = notes
+    
+    treatment.updated_at = _utc_now()
+    
+    await _append_event(db, "TREATMENT_UPDATED", actor_id, {
+        "treatment_id": treatment_id,
+        "updates": updates,
+    })
+    
+    await db.commit()
+    return _treatment_to_dict(treatment)
+
+
+async def delete_treatment(
+    db: AsyncSession,
+    treatment_id: str,
+    actor_id: str
+) -> dict:
+    """Soft delete a treatment."""
+    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
+    treatment = result.scalar_one_or_none()
+    if not treatment:
+        raise ValueError(f"Treatment {treatment_id} not found")
+    
+    await _append_event(db, "TREATMENT_DELETED", actor_id, {
+        "treatment_id": treatment_id,
+        "visit_id": treatment.visit_id,
+    })
+    
+    await db.execute(delete(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
+    await db.commit()
+    
+    return {"deleted": True, "treatment_id": treatment_id}
+
+
+async def list_visit_treatments(db: AsyncSession, visit_id: str) -> list:
+    """List all treatments for a visit."""
+    result = await db.execute(
+        select(VisitTreatment)
+        .where(VisitTreatment.visit_id == visit_id)
+        .order_by(VisitTreatment.started_at)
+    )
+    treatments = result.scalars().all()
+    
+    # Enrich with therapist names
+    enriched = []
+    for t in treatments:
+        t_dict = _treatment_to_dict(t)
+        if t.therapist_id:
+            staff = await db.get(Staff, t.therapist_id)
+            if staff:
+                t_dict["therapist_name"] = staff.name
+        enriched.append(t_dict)
+    
+    return enriched
+
+
+async def list_treatment_records(
+    db: AsyncSession,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+    modality: Optional[str] = None
+) -> list:
+    """Query treatment records with filters."""
+    query = select(VisitTreatment).join(Visit, Visit.visit_id == VisitTreatment.visit_id)
+    
+    if date_from:
+        query = query.where(Visit.check_in_time >= date_from)
+    if date_to:
+        query = query.where(Visit.check_in_time <= date_to + " 23:59:59")
+    if patient_id:
+        query = query.where(Visit.patient_id == patient_id)
+    if staff_id:
+        query = query.where(VisitTreatment.therapist_id == staff_id)
+    if modality:
+        query = query.where(VisitTreatment.modality == modality)
+    
+    query = query.order_by(Visit.check_in_time.desc())
+    result = await db.execute(query)
+    treatments = result.scalars().all()
+    
+    # Enrich with visit, patient, therapist, room details
+    enriched = []
+    for t in treatments:
+        t_dict = _treatment_to_dict(t)
+        
+        visit_result = await db.execute(select(Visit).where(Visit.visit_id == t.visit_id))
+        visit = visit_result.scalar_one_or_none()
+        if visit:
+            t_dict["visit_date"] = visit.check_in_time
+            t_dict["visit_status"] = visit.status
+            
+            # Get patient name
+            patient = await db.get(Patient, visit.patient_id)
+            if patient:
+                t_dict["patient_name"] = f"{patient.first_name} {patient.last_name}"
+            
+            # Get room name
+            if visit.room_id:
+                room = await db.get(Room, visit.room_id)
+                if room:
+                    t_dict["room_name"] = room.name
+                    t_dict["room_code"] = room.code
+        
+        # Get therapist name
+        if t.therapist_id:
+            staff = await db.get(Staff, t.therapist_id)
+            if staff:
+                t_dict["therapist_name"] = staff.name
+        
+        enriched.append(t_dict)
+    
+    return enriched
+
+
+def _treatment_to_dict(treatment: VisitTreatment) -> dict:
+    """Convert VisitTreatment ORM object to dict."""
+    return {
+        "treatment_id": treatment.treatment_id,
+        "visit_id": treatment.visit_id,
+        "modality": treatment.modality,
+        "therapist_id": treatment.therapist_id,
+        "duration_minutes": treatment.duration_minutes,
+        "started_at": treatment.started_at.isoformat() if treatment.started_at else None,
+        "completed_at": treatment.completed_at.isoformat() if treatment.completed_at else None,
+        "notes": treatment.notes,
+        "created_at": treatment.created_at.isoformat() if treatment.created_at else None,
+        "updated_at": treatment.updated_at.isoformat() if treatment.updated_at else None,
+    }

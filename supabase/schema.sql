@@ -180,6 +180,22 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_patient ON tasks(patient_id);
 
+-- VISIT TREATMENTS (PRD-005)
+CREATE TABLE IF NOT EXISTS visit_treatments (
+  treatment_id     TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  visit_id         TEXT NOT NULL REFERENCES visits(visit_id),
+  modality         TEXT NOT NULL,
+  therapist_id     TEXT REFERENCES staff(staff_id),
+  duration_minutes INT,
+  started_at       TIMESTAMPTZ,
+  completed_at     TIMESTAMPTZ,
+  notes            TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_visit_treatments_visit ON visit_treatments(visit_id);
+CREATE INDEX IF NOT EXISTS idx_visit_treatments_therapist ON visit_treatments(therapist_id);
+
 -- DAILY REPORTS
 CREATE TABLE IF NOT EXISTS daily_reports (
   id                       SERIAL PRIMARY KEY,

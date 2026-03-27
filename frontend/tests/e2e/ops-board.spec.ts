@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
 
-import { expectToast, openTab, resetLocalData } from "./helpers";
+import {
+  apiGet,
+  expectToast,
+  openTab,
+  resetLocalData,
+  seedAppointment,
+  seedPatient,
+} from "./helpers";
 
 // ── Shared setup helpers ──────────────────────────────────────────────────────
 
@@ -43,6 +50,19 @@ async function openCheckoutModal(
   const visitRow = page.locator("#visits-list tr").filter({ hasText: patientName });
   await expect(visitRow).toContainText("service_completed");
   await visitRow.getByRole("button", { name: /out/i }).click();
+}
+
+async function getFirstTherapistId(page: import("@playwright/test").Page) {
+  await openTab(page, "tab-admin");
+  await page.getByTestId("room-name-input").fill("Room 1");
+  await page.getByTestId("room-code-input").fill("R1");
+  await page.getByTestId("add-room-button").click();
+  await expectToast(page, "Room added");
+  await page.getByTestId("staff-name-input").fill("Alice PT");
+  await page.getByTestId("staff-role-input").selectOption("therapist");
+  await page.getByTestId("add-staff-button").click();
+  await expectToast(page, "Staff added");
+  return "from-ui";
 }
 
 // ── Test suite ────────────────────────────────────────────────────────────────
@@ -312,5 +332,71 @@ test.describe("ClinicOS UI harness", () => {
     await page.locator("#rc-search").fill("Ghost");
     await expect(page.locator("#rc-results")).toBeVisible();
     await expect(page.locator("#rc-results")).toContainText("No matches");
+  });
+
+  test("appointments tab can check in a scheduled patient", async ({ page, request }) => {
+    await getFirstTherapistId(page);
+    const staffHours = await apiGet(request, "/projections/staff-hours");
+    const therapistId = staffHours.staff.find((member: { role: string }) => member.role === "therapist").staff_id;
+    const patient = await seedPatient(request, "Amy", "Appt", "MRN-2001");
+    await seedAppointment(request, patient.patient_id, therapistId, "09:30");
+
+    await openTab(page, "tab-appointments");
+    const row = page.locator("#appts-list tr").filter({ hasText: "09:30" });
+    await expect(row).toContainText("scheduled");
+    await row.getByRole("button", { name: "Check-In" }).click();
+    await expectToast(page, "checked in");
+    await expect(row).toContainText("checked_in");
+
+    await openTab(page, "tab-ops");
+    await expect(page.locator("#visits-list")).toContainText("Amy Appt");
+  });
+
+  test("appointments tab can mark no-show and cancel", async ({ page, request }) => {
+    await getFirstTherapistId(page);
+    const staffHours = await apiGet(request, "/projections/staff-hours");
+    const therapistId = staffHours.staff.find((member: { role: string }) => member.role === "therapist").staff_id;
+
+    const noShowPatient = await seedPatient(request, "Nora", "Show", "MRN-2002");
+    await seedAppointment(request, noShowPatient.patient_id, therapistId, "11:00");
+    const cancelPatient = await seedPatient(request, "Carl", "Cancel", "MRN-2003");
+    await seedAppointment(request, cancelPatient.patient_id, therapistId, "14:00");
+
+    await openTab(page, "tab-appointments");
+
+    const noShowRow = page.locator("#appts-list tr").filter({ hasText: "11:00" });
+    await noShowRow.getByRole("button", { name: "No-Show" }).click();
+    await expectToast(page, "No-show");
+    await expect(noShowRow).toContainText("no_show");
+
+    const cancelRow = page.locator("#appts-list tr").filter({ hasText: "14:00" });
+    await cancelRow.getByRole("button", { name: "Cancel" }).click();
+    await expectToast(page, "Cancelled");
+    await expect(cancelRow).toContainText("cancelled");
+  });
+
+  test("refresh keeps in-service room occupancy visible", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Refresh Rita");
+
+    const roomCard = page.getByTestId("room-card-R1");
+    await expect(roomCard).toContainText("Refresh Rita");
+    await expect(roomCard).toContainText("occupied");
+
+    await page.reload();
+    await expect(roomCard).toContainText("Refresh Rita");
+    await expect(roomCard).toContainText("occupied");
+  });
+
+  test("checkout supports insurance-only payment path", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Insured Ivy");
+    await endService(page);
+    await openCheckoutModal(page, "Insured Ivy");
+
+    await page.locator("#co-ps").selectOption("insurance_only");
+    await page.getByRole("button", { name: /check out/i }).first().click();
+    await expectToast(page, "Checked out");
+    await expect(page.getByTestId("room-card-R1")).toContainText("available");
   });
 });

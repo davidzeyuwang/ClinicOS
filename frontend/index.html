@@ -779,7 +779,7 @@ async function loadTreatmentRecords(){
   if(sf.options.length===1&&staff.length){
     staff.forEach(s=>sf.add(new Option(s.name,s.staff_id)));
   }
-  
+
   // Build query params
   const from=document.getElementById('trtf-from').value||null;
   const to=document.getElementById('trtf-to').value||null;
@@ -791,42 +791,52 @@ async function loadTreatmentRecords(){
   if(pid)params.push('patient_id='+pid);
   if(sid)params.push('staff_id='+sid);
   const qs=params.length?'?'+params.join('&'):'';
-  
+
   try{
-    const r=await GET('/treatment-records'+qs);
-    const records=r.treatments||[];
+    const r=await GET('/visit-records'+qs);
+    const records=r.visits||[];
     const el=document.getElementById('treatment-records-list'),em=document.getElementById('treatment-records-empty');
     if(!records.length){el.innerHTML='';em.classList.remove('hidden');}
     else{
       em.classList.add('hidden');
-      el.innerHTML=`<div class="text-xs text-gray-500 mb-2">Found ${records.length} treatment record(s)</div>
-        <table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b">
-          <th class="pb-2 pr-3">#</th>
-          <th class="pb-2 pr-3">Date</th>
-          <th class="pb-2 pr-3">Patient</th>
-          <th class="pb-2 pr-3">Service</th>
-          <th class="pb-2 pr-3">生诊医生</th>
-          <th class="pb-2 pr-3">Modality</th>
-          <th class="pb-2 pr-3">Therapist</th>
-          <th class="pb-2 pr-3">Duration</th>
-          <th class="pb-2 pr-3">Room</th>
-          <th class="pb-2">Notes</th>
-        </tr></thead><tbody>${records.map((t,i)=>{
-        const dt=t.check_in_time?new Date(t.check_in_time).toLocaleDateString():'-';
-        const dur=t.duration_minutes?(t.duration_minutes>=60?Math.floor(t.duration_minutes/60)+'h'+(t.duration_minutes%60?t.duration_minutes%60+'m':''):t.duration_minutes+'m'):'-';
-        return`<tr class="border-b border-gray-100 hover:bg-gray-50">
-          <td class="py-2 pr-3 text-gray-400 text-xs">${i+1}</td>
-          <td class="py-2 pr-3 whitespace-nowrap">${dt}</td>
-          <td class="py-2 pr-3 font-medium">${t.patient_name||'-'}</td>
-          <td class="py-2 pr-3 text-blue-600">${t.service_type||'-'}</td>
-          <td class="py-2 pr-3 text-purple-600">${t.supervising_doctor||'-'}</td>
-          <td class="py-2 pr-3">${t.modality}</td>
-          <td class="py-2 pr-3 text-gray-600">${t.therapist_name||'-'}</td>
-          <td class="py-2 pr-3 text-gray-500">${dur}</td>
-          <td class="py-2 pr-3 text-gray-400 text-xs">${t.room_name||'-'}</td>
-          <td class="py-2 text-gray-500 text-xs italic">${t.notes||''}</td>
-        </tr>`;
-      }).join('')}</tbody></table>`;
+      // Format total minutes as Xh Ym
+      const fmtDur=m=>m?(m>=60?Math.floor(m/60)+'h'+(m%60?m%60+'m':''):m+'m'):'-';
+      el.innerHTML=`<div class="text-xs text-gray-500 mb-2">Found ${records.length} visit(s)</div>
+        <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+          <thead><tr class="bg-green-100 text-gray-600 text-xs font-semibold border-b border-gray-300">
+            <th class="py-2 px-2 text-center border border-gray-300">#</th>
+            <th class="py-2 px-2 border border-gray-300">Date</th>
+            <th class="py-2 px-2 border border-gray-300">Patient</th>
+            <th class="py-2 px-2 border border-gray-300">生诊医生</th>
+            <th class="py-2 px-2 text-center border border-gray-300">A</th>
+            <th class="py-2 px-2 text-center border border-gray-300">PT</th>
+            <th class="py-2 px-2 text-center border border-gray-300">CP</th>
+            <th class="py-2 px-2 text-center border border-gray-300">TN</th>
+            <th class="py-2 px-2 border border-gray-300">Room</th>
+            <th class="py-2 px-2 border border-gray-300">Duration</th>
+            <th class="py-2 px-2 border border-gray-300">Note</th>
+          </tr></thead>
+          <tbody>${records.map((v,i)=>{
+            const dt=v.check_in_time?new Date(v.check_in_time).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'-';
+            const bg=i%2===0?'':'background:#f6fcf6';
+            const cell=val=>val?`<span class="text-blue-700 font-medium text-xs">${val}</span>`:`<span class="text-gray-300">—</span>`;
+            const noteText=[v.notes,v.other_modalities?'['+v.other_modalities+']':''].filter(Boolean).join(' ');
+            return`<tr style="${bg}" class="border-b border-gray-200 hover:bg-yellow-50">
+              <td class="py-2 px-2 text-center text-gray-400 border border-gray-200">${i+1}</td>
+              <td class="py-2 px-2 whitespace-nowrap border border-gray-200">${dt}</td>
+              <td class="py-2 px-2 font-medium border border-gray-200">${v.patient_name||'-'}</td>
+              <td class="py-2 px-2 text-purple-700 border border-gray-200">${v.supervising_doctor||v.primary_therapist||'-'}</td>
+              <td class="py-2 px-2 text-center border border-gray-200">${cell(v.A)}</td>
+              <td class="py-2 px-2 text-center border border-gray-200">${cell(v.PT)}</td>
+              <td class="py-2 px-2 text-center border border-gray-200">${cell(v.CP)}</td>
+              <td class="py-2 px-2 text-center border border-gray-200">${cell(v.TN)}</td>
+              <td class="py-2 px-2 text-gray-500 text-xs border border-gray-200">${v.room_name||'-'}</td>
+              <td class="py-2 px-2 text-gray-500 text-xs border border-gray-200">${fmtDur(v.total_minutes)}</td>
+              <td class="py-2 px-2 text-gray-500 text-xs italic border border-gray-200">${noteText||''}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
     }
   }catch(e){toast(e.message,'error');}
 }

@@ -470,32 +470,44 @@ async def get_active_visits(db: AsyncSession) -> list:
 
 
 async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
-    """All visits for a patient, newest first. Includes room and staff names for PDF."""
+    """All visits for a patient, newest first. Includes room, staff, and treatment names for PDF."""
     result = await db.execute(
         select(Visit).where(Visit.patient_id == patient_id).order_by(Visit.check_in_time.desc())
     )
     visits = result.scalars().all()
-    
-    # Enrich with room and staff names for PDF generation
+
     enriched = []
     for v in visits:
         visit_dict = _visit_to_dict(v)
-        
-        # Add staff name (WHO)
+
         if v.staff_id:
             staff = await db.get(Staff, v.staff_id)
             if staff:
                 visit_dict["staff_name"] = staff.name
-        
-        # Add room name (WHERE)
+
         if v.room_id:
             room = await db.get(Room, v.room_id)
             if room:
                 visit_dict["room_name"] = room.name
                 visit_dict["room_code"] = room.code
-        
+
+        # Fetch all treatments for this visit
+        tx_result = await db.execute(
+            select(VisitTreatment).where(VisitTreatment.visit_id == v.visit_id)
+        )
+        txs = tx_result.scalars().all()
+        tx_list = []
+        for t in txs:
+            tx_dict = _treatment_to_dict(t)
+            if t.therapist_id:
+                therapist = await db.get(Staff, t.therapist_id)
+                if therapist:
+                    tx_dict["therapist_name"] = therapist.name
+            tx_list.append(tx_dict)
+        visit_dict["treatments"] = tx_list
+
         enriched.append(visit_dict)
-    
+
     return enriched
 
 
@@ -1440,6 +1452,118 @@ async def list_treatment_records(
         enriched.append(t_dict)
     
     return enriched
+
+
+def _modality_to_col(modality: str) -> str:
+    """Map treatment modality string to one of the 4 display columns."""
+    m = (modality or "").lower()
+    if "acupuncture" in m or m == "a":
+        return "A"
+    if any(x in m for x in ["pt", "ot", "eval", "physical", "occupational", "speech"]):
+        return "PT"
+    if any(x in m for x in ["cupping", "cup", "cp"]):
+        return "CP"
+    if any(x in m for x in ["massage", "tui", "tn"]):
+        return "TN"
+    return "other"  # E-stim, Heat, Cold, etc. — shown in notes column
+
+
+async def list_visits_with_treatments(
+    db: AsyncSession,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+) -> list:
+    """Return one record per visit with treatments organized by modality column (A/PT/CP/TN).
+    Used for the 诊疗记录表 Treatment Records tab.
+    """
+    query = select(Visit).order_by(Visit.check_in_time.desc())
+    if date_from:
+        query = query.where(Visit.check_in_time >= date_from)
+    if date_to:
+        query = query.where(Visit.check_in_time <= date_to + " 23:59:59")
+    if patient_id:
+        query = query.where(Visit.patient_id == patient_id)
+
+    visits = (await db.execute(query)).scalars().all()
+
+    # Bulk-load lookup maps (avoid N+1)
+    staff_map = {s.staff_id: s.name for s in (await db.execute(select(Staff))).scalars().all()}
+    patient_map = {p.patient_id: f"{p.first_name} {p.last_name}" for p in (await db.execute(select(Patient))).scalars().all()}
+    room_map = {r.room_id: r.name for r in (await db.execute(select(Room))).scalars().all()}
+
+    # Bulk-load all treatments for these visits
+    visit_ids = [v.visit_id for v in visits]
+    if visit_ids:
+        tx_result = await db.execute(
+            select(VisitTreatment).where(VisitTreatment.visit_id.in_(visit_ids))
+        )
+        all_treatments = tx_result.scalars().all()
+    else:
+        all_treatments = []
+
+    from collections import defaultdict
+    tx_by_visit: dict = defaultdict(list)
+    for t in all_treatments:
+        tx_by_visit[t.visit_id].append(t)
+
+    records = []
+    for v in visits:
+        treatments = tx_by_visit.get(v.visit_id, [])
+
+        # Apply staff_id filter — include visit if primary therapist OR any treatment therapist matches
+        if staff_id:
+            if v.staff_id != staff_id and not any(t.therapist_id == staff_id for t in treatments):
+                continue
+
+        # Map each treatment to a column; cell = therapist name (first match wins per column)
+        col_therapist: dict = {"A": "", "PT": "", "CP": "", "TN": ""}
+        other_modalities: list = []
+        notes_parts: list = []
+        total_minutes = 0
+        for t in treatments:
+            col = _modality_to_col(t.modality or "")
+            tname = staff_map.get(t.therapist_id, "") if t.therapist_id else ""
+            if col == "other":
+                other_modalities.append(t.modality or "")
+            elif not col_therapist[col]:
+                col_therapist[col] = tname
+            if t.notes:
+                notes_parts.append(t.notes)
+            if t.duration_minutes:
+                total_minutes += t.duration_minutes
+
+        # Fallback: if no explicit treatments but service_type is set, populate the right column
+        if not treatments and v.service_type:
+            col = _modality_to_col(v.service_type)
+            primary = staff_map.get(v.staff_id, "") if v.staff_id else ""
+            if col in col_therapist:
+                col_therapist[col] = primary
+
+        patient_name = patient_map.get(v.patient_id, "") if v.patient_id else (v.patient_name or "")
+
+        records.append({
+            "visit_id": v.visit_id,
+            "patient_id": v.patient_id,
+            "patient_name": patient_name,
+            "check_in_time": v.check_in_time.isoformat() if v.check_in_time else None,
+            "status": v.status,
+            "supervising_doctor": staff_map.get(v.supervising_staff_id, "") if v.supervising_staff_id else "",
+            "primary_therapist": staff_map.get(v.staff_id, "") if v.staff_id else "",
+            "room_name": room_map.get(v.room_id, "") if v.room_id else "",
+            "service_type": v.service_type or "",
+            "A": col_therapist["A"],
+            "PT": col_therapist["PT"],
+            "CP": col_therapist["CP"],
+            "TN": col_therapist["TN"],
+            "other_modalities": ", ".join(other_modalities),
+            "total_minutes": total_minutes,
+            "notes": " | ".join(notes_parts),
+            "copay_collected": v.copay_collected,
+        })
+
+    return records
 
 
 def _treatment_to_dict(treatment: VisitTreatment) -> dict:

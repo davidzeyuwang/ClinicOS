@@ -92,8 +92,8 @@ def generate_sign_sheet(patient, visits, policies):
 
     # ---- Visit Table ----
     # Columns (mm, total 190):
-    #   #=8  Date=26  Service=24  W=8  D=8  Signature=62  CC=20  Note=34
-    W       = [8, 26, 24, 8, 8, 62, 20, 34]
+    #   #=8  Date=26  Service=30  W=8  D=8  Signature=56  CC=20  Note=34
+    W       = [8, 26, 30, 8, 8, 56, 20, 34]
     HEADERS = ["#", "Date", "Service", "W", "D", "Signature", "CC", "Note"]
 
     pdf.set_fill_color(190, 210, 190)
@@ -109,7 +109,20 @@ def generate_sign_sheet(patient, visits, policies):
     for idx, v in enumerate(visits, 1):
         status   = str(v.get("status") or "")
         date_str = _fmt_dt(v.get("check_in_time"), "%m/%d/%y")
-        svc      = str(v.get("service_type") or "-")[:13]
+
+        # Build service label from treatments if available, else use service_type
+        treatments = v.get("treatments") or []
+        if treatments:
+            # Show distinct modalities, abbreviated
+            seen = []
+            for t in treatments:
+                mod = str(t.get("modality") or "").strip()
+                if mod and mod not in seen:
+                    seen.append(mod)
+            svc = ", ".join(seen)[:20] if seen else str(v.get("service_type") or "-")
+        else:
+            svc = str(v.get("service_type") or "-")
+        svc = svc[:20]  # truncate to fit cell
 
         # W = WD-verified checkmark (only meaningful after checkout)
         w_val = "v" if (status == "checked_out" and v.get("wd_verified")) else ""

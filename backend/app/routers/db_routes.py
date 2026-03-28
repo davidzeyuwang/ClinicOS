@@ -504,3 +504,23 @@ async def get_treatment_records(
             modality=modality
         )
     }
+
+
+@router.get("/visit-records")
+async def get_visit_records(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return visits grouped with treatments organized by modality (A/PT/CP/TN) for 诊疗记录表 view."""
+    return {
+        "visits": await db_service.list_visits_with_treatments(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            patient_id=patient_id,
+            staff_id=staff_id,
+        )
+    }

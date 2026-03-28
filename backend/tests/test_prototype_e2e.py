@@ -1,6 +1,6 @@
 """Pytest E2E coverage for the ClinicOS prototype API."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -288,7 +288,8 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
     assert v_rec["patient_signed"] is True
 
     # ==================== DAILY SUMMARY ENDPOINT ====================
-    today = date.today().isoformat()
+    # Use UTC date — check_in_time is stored in UTC, so summary must match UTC date
+    today = datetime.now(timezone.utc).date().isoformat()
     summary = get_json(client, f"/projections/daily-summary?date={today}")
     assert summary["date"] == today
     assert summary["total_check_ins"] >= 1

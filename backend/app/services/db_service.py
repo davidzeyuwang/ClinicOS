@@ -15,8 +15,23 @@ from app.models.tables import (
 
 
 DEFAULT_STAFF = (
-    {"name": "Alice PT", "role": "therapist", "license_id": "PT-001"},
-    {"name": "Front Desk", "role": "front_desk", "license_id": None},
+    {"name": "Alice PT",    "role": "therapist",  "license_id": "PT-001"},
+    {"name": "Sylvia Chen", "role": "therapist",  "license_id": "PT-002"},
+    {"name": "Dr. Gao",     "role": "therapist",  "license_id": "MD-001"},
+    {"name": "Xu",          "role": "therapist",  "license_id": "PT-003"},
+    {"name": "Front Desk",  "role": "front_desk", "license_id": None},
+)
+
+DEFAULT_ROOMS = (
+    {"name": "Room A", "code": "A", "room_type": "treatment"},
+    {"name": "Room B", "code": "B", "room_type": "treatment"},
+    {"name": "Room C", "code": "C", "room_type": "treatment"},
+    {"name": "Room D", "code": "D", "room_type": "treatment"},
+)
+
+DEFAULT_PATIENTS = (
+    {"first_name": "Demo",   "last_name": "Patient",  "phone": "555-0001", "mrn": "MRN-DEMO-1"},
+    {"first_name": "Walk-in","last_name": "Example",  "phone": "555-0002", "mrn": "MRN-DEMO-2"},
 )
 
 
@@ -56,7 +71,7 @@ def _serialize_payload(payload: dict) -> dict:
 
 
 async def reset_demo_data(db: AsyncSession) -> None:
-    """Clear local demo/test data so UI automation starts from a known state."""
+    """Clear all data and seed default entities for a clean local deploy."""
     for model in (
         DailyReport,
         Task,
@@ -72,16 +87,13 @@ async def reset_demo_data(db: AsyncSession) -> None:
     ):
         await db.execute(delete(model))
     await db.commit()
-    await ensure_default_demo_staff(db)
+    await _seed_demo_entities(db)
 
 
-async def ensure_default_demo_staff(db: AsyncSession) -> None:
-    """Seed default local staff so demo flows work without manual setup."""
-    existing = await db.execute(select(Staff.staff_id).limit(1))
-    if existing.scalar_one_or_none():
-        return
-
+async def _seed_demo_entities(db: AsyncSession) -> None:
+    """Seed default staff, rooms, and patients for local testing."""
     now = _utc_now()
+
     for item in DEFAULT_STAFF:
         member = Staff(
             staff_id=_new_id(),
@@ -93,7 +105,44 @@ async def ensure_default_demo_staff(db: AsyncSession) -> None:
         )
         db.add(member)
         await _append_event(db, "STAFF_CREATED", "system_seed", _staff_to_dict(member))
+
+    for item in DEFAULT_ROOMS:
+        room = Room(
+            room_id=_new_id(),
+            name=item["name"],
+            code=item["code"],
+            room_type=item.get("room_type", "treatment"),
+            branch="Main",
+            floor="1F",
+            active=True,
+            status="available",
+            updated_at=now,
+        )
+        db.add(room)
+        await _append_event(db, "ROOM_CREATED", "system_seed", _room_to_dict(room))
+
+    for item in DEFAULT_PATIENTS:
+        patient = Patient(
+            patient_id=_new_id(),
+            first_name=item["first_name"],
+            last_name=item["last_name"],
+            phone=item.get("phone"),
+            mrn=item.get("mrn"),
+            active=True,
+            updated_at=now,
+        )
+        db.add(patient)
+        await _append_event(db, "PATIENT_CREATED", "system_seed", _patient_to_dict(patient))
+
     await db.commit()
+
+
+async def ensure_default_demo_staff(db: AsyncSession) -> None:
+    """Seed default local staff if none exist (non-destructive startup seed)."""
+    existing = await db.execute(select(Staff.staff_id).limit(1))
+    if existing.scalar_one_or_none():
+        return
+    await _seed_demo_entities(db)
 
 
 # ==================== ROOMS ====================

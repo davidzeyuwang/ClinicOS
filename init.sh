@@ -41,7 +41,12 @@ else
   fi
 fi
 
-# 4. Smoke test — verify the DB layer is working
+# 4. Reset and seed demo data (clear all + seed staff/rooms/patients)
+echo "--- Resetting demo data..."
+curl -sf -X POST http://localhost:8000/prototype/test/reset > /dev/null
+echo "    Demo data seeded (staff, rooms, patients)."
+
+# 6. Smoke test — verify the DB layer is working
 echo "--- Running smoke tests..."
 cd "$BACKEND" && python -m pytest tests/test_prototype_e2e.py -x -q --tb=short 2>&1 | tail -10
 
@@ -55,7 +60,7 @@ else
   echo "--- All smoke tests passed."
 fi
 
-# 5. Print current milestone status
+# 7. Print current milestone status
 echo ""
 echo "=== Current State ==="
 echo "  Milestone: M1 — Operations Board"

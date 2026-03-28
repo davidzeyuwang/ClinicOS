@@ -433,7 +433,10 @@ function openRoomCheckin(roomId,roomCode){
     </div>
     <div id="rc-selected" class="text-sm text-gray-500"></div>
     <select id="rc-staff" class="input">${so}</select>
-    <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Acupuncture</option><option>Cupping</option><option>Massage</option><option>E-stim</option><option>Speech</option></select>
+    <div class="grid grid-cols-2 gap-2">
+      <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Acupuncture</option><option>Cupping</option><option>Massage</option><option>E-stim</option><option>Speech</option></select>
+      <input id="rc-dur" type="number" class="input" placeholder="Duration (min)" value="30" min="1">
+    </div>
     <button onclick="doRoomCheckin('${roomId}')" class="btn btn-primary w-full">✓ Check In & Start</button>
   </div>`);
 }
@@ -442,10 +445,12 @@ async function doRoomCheckin(roomId){
   const name=document.getElementById('rc-patient-name').value||document.getElementById('rc-search').value.trim();
   const ref=document.getElementById('rc-patient-ref').value||null;
   const sid=document.getElementById('rc-staff').value,svc=document.getElementById('rc-svc').value;
+  const dur=parseInt(document.getElementById('rc-dur').value)||30;
   if(!name)return toast('Name required','error');
   try{
     const v=await POST('/portal/checkin',{patient_name:name,patient_ref:ref,patient_id:pid,actor_id:'frontdesk'});
     await POST('/portal/service/start',{visit_id:v.visit_id,staff_id:sid,room_id:roomId,service_type:svc,actor_id:'therapist'});
+    await POST(`/visits/${v.visit_id}/treatments/add`,{visit_id:v.visit_id,modality:svc,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});
     toast(name+' → room assigned');closeModal();refreshOps();
   }catch(e){toast(e.message,'error');}
 }
@@ -459,15 +464,23 @@ function openAssignSvc(visitId,name){
     <div><label class="text-xs text-gray-500">Therapist</label><select id="as-staff" class="input">${so}</select></div>
     <div><label class="text-xs text-gray-500">生诊医生 Supervising Doctor</label><select id="as-super" class="input">${supOpts}</select></div>
     <div><label class="text-xs text-gray-500">Room</label><select id="as-room" class="input">${ro}</select></div>
-    <div><label class="text-xs text-gray-500">Service Type</label><select id="as-svc" class="input"><option>Acupuncture</option><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option><option>Cupping</option><option>Massage</option></select></div>
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="text-xs text-gray-500">Service Type</label><select id="as-svc" class="input"><option>Acupuncture</option><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option><option>Cupping</option><option>Massage</option></select></div>
+      <div><label class="text-xs text-gray-500">Duration (min)</label><input id="as-dur" type="number" class="input" value="30" min="1"></div>
+    </div>
     <button onclick="doAssignSvc('${visitId}')" class="btn btn-primary w-full">▶ Start Service</button>
   </div>`);
 }
 async function doAssignSvc(vid){
   const si=document.getElementById('as-staff').value,ri=document.getElementById('as-room').value,st=document.getElementById('as-svc').value;
   const sup=document.getElementById('as-super').value||null;
+  const dur=parseInt(document.getElementById('as-dur').value)||30;
   if(!si||!ri)return toast('Select staff & room','error');
-  try{await POST('/portal/service/start',{visit_id:vid,staff_id:si,room_id:ri,service_type:st,actor_id:'therapist',supervising_staff_id:sup});toast('Started');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
+  try{
+    await POST('/portal/service/start',{visit_id:vid,staff_id:si,room_id:ri,service_type:st,actor_id:'therapist',supervising_staff_id:sup});
+    await POST(`/visits/${vid}/treatments/add`,{visit_id:vid,modality:st,therapist_id:si,duration_minutes:dur,actor_id:'frontdesk'});
+    toast('Started');closeModal();refreshOps();
+  }catch(e){toast(e.message,'error');}
 }
 
 async function endSvc(vid){try{await POST('/portal/service/end',{visit_id:vid,actor_id:'therapist'});toast('Service ended');refreshOps();}catch(e){toast(e.message,'error');}}
@@ -485,18 +498,11 @@ async function openCheckout(vid){
   try {
     const tRes = await GET(`/visits/${vid}/treatments`);
     const treatments = tRes.treatments || [];
-    // Prepend the initial service_type from the visit record if not already present
-    const rows = [];
-    if (visit && visit.service_type) {
-      const staffName = staff.find(s => s.staff_id === visit.staff_id)?.name || '-';
-      rows.push({modality: visit.service_type, therapist_name: staffName, duration_minutes: null, _initial: true});
-    }
-    treatments.forEach(t => rows.push(t));
-    if (rows.length) {
+    if (treatments.length) {
       treatmentsHtml = `<div class="bg-gray-50 rounded-lg p-3 mb-3">
-        <h4 class="font-semibold text-sm mb-2">🩺 Services & Treatments (${rows.length})</h4>
+        <h4 class="font-semibold text-sm mb-2">🩺 Services & Treatments (${treatments.length})</h4>
         <table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1">Service/Modality</th><th class="pb-1">Staff</th><th class="pb-1">Duration</th></tr></thead><tbody>
-        ${rows.map(t => `<tr class="border-b border-gray-100"><td class="py-1 font-medium">${t.modality}${t._initial?' <span class="text-gray-400">(initial)</span>':''}</td><td class="py-1 text-gray-500">${t.therapist_name || '-'}</td><td class="py-1">${t.duration_minutes ? t.duration_minutes+'m' : '-'}</td></tr>`).join('')}
+        ${treatments.map(t => `<tr class="border-b border-gray-100"><td class="py-1 font-medium">${t.modality}</td><td class="py-1 text-gray-500">${t.therapist_name||'-'}</td><td class="py-1">${t.duration_minutes?t.duration_minutes+'m':'-'}</td></tr>`).join('')}
         </tbody></table></div>`;
     }
   } catch(e) {
@@ -569,17 +575,14 @@ async function openTreatments(vid,patientName){
 <div class="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">Manage treatments for ${patientName}</div>
       <div class="max-h-64 overflow-y-auto">`;
     h+=`<table class="w-full text-xs mb-3"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-1">Service/Modality</th><th class="pb-1">Staff</th><th class="pb-1">Duration</th><th class="pb-1">Actions</th></tr></thead><tbody>`;
-    if(visit&&visit.service_type){
-      const sName=staff.find(s=>s.staff_id===visit.staff_id)?.name||'-';
-      h+=`<tr class="border-b border-gray-100 bg-gray-50"><td class="py-1 font-medium">${visit.service_type} <span class="text-gray-400 text-xs">(initial)</span></td><td class="py-1 text-gray-500">${sName}</td><td class="py-1 text-gray-400">—</td><td class="py-1 text-gray-400 text-xs">set at start</td></tr>`;
-    }
     if(treatments.length){
       treatments.forEach(t=>{
         const tn=t.therapist_name||'-';
-        h+=`<tr class="border-b border-gray-100"><td class="py-1">${t.modality}</td><td class="py-1 text-gray-500">${tn}</td><td class="py-1">${t.duration_minutes}m</td><td class="py-1"><button onclick="editTreatment('${vid}','${t.treatment_id}',${t.duration_minutes},'${t.notes||''}')" class="btn btn-xs btn-outline">✏️</button> <button onclick="deleteTreatment('${vid}','${t.treatment_id}')" class="btn btn-xs btn-danger">🗑</button></td></tr>`;
+        h+=`<tr class="border-b border-gray-100"><td class="py-1 font-medium">${t.modality}</td><td class="py-1 text-gray-500">${tn}</td><td class="py-1">${t.duration_minutes}m</td><td class="py-1"><button onclick="editTreatment('${vid}','${t.treatment_id}',${t.duration_minutes},'${t.notes||''}')" class="btn btn-xs btn-outline">✏️</button> <button onclick="deleteTreatment('${vid}','${t.treatment_id}')" class="btn btn-xs btn-danger">🗑</button></td></tr>`;
       });
+    } else {
+      h+='<tr><td colspan="4" class="py-2 text-center text-gray-400 text-xs">No treatments yet</td></tr>';
     }
-    if(!visit?.service_type&&!treatments.length) h+='<tr><td colspan="4" class="py-2 text-center text-gray-400 text-xs">No treatments yet</td></tr>';
     h+='</tbody></table>';
     h+=`</div><div class="grid grid-cols-2 gap-2">
         <select id="trt-mod" class="input"><option value="PT">PT</option><option value="OT">OT</option><option value="E-stim">E-stim</option><option value="Massage">Massage</option><option value="Cupping">Cupping</option><option value="Acupuncture">Acupuncture</option><option value="Heat">Heat Therapy</option><option value="Cold">Cold Therapy</option></select>

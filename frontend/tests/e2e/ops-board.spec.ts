@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 import {
   apiGet,
+  apiPost,
   expectToast,
   openTab,
   resetLocalData,
@@ -398,5 +399,197 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByRole("button", { name: /check out/i }).first().click();
     await expectToast(page, "Checked out");
     await expect(page.getByTestId("room-card-R1")).toContainText("available");
+  });
+
+  // ── 15. Add treatment to active visit ──────────────────────────────────────
+  test("can add a treatment modality to an in-service visit", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Treatment Tanya");
+
+    // The visit row in the active visits table should have a "+ Tx" button
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Treatment Tanya" });
+    await expect(visitRow).toContainText("in_service");
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+
+    // Treatment modal should open
+    await expect(page.locator("#modal, .modal-bg")).toBeVisible();
+
+    // Select E-stim modality and submit
+    await page.locator("#trt-mod").selectOption("E-stim");
+    await page.locator("#trt-dur").fill("20");
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+  });
+
+  // ── 16. Treatment Records tab shows records after adding treatment ──────────
+  test("treatment records tab shows records after adding treatment", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Records Pat");
+
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Records Pat" });
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+    await page.locator("#trt-mod").selectOption("PT");
+    await page.locator("#trt-dur").fill("30");
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+    await page.getByRole("button", { name: /×/ }).click();
+
+    await openTab(page, "tab-treatments");
+    await page.getByRole("button", { name: /search/i }).click();
+
+    await expect(page.locator("#treatment-records-list")).toContainText("Records Pat");
+    await expect(page.locator("#treatment-records-list")).toContainText("PT");
+  });
+
+  // ── 17. Treatment Records shows correct date (not "-") ─────────────────────
+  test("treatment records show correct date and duration format", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Date Dan");
+
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Date Dan" });
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+    await page.locator("#trt-mod").selectOption("PT");
+    await page.locator("#trt-dur").fill("90"); // should render as 1h30m
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+    await page.getByRole("button", { name: /×/ }).click();
+
+    await openTab(page, "tab-treatments");
+    await page.getByRole("button", { name: /search/i }).click();
+
+    const table = page.locator("#treatment-records-list");
+    // Date column must not be "-"
+    const rows = table.locator("tbody tr");
+    await expect(rows.first()).not.toContainText("| - |");
+    const dateCell = rows.first().locator("td").nth(1);
+    await expect(dateCell).not.toHaveText("-");
+    // Duration should format as 1h30m not "90m"
+    await expect(table).toContainText("1h30m");
+  });
+
+  // ── 18. Treatment Records table has all required column headers ─────────────
+  test("treatment records table has all required columns", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Column Check");
+
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Column Check" });
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+    await page.locator("#trt-mod").selectOption("Acupuncture");
+    await page.locator("#trt-dur").fill("60");
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+    await page.getByRole("button", { name: /×/ }).click();
+
+    await openTab(page, "tab-treatments");
+    await page.getByRole("button", { name: /search/i }).click();
+
+    const headers = page.locator("#treatment-records-list thead th");
+    await expect(headers).toContainText(["#", "Date", "Patient", "Service", "生诊医生", "Modality", "Therapist", "Duration", "Room", "Notes"]);
+  });
+
+  // ── 19. Walk-in patient name appears in treatment records ──────────────────
+  test("walk-in treatment appears in treatment records with patient name", async ({ page }) => {
+    await setupRoomAndStaff(page);
+    await checkinAndStartService(page, "Walkin Wayne");
+
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Walkin Wayne" });
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+    await page.locator("#trt-mod").selectOption("Massage");
+    await page.locator("#trt-dur").fill("45");
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+    await page.getByRole("button", { name: /×/ }).click();
+
+    await openTab(page, "tab-treatments");
+    await page.getByRole("button", { name: /search/i }).click();
+
+    const table = page.locator("#treatment-records-list");
+    await expect(table).toContainText("Walkin Wayne");
+    await expect(table).toContainText("Massage");
+    await expect(table).toContainText("45m");
+  });
+
+  // ── 20. Start Service modal has supervising doctor field ──────────────────
+  test("start service modal has supervising doctor selector and it appears in treatment records", async ({ page, request }) => {
+    await setupRoomAndStaff(page);
+
+    // Add a supervising physician
+    await openTab(page, "tab-admin");
+    await page.getByTestId("staff-name-input").fill("Dr. Gao");
+    await page.getByTestId("staff-role-input").selectOption("therapist");
+    await page.getByTestId("add-staff-button").click();
+    await expectToast(page, "Staff added");
+
+    // Check in via API (no room → visit lands in checked_in state in visits list)
+    await apiPost(request, "/portal/checkin", {
+      patient_name: "Supervised Sue",
+      actor_id: "frontdesk",
+    });
+
+    await openTab(page, "tab-ops");
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Supervised Sue" });
+    await expect(visitRow).toContainText("checked_in");
+
+    // Click "Start" to open the assign-service modal
+    await visitRow.getByRole("button", { name: /start/i }).click();
+
+    // Supervising doctor dropdown must be present
+    await expect(page.locator("#as-super")).toBeVisible();
+
+    // Select Dr. Gao as supervising doctor
+    await page.locator("#as-super").selectOption({ label: "Dr. Gao" });
+    await page.locator("#as-staff").selectOption({ index: 0 });
+    await page.locator("#as-room").selectOption({ index: 0 });
+    await page.getByRole("button", { name: /start service/i }).click();
+    await expectToast(page, "Started");
+
+    // Add a treatment
+    await visitRow.getByRole("button", { name: /tx/i }).click();
+    await page.locator("#trt-mod").selectOption("Acupuncture");
+    await page.locator("#trt-dur").fill("60");
+    await page.getByRole("button", { name: /add treatment/i }).click();
+    await expectToast(page, "Treatment added");
+    await page.getByRole("button", { name: /×/ }).click();
+
+    // Treatment records must show Dr. Gao as supervising doctor
+    await openTab(page, "tab-treatments");
+    await page.getByRole("button", { name: /search/i }).click();
+    await expect(page.locator("#treatment-records-list")).toContainText("Supervised Sue");
+    await expect(page.locator("#treatment-records-list")).toContainText("Dr. Gao");
+  });
+
+  // ── 21. Sign sheet PDF returns a valid PDF file ────────────────────────────
+  test("sign sheet PDF endpoint returns valid PDF binary", async ({ request }) => {
+    const patient = await apiPost(request, "/patients", {
+      first_name: "PDF",
+      last_name: "Tester",
+      phone: "555-0001",
+    });
+
+    const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`);
+    expect(resp.ok()).toBeTruthy();
+    expect(resp.headers()["content-type"]).toContain("application/pdf");
+
+    const body = await resp.body();
+    expect(body.slice(0, 4).toString()).toBe("%PDF");
+    expect(body.length).toBeGreaterThan(1500);
+  });
+
+  // ── 22. PDF check-out column shows readable label not raw status ───────────
+  test("sign sheet PDF does not contain raw status strings", async ({ request }) => {
+    const patient = await apiPost(request, "/patients", {
+      first_name: "Status",
+      last_name: "Label",
+      phone: "555-0002",
+    });
+
+    const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`);
+    const body = await resp.body();
+    const text = body.toString("latin1");
+
+    // Raw truncated status must NOT appear
+    expect(text).not.toContain("service_complet");
+    expect(text).not.toContain("checked_in");
+    expect(text).not.toContain("in_service");
   });
 });

@@ -453,18 +453,21 @@ async function doRoomCheckin(roomId){
 // Assign service from visit
 function openAssignSvc(visitId,name){
   const so=staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
+  const supOpts=`<option value="">— None —</option>`+staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
   const ro=sortRooms(rooms).filter(r=>r.status==='available').map(r=>`<option value="${r.room_id}">${r.code} — ${r.name}</option>`).join('');
   openModal('Start Service — '+name,`<div class="space-y-3">
-    <select id="as-staff" class="input">${so}</select>
-    <select id="as-room" class="input">${ro}</select>
-    <select id="as-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option></select>
+    <div><label class="text-xs text-gray-500">Therapist</label><select id="as-staff" class="input">${so}</select></div>
+    <div><label class="text-xs text-gray-500">生诊医生 Supervising Doctor</label><select id="as-super" class="input">${supOpts}</select></div>
+    <div><label class="text-xs text-gray-500">Room</label><select id="as-room" class="input">${ro}</select></div>
+    <div><label class="text-xs text-gray-500">Service Type</label><select id="as-svc" class="input"><option>Acupuncture</option><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option><option>Cupping</option><option>Massage</option></select></div>
     <button onclick="doAssignSvc('${visitId}')" class="btn btn-primary w-full">▶ Start Service</button>
   </div>`);
 }
 async function doAssignSvc(vid){
   const si=document.getElementById('as-staff').value,ri=document.getElementById('as-room').value,st=document.getElementById('as-svc').value;
+  const sup=document.getElementById('as-super').value||null;
   if(!si||!ri)return toast('Select staff & room','error');
-  try{await POST('/portal/service/start',{visit_id:vid,staff_id:si,room_id:ri,service_type:st,actor_id:'therapist'});toast('Started');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
+  try{await POST('/portal/service/start',{visit_id:vid,staff_id:si,room_id:ri,service_type:st,actor_id:'therapist',supervising_staff_id:sup});toast('Started');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
 }
 
 async function endSvc(vid){try{await POST('/portal/service/end',{visit_id:vid,actor_id:'therapist'});toast('Service ended');refreshOps();}catch(e){toast(e.message,'error');}}
@@ -575,7 +578,7 @@ async function openTreatments(vid,patientName){
 }
 async function addTreatment(vid){
   const mod=document.getElementById('trt-mod').value,sid=document.getElementById('trt-staff').value||null,dur=parseInt(document.getElementById('trt-dur').value)||30;
-  try{await POST(`/visits/${vid}/treatments/add`,{modality:mod,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});toast('Treatment added');openTreatments(vid,'Patient');}catch(e){toast(e.message,'error');}
+  try{await POST(`/visits/${vid}/treatments/add`,{visit_id:vid,modality:mod,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});toast('Treatment added');openTreatments(vid,'Patient');}catch(e){toast(e.message,'error');}
 }
 function editTreatment(vid,tid,currDur,currNotes){
   openModal('Edit Treatment',`<div class="space-y-3">
@@ -696,7 +699,7 @@ async function openPatientDetail(pid){
     h+=`<button onclick="openAddInsurance('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Insurance</button></div>`;
     // Visit history with selective PDF
     const totCopay=visList.filter(v=>v.status==='checked_out').reduce((s,v)=>s+(v.copay_collected||0),0);
-    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><div class="flex gap-2"><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-outline">📄 All Visits PDF</a><button id="sel-pdf-btn" onclick="downloadSelectedPDF('${pid}')" class="btn btn-xs btn-blue" disabled>📄 Selected PDF</button></div></div>`;
+    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><div class="flex gap-2"><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-outline">Sign Sheet PDF</a><button id="sel-pdf-btn" onclick="downloadSelectedPDF('${pid}')" class="btn btn-xs btn-blue" disabled>📄 Selected PDF</button></div></div>`;
     if(visList.length){
       h+=`<div class="text-xs text-gray-500 mb-1">Total copay collected: <strong>$${totCopay.toFixed(2)}</strong></div>`;
       h+=`<table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1 w-8"><input type="checkbox" id="select-all-visits" onchange="toggleAllVisits(this)"></th><th class="pb-1">Date</th><th class="pb-1">Service</th><th class="pb-1">Status</th><th class="pb-1">CC</th><th class="pb-1">WD</th><th class="pb-1">Signed</th></tr></thead><tbody>`;
@@ -791,15 +794,38 @@ async function loadTreatmentRecords(){
   
   try{
     const r=await GET('/treatment-records'+qs);
-    const records=r.records||[];
+    const records=r.treatments||[];
     const el=document.getElementById('treatment-records-list'),em=document.getElementById('treatment-records-empty');
     if(!records.length){el.innerHTML='';em.classList.remove('hidden');}
     else{
       em.classList.add('hidden');
       el.innerHTML=`<div class="text-xs text-gray-500 mb-2">Found ${records.length} treatment record(s)</div>
-        <table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-2">Date</th><th class="pb-2">Patient</th><th class="pb-2">Modality</th><th class="pb-2">Therapist</th><th class="pb-2">Duration</th><th class="pb-2">Room</th></tr></thead><tbody>${records.map(t=>{
+        <table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b">
+          <th class="pb-2 pr-3">#</th>
+          <th class="pb-2 pr-3">Date</th>
+          <th class="pb-2 pr-3">Patient</th>
+          <th class="pb-2 pr-3">Service</th>
+          <th class="pb-2 pr-3">生诊医生</th>
+          <th class="pb-2 pr-3">Modality</th>
+          <th class="pb-2 pr-3">Therapist</th>
+          <th class="pb-2 pr-3">Duration</th>
+          <th class="pb-2 pr-3">Room</th>
+          <th class="pb-2">Notes</th>
+        </tr></thead><tbody>${records.map((t,i)=>{
         const dt=t.check_in_time?new Date(t.check_in_time).toLocaleDateString():'-';
-        return`<tr class="border-b border-gray-100"><td class="py-2">${dt}</td><td class="py-2 font-medium">${t.patient_name||'-'}</td><td class="py-2">${t.modality}</td><td class="py-2 text-gray-500">${t.therapist_name||'-'}</td><td class="py-2">${t.duration_minutes}m</td><td class="py-2 text-gray-400">${t.room_name||'-'}</td></tr>`;
+        const dur=t.duration_minutes?(t.duration_minutes>=60?Math.floor(t.duration_minutes/60)+'h'+(t.duration_minutes%60?t.duration_minutes%60+'m':''):t.duration_minutes+'m'):'-';
+        return`<tr class="border-b border-gray-100 hover:bg-gray-50">
+          <td class="py-2 pr-3 text-gray-400 text-xs">${i+1}</td>
+          <td class="py-2 pr-3 whitespace-nowrap">${dt}</td>
+          <td class="py-2 pr-3 font-medium">${t.patient_name||'-'}</td>
+          <td class="py-2 pr-3 text-blue-600">${t.service_type||'-'}</td>
+          <td class="py-2 pr-3 text-purple-600">${t.supervising_doctor||'-'}</td>
+          <td class="py-2 pr-3">${t.modality}</td>
+          <td class="py-2 pr-3 text-gray-600">${t.therapist_name||'-'}</td>
+          <td class="py-2 pr-3 text-gray-500">${dur}</td>
+          <td class="py-2 pr-3 text-gray-400 text-xs">${t.room_name||'-'}</td>
+          <td class="py-2 text-gray-500 text-xs italic">${t.notes||''}</td>
+        </tr>`;
       }).join('')}</tbody></table>`;
     }
   }catch(e){toast(e.message,'error');}

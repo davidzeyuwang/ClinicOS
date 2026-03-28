@@ -30,6 +30,15 @@ if not _IS_SUPABASE:
         async with engine.begin() as conn:
             from app.models.tables import Base as _  # noqa
             await conn.run_sync(Base.metadata.create_all)
+            # Incremental migrations — safe to re-run (ignored if column exists)
+            migrations = [
+                "ALTER TABLE visits ADD COLUMN supervising_staff_id VARCHAR(36)",
+            ]
+            for sql in migrations:
+                try:
+                    await conn.execute(__import__("sqlalchemy").text(sql))
+                except Exception:
+                    pass  # column already exists
         from app.services.db_service import ensure_default_demo_staff
         async with async_session() as session:
             await ensure_default_demo_staff(session)

@@ -134,6 +134,7 @@ async def service_start(payload: ServiceStart, db: AsyncSession = Depends(get_db
             db, visit_id=payload.visit_id, actor_id=payload.actor_id,
             staff_id=payload.staff_id, room_id=payload.room_id,
             service_type=payload.service_type,
+            supervising_staff_id=payload.supervising_staff_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))

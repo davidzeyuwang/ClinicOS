@@ -129,6 +129,7 @@ class ServiceStart(BaseModel):
     room_id: str
     service_type: str
     actor_id: str
+    supervising_staff_id: Optional[str] = None
 
 
 class ServiceEnd(BaseModel):

@@ -3,6 +3,10 @@ PDF generation service for ClinicOS.
 Generates Individual Visit Sign Sheet (printable patient record).
 Uses fpdf2 (pure Python, pip install fpdf2).
 All text is ASCII/latin-1 safe so Helvetica built-in font works.
+
+Layout matches clinic's paper sign sheet:
+  # | Date | Service | W | D | Signature (blank line) | CC | Note
+No insurance block — keeps the sheet clean for patient signing.
 """
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -22,10 +26,6 @@ def _fmt_dt(iso, fmt="%m/%d/%Y %H:%M"):
         return str(iso)[:16]
 
 
-def _fmt_date(iso):
-    return _fmt_dt(iso, "%m/%d/%Y")
-
-
 def _money(val):
     if val is None:
         return "-"
@@ -43,17 +43,17 @@ def generate_sign_sheet(patient, visits, policies):
         raise RuntimeError("fpdf2 not installed. Run: pip install fpdf2")
 
     pdf = FPDF(orientation="P", unit="mm", format="Letter")
-    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
-    # ---- Header ----
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 8, "Individual Visit Sign Sheet", ln=True, align="C")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 5, "Printed: " + _today(), ln=True, align="C")
-    pdf.ln(3)
+    # ---- Title ----
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "Individual Visit Sign Sheet", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 8)
+    pdf.cell(0, 4, "Printed: " + _today(), ln=True, align="C")
+    pdf.ln(4)
 
-    # ---- Patient Info ----
+    # ---- Patient Info (compact bordered block, no insurance) ----
     first = str(patient.get("first_name") or "")
     last  = str(patient.get("last_name") or "")
     full  = str(patient.get("full_name") or (first + " " + last).strip())
@@ -61,114 +61,115 @@ def generate_sign_sheet(patient, visits, policies):
     mrn   = str(patient.get("mrn") or "-")
     ph    = str(patient.get("phone") or "-")
 
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 6, "Patient Information", ln=True, fill=True)
-    pdf.set_font("Helvetica", "", 9)
-    col = 95
-    pdf.cell(col, 5, "Name:  " + full, border=0)
-    pdf.cell(col, 5, "MRN:   " + mrn, border=0, ln=True)
-    pdf.cell(col, 5, "DOB:   " + dob, border=0)
-    pdf.cell(col, 5, "Phone: " + ph, border=0, ln=True)
-    pdf.ln(2)
-
-    # ---- Insurance ----
+    # Pull primary insurance copay for header summary
+    copay_label = "-"
+    carrier_label = ""
     if policies:
-        pdf.set_fill_color(230, 230, 230)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(0, 6, "Insurance Information", ln=True, fill=True)
-        for pol in policies[:2]:
-            priority = str(pol.get("priority") or "primary").capitalize()
-            pdf.set_font("Helvetica", "B", 9)
-            pdf.cell(0, 5, "  " + priority + " Insurance", ln=True)
-            pdf.set_font("Helvetica", "", 9)
-            carrier  = str(pol.get("carrier_name") or "-")
-            member   = str(pol.get("member_id") or "-")
-            group    = str(pol.get("group_number") or "-")
-            plan_t   = str(pol.get("plan_type") or "-")
-            copay    = _money(pol.get("copay_amount"))
-            ded      = _money(pol.get("deductible"))
-            vis_auth = pol.get("visits_authorized")
-            vis_used = pol.get("visits_used") or 0
-            elig     = str(pol.get("eligibility_status") or "-")
-            vis_str  = str(vis_used) + "/" + (str(vis_auth) if vis_auth else "?")
-            pdf.cell(col, 4.5, "  Carrier:    " + carrier)
-            pdf.cell(col, 4.5, "Plan Type:   " + plan_t, ln=True)
-            pdf.cell(col, 4.5, "  Member ID:  " + member)
-            pdf.cell(col, 4.5, "Group No:    " + group, ln=True)
-            pdf.cell(col, 4.5, "  Copay:      " + copay)
-            pdf.cell(col, 4.5, "Deductible:  " + ded, ln=True)
-            pdf.cell(col, 4.5, "  Visits:     " + vis_str)
-            pdf.cell(col, 4.5, "Eligibility: " + elig, ln=True)
-            pdf.ln(1)
-        pdf.ln(1)
+        pri = next((p for p in policies if str(p.get("priority") or "").lower() == "primary"), policies[0])
+        copay_label   = _money(pri.get("copay_amount"))
+        carrier_label = str(pri.get("carrier_name") or "")
+
+    pdf.set_fill_color(235, 235, 235)
+    pdf.set_draw_color(140, 140, 140)
+
+    # Name row — full width, bold
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "  " + full, border=1, fill=True, ln=True)
+
+    # Detail row
+    col = 63.3  # 190 / 3
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(col, 6, "  MRN: " + mrn,   border="LRB")
+    pdf.cell(col, 6, "  DOB: " + dob,   border="RB")
+    pdf.cell(col, 6, "  Phone: " + ph,  border="RB", ln=True)
+
+    # Insurance summary row
+    ins_text = "  Insurance: " + (carrier_label if carrier_label else "-")
+    pdf.cell(col * 2, 6, ins_text,                border="LRB")
+    pdf.cell(col,     6, "  Co-Pay: " + copay_label, border="RB", ln=True)
+
+    pdf.ln(6)
 
     # ---- Visit Table ----
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 6, "Visit Records", ln=True, fill=True)
-    pdf.ln(1)
+    # Columns (mm, total 190):
+    #   #=8  Date=26  Service=24  W=8  D=8  Signature=62  CC=20  Note=34
+    W       = [8, 26, 24, 8, 8, 62, 20, 34]
+    HEADERS = ["#", "Date", "Service", "W", "D", "Signature", "CC", "Note"]
 
-    # col widths mm: Date/Time | Service | Room | CC | WD | Signed | Check-Out
-    W = [38, 28, 28, 20, 12, 14, 33]
-    HEADERS = ["Date/Time", "Service", "Room", "Copay CC", "WD", "Sign", "Check-Out"]
-    pdf.set_fill_color(210, 220, 210)
-    pdf.set_font("Helvetica", "B", 7.5)
+    pdf.set_fill_color(190, 210, 190)
+    pdf.set_draw_color(100, 130, 100)
+    pdf.set_font("Helvetica", "B", 8.5)
     for i, h in enumerate(HEADERS):
-        pdf.cell(W[i], 6, h, border=1, fill=True, align="C")
+        pdf.cell(W[i], 7, h, border=1, fill=True, align="C")
     pdf.ln()
 
-    pdf.set_font("Helvetica", "", 7.5)
+    ROW_H = 9   # tall enough to write a real signature
+
     alt = False
-    for v in visits:
+    for idx, v in enumerate(visits, 1):
         status   = str(v.get("status") or "")
-        # Date/Time with checkin time
-        checkin_time = _fmt_dt(v.get("check_in_time"), "%m/%d %H:%M")
-        # Service type
-        svc      = str(v.get("service_type") or "-")[:12]
-        # Room
-        room     = str(v.get("room_name") or v.get("room_code") or "-")[:12]
-        
+        date_str = _fmt_dt(v.get("check_in_time"), "%m/%d/%y")
+        svc      = str(v.get("service_type") or "-")[:13]
+
+        # W = WD-verified checkmark (only meaningful after checkout)
+        w_val = "v" if (status == "checked_out" and v.get("wd_verified")) else ""
+
+        # D = leave blank for manual fill
+        d_val = ""
+
+        # CC = copay collected (shown if checked out)
         if status == "checked_out":
-            cc       = _money(v.get("copay_collected"))
-            wd       = "Y" if v.get("wd_verified") else ""
-            signed   = "Y" if v.get("patient_signed") else ""
-            checkout = _fmt_dt(v.get("check_out_time"), "%m/%d %H:%M")
+            cc_val = _money(v.get("copay_collected"))
         else:
-            cc = wd = signed = ""
-            checkout = ("(" + status + ")")[:16]
+            cc_val = ""
+
+        # Signature cell is always blank — patient writes here
+        sig_val = ""
 
         if alt:
-            pdf.set_fill_color(248, 252, 248)
+            pdf.set_fill_color(246, 252, 246)
         else:
             pdf.set_fill_color(255, 255, 255)
         alt = not alt
 
-        row = [checkin_time, svc, room, cc, wd, signed, checkout]
+        pdf.set_draw_color(150, 150, 150)
+        pdf.set_font("Helvetica", "", 8)
+        row    = [str(idx), date_str, svc, w_val, d_val, sig_val, cc_val, ""]
+        aligns = ["C", "C", "L", "C", "C", "L", "C", "L"]
         for i, cell in enumerate(row):
-            pdf.cell(W[i], 5.5, str(cell), border=1, fill=True,
-                     align="C" if i in (3, 4, 5) else "L")
+            pdf.cell(W[i], ROW_H, cell, border=1, fill=True, align=aligns[i])
         pdf.ln()
 
-    # ---- Totals ----
+    # ---- Totals row ----
     checked_out = [v for v in visits if v.get("status") == "checked_out"]
     total_copay = sum(float(v.get("copay_collected") or 0) for v in checked_out)
-    pdf.set_fill_color(210, 225, 210)
+    pdf.set_fill_color(210, 228, 210)
+    pdf.set_draw_color(100, 130, 100)
     pdf.set_font("Helvetica", "B", 8)
-    label = "Total Visits: %d  |  Checked Out: %d" % (len(visits), len(checked_out))
-    pdf.cell(sum(W[:2]), 5.5, label, border=1, fill=True)
-    pdf.cell(W[2], 5.5, _money(total_copay) if total_copay else "-", border=1, fill=True, align="C")
-    pdf.cell(W[3] + W[4] + W[5] + W[6], 5.5, "", border=1, fill=True)
+    label_w = sum(W[:5])   # #, Date, Service, W, D
+    total_label = "Total: %d visits | %d checked out" % (len(visits), len(checked_out))
+    pdf.cell(label_w, 6, total_label, border=1, fill=True)
+    pdf.cell(W[5],    6, "",          border=1, fill=True)
+    pdf.cell(W[6],    6, _money(total_copay) if total_copay else "-", border=1, fill=True, align="C")
+    pdf.cell(W[7],    6, "",          border=1, fill=True)
+    pdf.ln(5)
+
+    # ---- Empty rows for upcoming / future visits ----
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_draw_color(180, 180, 180)
+    for extra_idx in range(len(visits) + 1, len(visits) + 5):
+        pdf.set_fill_color(255, 255, 255)
+        row = [str(extra_idx), "", "", "", "", "", "", ""]
+        for i, cell in enumerate(row):
+            pdf.cell(W[i], ROW_H, cell, border=1, fill=False,
+                     align="C" if i in (0, 3, 4, 6) else "L")
+        pdf.ln()
+
     pdf.ln(8)
 
-    # ---- Signature ----
-    pdf.set_font("Helvetica", "", 9)
-    pdf.cell(95, 5, "Patient Signature: ______________________________")
-    pdf.cell(0, 5, "Date: _______________", ln=True)
-    pdf.ln(4)
+    # ---- Footer ----
     pdf.set_font("Helvetica", "I", 7.5)
-    pdf.cell(0, 4,
-             "Generated by ClinicOS. Please verify with the patient before signing.",
-             ln=True, align="C")
+    pdf.set_draw_color(0, 0, 0)
+    pdf.cell(0, 4, "Generated by ClinicOS. Please verify information with patient before signing.", ln=True, align="C")
 
     return bytes(pdf.output())

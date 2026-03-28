@@ -138,6 +138,7 @@ class Visit(Base):
     copay_collected: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # actual copay amount collected at desk
     wd_verified: Mapped[bool] = mapped_column(Boolean, default=False)  # WD (waived deductible / verified date) checked
     patient_signed: Mapped[bool] = mapped_column(Boolean, default=False)  # patient signed at checkout
+    supervising_staff_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # 生诊医生 — supervising/attending physician
 
 
 # ==================== VISIT TREATMENTS (§11.5 - Multiple Modalities) ====================

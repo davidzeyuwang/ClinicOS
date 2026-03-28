@@ -214,7 +214,8 @@ async def patient_checkin(db: AsyncSession, actor_id: str, patient_name: str, pa
 
 async def service_start(
     db: AsyncSession, visit_id: str, actor_id: str,
-    staff_id: str, room_id: str, service_type: str
+    staff_id: str, room_id: str, service_type: str,
+    supervising_staff_id: Optional[str] = None,
 ) -> Optional[dict]:
     visit = await db.get(Visit, visit_id)
     staff_member = await db.get(Staff, staff_id)
@@ -236,6 +237,8 @@ async def service_start(
     visit.service_type = service_type
     visit.service_start_time = now
     visit.status = "in_service"
+    if supervising_staff_id:
+        visit.supervising_staff_id = supervising_staff_id
 
     room.status = "occupied"
     room.updated_at = now
@@ -369,6 +372,7 @@ def _visit_to_dict(visit: Visit) -> dict:
         "copay_collected": visit.copay_collected,
         "wd_verified": visit.wd_verified,
         "patient_signed": visit.patient_signed,
+        "supervising_staff_id": visit.supervising_staff_id,
     }
 
 
@@ -1355,13 +1359,21 @@ async def list_treatment_records(
         visit_result = await db.execute(select(Visit).where(Visit.visit_id == t.visit_id))
         visit = visit_result.scalar_one_or_none()
         if visit:
-            t_dict["visit_date"] = visit.check_in_time
+            t_dict["check_in_time"] = visit.check_in_time.isoformat() if visit.check_in_time else None
             t_dict["visit_status"] = visit.status
+            t_dict["service_type"] = visit.service_type
+            if visit.supervising_staff_id:
+                supervisor = await db.get(Staff, visit.supervising_staff_id)
+                t_dict["supervising_doctor"] = supervisor.name if supervisor else None
+            else:
+                t_dict["supervising_doctor"] = None
             
-            # Get patient name
-            patient = await db.get(Patient, visit.patient_id)
+            # Get patient name — prefer Patient record, fall back to visit.patient_name (walk-ins)
+            patient = await db.get(Patient, visit.patient_id) if visit.patient_id else None
             if patient:
                 t_dict["patient_name"] = f"{patient.first_name} {patient.last_name}"
+            elif visit.patient_name:
+                t_dict["patient_name"] = visit.patient_name
             
             # Get room name
             if visit.room_id:

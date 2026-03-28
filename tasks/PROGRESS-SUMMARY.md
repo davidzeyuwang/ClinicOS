@@ -2,8 +2,8 @@
 
 ## Summary
 
-✅ **Phases 1-3 COMPLETE** (10/13 tasks)  
-⚠️ **Phase 4 PENDING** (3/13 tasks - Selective PDF)
+✅ **ALL 4 PHASES COMPLETE** (13/13 tasks - 100%)  
+🎉 **PRODUCTION DEPLOYED** https://clinicos-psi.vercel.app
 
 ---
 
@@ -80,21 +80,25 @@
 
 ---
 
-## What's Still Pending (Phase 4)
+### Phase 4: Selective PDF Generation ✅ (Deployed)
 
-### PLAN-11: Visit Checkboxes ❌
-- Need: Checkboxes next to each visit in patient detail modal
-- Purpose: Select specific visits for PDF generation
+**PLAN-11: Visit Checkboxes in Patient Modal**
+- ✅ Added checkbox column to visit history table
+- ✅ "Select All" checkbox in table header
+- ✅ Individual checkboxes per visit row
+- ✅ Visual indication of selection count
 
-### PLAN-12: Selective PDF Backend ❌
-- Need: Modify `/patients/{id}/sign-sheet.pdf` to accept `?visit_ids=x,y,z` param
-- Purpose: Generate PDF for only selected visits (not all)
+**PLAN-12: Backend Support for Selective PDF**
+- ✅ Modified `/patients/{id}/sign-sheet.pdf` to accept `?visit_ids=x,y,z` parameter
+- ✅ Server-side filtering of visits before PDF generation
+- ✅ Updated filename: `sign_sheet_{id}_selected_{count}.pdf`
+- ✅ Backward compatible (no visit_ids = all visits)
 
-### PLAN-13: "Download Selected PDF" Button ❌
-- Need: Button in patient modal (enabled when ≥1 visit selected)
-- Purpose: Generate partial records (e.g., only this month)
-
-**Priority:** P2 (Nice-to-have, not blocking main workflow)
+**PLAN-13: "Download Selected PDF" Button**
+- ✅ Button enabled only when ≥1 visit selected
+- ✅ Shows count: "Selected (3) PDF"  
+- ✅ Opens PDF in new tab with selected visits only
+- ✅ Works alongside "All Visits PDF" button
 
 ---
 
@@ -144,6 +148,8 @@
 
 1. **12c3f69** — `fix(phase1): simplify PDF format, add PDF button to checkout`
 2. **21d7000** — `feat(phase2-3): multiple treatments UI + treatment records page`
+3. **cb47d28** — `docs: Phase 1-3 completion summary and progress tracking`
+4. **d4c3cd1** — `feat: Phase 4 - selective PDF with visit checkboxes`
 
 ---
 
@@ -212,9 +218,8 @@
 
 ## Conclusion
 
-**10 out of 13 tasks complete** (77% done)  
-**All critical features implemented and deployed**  
-**Phase 4 (Selective PDF) is optional enhancement**
+**13 out of 13 tasks complete** (100% done 🎉)  
+**ALL 4 PHASES COMPLETE AND DEPLOYED**  
 
 The clinic can now:
 - ✅ Add multiple treatments per visit
@@ -222,5 +227,8 @@ The clinic can now:
 - ✅ Download PDFs with simplified format
 - ✅ View all treatment records with filters
 - ✅ Track therapist productivity and modalities used
+- ✅ **Select specific visits for partial PDF generation**
+- ✅ Generate PDFs for billing periods or selected visits only
 
-**Status:** Ready for user acceptance testing in production! 🎉
+**Status:** All features complete and production-ready! 🚀  
+**Production URL:** https://clinicos-psi.vercel.app

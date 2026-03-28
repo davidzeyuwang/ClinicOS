@@ -1,5 +1,53 @@
 [
   {
+    "id": "PRD005-P1-01",
+    "title": "Phase 1: PDF & Checkout Fixes",
+    "description": "Simplified PDF format (removed WHO/WHAT/WHEN/WHERE header and staff column), fixed checkout flow, added PDF download button in checkout modal",
+    "phase": 4,
+    "owner": "tester",
+    "priority": "P0",
+    "depends_on": [],
+    "verify": "Open checkout modal → verify PDF download button → click and verify PDF format is simplified",
+    "verify_manual": "Full workflow: checkin → service → checkout → download PDF → verify no Staff column",
+    "passes": true
+  },
+  {
+    "id": "PRD005-P2-01",
+    "title": "Phase 2: Multiple Treatments UI",
+    "description": "Add/edit/delete treatments on active visits, show treatments in checkout modal, treatment buttons on in_service and service_completed visits",
+    "phase": 4,
+    "owner": "tester",
+    "priority": "P0",
+    "depends_on": ["PRD005-P1-01"],
+    "verify": "Start service → click '+Tx' → add 2 treatments → edit duration → delete one → checkout shows remaining treatment",
+    "verify_manual": "Ops Board → Active Visits → in_service visit → '+Tx' button exists → works",
+    "passes": true
+  },
+  {
+    "id": "PRD005-P3-01",
+    "title": "Phase 3: Treatment Records Page",
+    "description": "New 'Treatments' tab with date/patient/staff filters, displays all treatments across all visits with therapist/modality/duration/room",
+    "phase": 4,
+    "owner": "tester",
+    "priority": "P1",
+    "depends_on": ["PRD005-P2-01"],
+    "verify": "Navigate to Treatments tab → set date filter → verify treatments appear → staff filter works",
+    "verify_manual": "Add treatments to 2 visits → go to Treatments tab → see both treatments listed",
+    "passes": true
+  },
+  {
+    "id": "PRD005-P4-01",
+    "title": "Phase 4: Selective PDF Generation",
+    "description": "Checkboxes on visit history table, 'Select All' checkbox, 'Selected PDF' button enabled when >=1 selected, backend accepts visit_ids parameter",
+    "phase": 4,
+    "owner": "tester",
+    "priority": "P2",
+    "depends_on": ["PRD005-P3-01"],
+    "verify": "Patient modal → check 2 visits → click 'Selected (2) PDF' → verify PDF contains only those 2 visits",
+    "verify_manual": "Patient with 5 visits → select 3 → download → PDF has exactly 3 visits",
+    "passes": true
+  },
+  {
     "id": "M1-BE-01",
     "title": "PostgreSQL event_log + core events",
     "description": "SQLAlchemy models for event_log table and core event types (ROOM_CREATED, STAFF_CREATED, PATIENT_CHECKED_IN, SERVICE_STARTED, SERVICE_ENDED, PATIENT_CHECKED_OUT). DB-agnostic (SQLite local, Supabase prod).",

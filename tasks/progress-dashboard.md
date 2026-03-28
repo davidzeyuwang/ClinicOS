@@ -1,19 +1,37 @@
-# ClinicOS Progress Dashboard
+# ClinicOS Progress Dashboard — DEPRECATED
 
-**Generated:** 2026-03-27  
-**Active Milestone:** M1 — Operations Board
+**⚠️ THIS FILE IS OUTDATED ⚠️**
 
-## Overall Status: 🟡 M1 Core In Progress
+**Generated:** 2026-03-27 (marked as deprecated)  
+**Active Tracking:** See **IMPLEMENTATION-PLAN.md** and **PROGRESS-SUMMARY.md**
 
-### Phase Status
+## Current Status: ✅ PRD-005 Complete (100%)
+
+**Completed Work:**
+- ✅ Phase 1: PDF & Checkout Fixes (3 tasks) — DEPLOYED
+- ✅ Phase 2: Multiple Treatments UI (4 tasks) — DEPLOYED
+- ✅ Phase 3: Treatment Records Page (3 tasks) — DEPLOYED  
+- ✅ Phase 4: Selective PDF Generation (3 tasks) — DEPLOYED
+
+**Production:** https://clinicos-psi.vercel.app  
+**Health:** {"status":"ok","version":"0.3.0"}  
+**All features working in production** ✅
+
+---
+
+## Old Status (No Longer Applicable)
+
+### Phase Status (Legacy M1 Milestone)
 | Phase | Status | Agent | Blocker? |
 |---|---|---|---|
 | 1. Requirements (PRD) | ✅ Done | PM | - |
-| 2. Architecture (RFC) | 🔲 Pending | Architect | Need RFC for M1 |
-| 3. Test Spec | 🔲 Pending | QA SDE | Waiting on RFC |
-| 4. Implementation | 🔲 Pending | SDE-A | Waiting on test spec |
-| 5. Review | 🔲 Pending | SDE-B + QA | Waiting on code |
-| 6. Human Review | 🔲 Pending | Human | Waiting on review |
+| 2. Architecture (RFC) | 🔲 Pending | Architect | Future work |
+| 3. Test Spec | 🔲 Pending | QA SDE | Future work |
+| 4. Implementation | ✅ **Current PRD-005 Done** | SDE-A | - |
+| 5. Review | ✅ **PRD-005 Done** | SDE-B + QA | - |
+| 6. Human Review | 🔲 Pending | Human | UAT needed |
+
+**Note:** M1 event-sourcing migration is future work. Current system uses Supabase REST API.
 
 ### Key Metrics
 - **Prototype:** In-memory API working (backend/app/routers/prototype.py)

@@ -67,10 +67,10 @@
 9. ✅ **PLAN-09:** Add date/patient/staff filters - **DEPLOYED**
 10. ✅ **PLAN-10:** Display treatment table with all fields - **DEPLOYED**
 
-### Phase 4: Selective PDF (P2)
-11. ✅ **PLAN-11:** Add checkboxes to visit history in patient modal
-12. ✅ **PLAN-12:** Modify PDF backend to accept visit_ids parameter
-13. ✅ **PLAN-13:** Add "Download Selected PDF" button
+### Phase 4: Selective PDF (P2) ✅ COMPLETE
+11. ✅ **PLAN-11:** Add checkboxes to visit history in patient modal - **TESTED**
+12. ✅ **PLAN-12:** Modify PDF backend to accept visit_ids parameter - **DEPLOYED**
+13. ✅ **PLAN-13:** Add "Download Selected PDF" button - **DEPLOYED**
 
 ---
 
@@ -88,9 +88,9 @@
 | PLAN-08: Treatment Records tab | ✅ DONE | tester | index.html |
 | PLAN-09: Treatment filters | ✅ DONE | tester | index.html |
 | PLAN-10: Treatment table | ✅ DONE | tester | index.html |
-| PLAN-11: Visit checkboxes | 🟡 TODO | tester | index.html |
-| PLAN-12: PDF w/ visit_ids | 🟡 TODO | tester | db_routes.py, pdf_service.py |
-| PLAN-13: Selected PDF button | 🟡 TODO | tester | index.html |
+| PLAN-11: Visit checkboxes | ✅ DONE | tester | index.html |
+| PLAN-12: PDF w/ visit_ids | ✅ DONE | tester | db_routes.py |
+| PLAN-13: Selected PDF button | ✅ DONE | tester | index.html |
 
 ---
 
@@ -123,4 +123,5 @@
 ✅ Treatment Records page shows all treatments with filters  
 ✅ Can select specific visits and generate partial PDF  
 ✅ All changes tested locally and in production  
-✅ Progress tracking updated in features.json
+✅ Progress tracking updated in all files  
+✅ **ALL 13 TASKS COMPLETE - 100% DONE!**

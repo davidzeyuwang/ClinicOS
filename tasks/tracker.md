@@ -1,12 +1,32 @@
-# ClinicOS Task Tracker — Master Board
+# ClinicOS Task Tracker — DEPRECATED
 
-**Last Updated:** 2026-03-27
+**⚠️ THIS FILE IS OUTDATED ⚠️**
 
-## Active Milestone: M1 — Operations Board
+**Last Updated:** 2026-03-27 (marked as deprecated)
+
+## Active tracking has moved to:
+- **IMPLEMENTATION-PLAN.md** — Current implementation status (PRD-005: Multiple Treatments)
+- **PROGRESS-SUMMARY.md** — Detailed progress summary
+
+---
+
+## Status: PRD-005 Complete (13/13 tasks - 100%)
+
+**What was completed:**
+1. ✅ Phase 1: PDF & Checkout Fixes (3 tasks)
+2. ✅ Phase 2: Multiple Treatments UI (4 tasks)
+3. ✅ Phase 3: Treatment Records Page (3 tasks)
+4. ✅ Phase 4: Selective PDF Generation (3 tasks)
+
+**Production URL:** https://clinicos-psi.vercel.app
+
+---
+
+## Old M1 Milestone (Not Currently Active)
 
 **M1 Scope Clarification:** Patient management, staff management, room management, check-in, check-out, sign-sheet PDF generation, and daily report aggregation. Appointment/insurance/tasking beyond this core flow are tracked as post-M1 or secondary scope.
 
-### Task Summary
+### Task Summary (M1 - Future Work)
 | Status | Count |
 |---|---|
 | Backlog | 9 |
@@ -16,7 +36,10 @@
 | Done | 0 |
 | **Total** | **9** |
 
-### Task Board
+**Note:** M1 tasks below are for event-sourcing migration (future work).  
+Current system uses Supabase REST API and is production-ready.
+
+### Task Board (M1 - Future)
 
 | ID | Task | Phase | Owner | Status | Priority | Est | Actual | Depends |
 |---|---|---|---|---|---|---|---|---|

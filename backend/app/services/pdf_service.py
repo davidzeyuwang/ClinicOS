@@ -105,40 +105,35 @@ def generate_sign_sheet(patient, visits, policies):
 
     ROW_H = 9   # tall enough to write a real signature
 
-    alt = False
-    for idx, v in enumerate(visits, 1):
+    # Expand visits: one row per treatment (or one row per visit if no treatments)
+    rows = []
+    for v in visits:
         status   = str(v.get("status") or "")
         date_str = _fmt_dt(v.get("check_in_time"), "%m/%d/%y")
+        w_val    = "v" if (status == "checked_out" and v.get("wd_verified")) else ""
+        cc_val   = _money(v.get("copay_collected")) if status == "checked_out" else ""
 
-        # Build service label from treatments if available, else use service_type
         treatments = v.get("treatments") or []
         if treatments:
-            # Show distinct modalities, abbreviated
-            seen = []
-            for t in treatments:
-                mod = str(t.get("modality") or "").strip()
-                if mod and mod not in seen:
-                    seen.append(mod)
-            svc = ", ".join(seen)[:20] if seen else str(v.get("service_type") or "-")
+            for ti, t in enumerate(treatments):
+                mod = str(t.get("modality") or "-")
+                dur = t.get("duration_minutes")
+                svc_cell = (mod + " (" + str(dur) + "m)")[:20] if dur else mod[:20]
+                # CC only on first treatment row of the visit; W only on last
+                rows.append({
+                    "date": date_str,
+                    "svc": svc_cell,
+                    "w": w_val if ti == len(treatments) - 1 else "",
+                    "cc": cc_val if ti == 0 else "",
+                    "visit": v,
+                })
         else:
-            svc = str(v.get("service_type") or "-")
-        svc = svc[:20]  # truncate to fit cell
+            # No explicit treatments — show service_type from ServiceStart
+            svc_type = str(v.get("service_type") or "-")[:20]
+            rows.append({"date": date_str, "svc": svc_type, "w": w_val, "cc": cc_val, "visit": v})
 
-        # W = WD-verified checkmark (only meaningful after checkout)
-        w_val = "v" if (status == "checked_out" and v.get("wd_verified")) else ""
-
-        # D = leave blank for manual fill
-        d_val = ""
-
-        # CC = copay collected (shown if checked out)
-        if status == "checked_out":
-            cc_val = _money(v.get("copay_collected"))
-        else:
-            cc_val = ""
-
-        # Signature cell is always blank — patient writes here
-        sig_val = ""
-
+    alt = False
+    for idx, row in enumerate(rows, 1):
         if alt:
             pdf.set_fill_color(246, 252, 246)
         else:
@@ -147,9 +142,9 @@ def generate_sign_sheet(patient, visits, policies):
 
         pdf.set_draw_color(150, 150, 150)
         pdf.set_font("Helvetica", "", 8)
-        row    = [str(idx), date_str, svc, w_val, d_val, sig_val, cc_val, ""]
+        cells  = [str(idx), row["date"], row["svc"], row["w"], "", "", row["cc"], ""]
         aligns = ["C", "C", "L", "C", "C", "L", "C", "L"]
-        for i, cell in enumerate(row):
+        for i, cell in enumerate(cells):
             pdf.cell(W[i], ROW_H, cell, border=1, fill=True, align=aligns[i])
         pdf.ln()
 
@@ -170,10 +165,11 @@ def generate_sign_sheet(patient, visits, policies):
     # ---- Empty rows for upcoming / future visits ----
     pdf.set_font("Helvetica", "", 8)
     pdf.set_draw_color(180, 180, 180)
-    for extra_idx in range(len(visits) + 1, len(visits) + 5):
+    next_idx = len(rows) + 1
+    for extra_idx in range(next_idx, next_idx + 4):
         pdf.set_fill_color(255, 255, 255)
-        row = [str(extra_idx), "", "", "", "", "", "", ""]
-        for i, cell in enumerate(row):
+        erow = [str(extra_idx), "", "", "", "", "", "", ""]
+        for i, cell in enumerate(erow):
             pdf.cell(W[i], ROW_H, cell, border=1, fill=False,
                      align="C" if i in (0, 3, 4, 6) else "L")
         pdf.ln()

@@ -522,7 +522,7 @@ async def get_daily_summary(db: AsyncSession, date: Optional[str] = None) -> dic
     checked_out = [v for v in today_visits if v.status == "checked_out"]
     active = [v for v in today_visits if v.status in ("checked_in", "in_service", "service_completed")]
     copay_total = sum((v.copay_collected or 0) for v in checked_out)
-    payment_total = sum((v.payment_amount or 0) for v in checked_out if v.payment_amount)
+    payment_total = sum((v.copay_collected or 0) + (v.payment_amount or 0) for v in checked_out)
 
     by_service: dict = {}
     for v in today_visits:
@@ -569,6 +569,26 @@ async def get_staff_hours(db: AsyncSession) -> list:
     visits_result = await db.execute(select(Visit).where(Visit.staff_id.isnot(None)))
     all_visits = visits_result.scalars().all()
 
+    # Load all treatments for today's visits
+    today_visit_ids = [
+        v.visit_id for v in all_visits
+        if _ensure_utc(v.service_start_time) and
+           _ensure_utc(v.service_start_time).date().isoformat() == today
+    ]
+    if today_visit_ids:
+        tx_result = await db.execute(
+            select(VisitTreatment).where(VisitTreatment.visit_id.in_(today_visit_ids))
+        )
+        all_treatments = tx_result.scalars().all()
+    else:
+        all_treatments = []
+
+    # Group treatment minutes by therapist_id
+    tx_minutes: dict = {}
+    for t in all_treatments:
+        tid = t.therapist_id or ""
+        tx_minutes[tid] = tx_minutes.get(tid, 0) + (t.duration_minutes or 0)
+
     per_staff = {}
     for member in all_staff:
         per_staff[member.staff_id] = {
@@ -585,15 +605,34 @@ async def get_staff_hours(db: AsyncSession) -> list:
         if sid not in per_staff:
             continue
         start = _ensure_utc(visit.service_start_time)
+        if not start or start.date().isoformat() != today:
+            continue
         end = _ensure_utc(visit.service_end_time)
-        if start and start.date().isoformat() == today:
-            if end:
-                seconds = (end - start).total_seconds()
-                per_staff[sid]["completed_minutes"] += max(int(seconds // 60), 0)
-                per_staff[sid]["sessions_completed"] += 1
-            elif visit.status == "in_service":
-                live_seconds = (now - start).total_seconds()
-                per_staff[sid]["active_minutes"] += max(int(live_seconds // 60), 0)
+        if end:
+            per_staff[sid]["sessions_completed"] += 1
+        elif visit.status == "in_service":
+            # Live session: use wall-clock time for active_minutes only
+            live_seconds = (now - start).total_seconds()
+            per_staff[sid]["active_minutes"] += max(int(live_seconds // 60), 0)
+
+    # Use treatment duration sums as completed_minutes (more accurate than wall-clock)
+    for sid, minutes in tx_minutes.items():
+        if sid in per_staff:
+            per_staff[sid]["completed_minutes"] += minutes
+
+    # Fallback for visits with no treatment records: use service duration
+    visit_ids_with_tx = {t.visit_id for t in all_treatments}
+    for visit in all_visits:
+        sid = visit.staff_id
+        if sid not in per_staff:
+            continue
+        if visit.visit_id in visit_ids_with_tx:
+            continue  # already counted via treatments
+        start = _ensure_utc(visit.service_start_time)
+        end = _ensure_utc(visit.service_end_time)
+        if start and end and start.date().isoformat() == today:
+            seconds = (end - start).total_seconds()
+            per_staff[sid]["completed_minutes"] += max(int(seconds // 60), 0)
 
     return list(per_staff.values())
 
@@ -1517,18 +1556,22 @@ async def list_visits_with_treatments(
             if v.staff_id != staff_id and not any(t.therapist_id == staff_id for t in treatments):
                 continue
 
-        # Map each treatment to a column; cell = therapist name (first match wins per column)
+        # Map each treatment to a column; cell = "Name / Xm" (first match wins per column)
         col_therapist: dict = {"A": "", "PT": "", "CP": "", "TN": ""}
+        col_minutes: dict   = {"A": 0,  "PT": 0,  "CP": 0,  "TN": 0}
         other_modalities: list = []
         notes_parts: list = []
         total_minutes = 0
         for t in treatments:
             col = _modality_to_col(t.modality or "")
             tname = staff_map.get(t.therapist_id, "") if t.therapist_id else ""
+            dur = t.duration_minutes or 0
             if col == "other":
                 other_modalities.append(t.modality or "")
-            elif not col_therapist[col]:
-                col_therapist[col] = tname
+            else:
+                if not col_therapist[col]:
+                    col_therapist[col] = tname
+                col_minutes[col] += dur
             if t.notes:
                 notes_parts.append(t.notes)
             if t.duration_minutes:
@@ -1540,6 +1583,14 @@ async def list_visits_with_treatments(
             primary = staff_map.get(v.staff_id, "") if v.staff_id else ""
             if col in col_therapist:
                 col_therapist[col] = primary
+
+        # Build display strings: "Alice PT / 30m" or "Alice PT" if no duration
+        def _col_display(col_key: str) -> str:
+            name = col_therapist[col_key]
+            mins = col_minutes[col_key]
+            if not name:
+                return ""
+            return (name + " / " + str(mins) + "m") if mins else name
 
         patient_name = patient_map.get(v.patient_id, "") if v.patient_id else (v.patient_name or "")
 
@@ -1553,10 +1604,10 @@ async def list_visits_with_treatments(
             "primary_therapist": staff_map.get(v.staff_id, "") if v.staff_id else "",
             "room_name": room_map.get(v.room_id, "") if v.room_id else "",
             "service_type": v.service_type or "",
-            "A": col_therapist["A"],
-            "PT": col_therapist["PT"],
-            "CP": col_therapist["CP"],
-            "TN": col_therapist["TN"],
+            "A": _col_display("A"),
+            "PT": _col_display("PT"),
+            "CP": _col_display("CP"),
+            "TN": _col_display("TN"),
             "other_modalities": ", ".join(other_modalities),
             "total_minutes": total_minutes,
             "notes": " | ".join(notes_parts),

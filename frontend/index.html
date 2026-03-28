@@ -433,7 +433,7 @@ function openRoomCheckin(roomId,roomCode){
     </div>
     <div id="rc-selected" class="text-sm text-gray-500"></div>
     <select id="rc-staff" class="input">${so}</select>
-    <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option></select>
+    <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Acupuncture</option><option>Cupping</option><option>Massage</option><option>E-stim</option><option>Speech</option></select>
     <button onclick="doRoomCheckin('${roomId}')" class="btn btn-primary w-full">✓ Check In & Start</button>
   </div>`);
 }
@@ -480,16 +480,23 @@ async function openCheckout(vid){
   const downloadPdfBtn = patientId ? 
     `<a href="${API}/patients/${patientId}/sign-sheet.pdf" target="_blank" class="btn btn-outline w-full text-sm mb-2">📄 Download Sign Sheet PDF</a>` : '';
   
-  // Load treatments for this visit
+  // Load treatments for this visit (include initial service_type from visit)
   let treatmentsHtml = '';
   try {
     const tRes = await GET(`/visits/${vid}/treatments`);
     const treatments = tRes.treatments || [];
-    if (treatments.length) {
+    // Prepend the initial service_type from the visit record if not already present
+    const rows = [];
+    if (visit && visit.service_type) {
+      const staffName = staff.find(s => s.staff_id === visit.staff_id)?.name || '-';
+      rows.push({modality: visit.service_type, therapist_name: staffName, duration_minutes: null, _initial: true});
+    }
+    treatments.forEach(t => rows.push(t));
+    if (rows.length) {
       treatmentsHtml = `<div class="bg-gray-50 rounded-lg p-3 mb-3">
-        <h4 class="font-semibold text-sm mb-2">🩺 Treatments Performed (${treatments.length})</h4>
-        <table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1">Modality</th><th class="pb-1">Therapist</th><th class="pb-1">Duration</th></tr></thead><tbody>
-        ${treatments.map(t => `<tr class="border-b border-gray-100"><td class="py-1">${t.modality}</td><td class="py-1 text-gray-500">${t.therapist_name || '-'}</td><td class="py-1">${t.duration_minutes}m</td></tr>`).join('')}
+        <h4 class="font-semibold text-sm mb-2">🩺 Services & Treatments (${rows.length})</h4>
+        <table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1">Service/Modality</th><th class="pb-1">Staff</th><th class="pb-1">Duration</th></tr></thead><tbody>
+        ${rows.map(t => `<tr class="border-b border-gray-100"><td class="py-1 font-medium">${t.modality}${t._initial?' <span class="text-gray-400">(initial)</span>':''}</td><td class="py-1 text-gray-500">${t.therapist_name || '-'}</td><td class="py-1">${t.duration_minutes ? t.duration_minutes+'m' : '-'}</td></tr>`).join('')}
         </tbody></table></div>`;
     }
   } catch(e) {
@@ -555,17 +562,25 @@ async function openTreatments(vid,patientName){
     const r=await GET(`/visits/${vid}/treatments`);
     const treatments=r.treatments||[];
     const so=staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
+    // Show initial service_type from visit as first read-only row
+    const visit=visits.find(v=>v.visit_id===vid);
+    const so2=staff.map(s=>`<option value="${s.staff_id}"${visit&&s.staff_id===visit.staff_id?' selected':''} >${s.name}</option>`).join('');
     let h=`<div class="space-y-3">
 <div class="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">Manage treatments for ${patientName}</div>
       <div class="max-h-64 overflow-y-auto">`;
+    h+=`<table class="w-full text-xs mb-3"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-1">Service/Modality</th><th class="pb-1">Staff</th><th class="pb-1">Duration</th><th class="pb-1">Actions</th></tr></thead><tbody>`;
+    if(visit&&visit.service_type){
+      const sName=staff.find(s=>s.staff_id===visit.staff_id)?.name||'-';
+      h+=`<tr class="border-b border-gray-100 bg-gray-50"><td class="py-1 font-medium">${visit.service_type} <span class="text-gray-400 text-xs">(initial)</span></td><td class="py-1 text-gray-500">${sName}</td><td class="py-1 text-gray-400">—</td><td class="py-1 text-gray-400 text-xs">set at start</td></tr>`;
+    }
     if(treatments.length){
-      h+=`<table class="w-full text-xs mb-3"><thead><tr class="text-left text-gray-500 border-b"><th class="pb-1">Modality</th><th class="pb-1">Therapist</th><th class="pb-1">Duration</th><th class="pb-1">Actions</th></tr></thead><tbody>`;
       treatments.forEach(t=>{
         const tn=t.therapist_name||'-';
         h+=`<tr class="border-b border-gray-100"><td class="py-1">${t.modality}</td><td class="py-1 text-gray-500">${tn}</td><td class="py-1">${t.duration_minutes}m</td><td class="py-1"><button onclick="editTreatment('${vid}','${t.treatment_id}',${t.duration_minutes},'${t.notes||''}')" class="btn btn-xs btn-outline">✏️</button> <button onclick="deleteTreatment('${vid}','${t.treatment_id}')" class="btn btn-xs btn-danger">🗑</button></td></tr>`;
       });
-      h+='</tbody></table>';
-    }else h+='<p class="text-gray-400 text-sm text-center py-2">No treatments yet</p>';
+    }
+    if(!visit?.service_type&&!treatments.length) h+='<tr><td colspan="4" class="py-2 text-center text-gray-400 text-xs">No treatments yet</td></tr>';
+    h+='</tbody></table>';
     h+=`</div><div class="grid grid-cols-2 gap-2">
         <select id="trt-mod" class="input"><option value="PT">PT</option><option value="OT">OT</option><option value="E-stim">E-stim</option><option value="Massage">Massage</option><option value="Cupping">Cupping</option><option value="Acupuncture">Acupuncture</option><option value="Heat">Heat Therapy</option><option value="Cold">Cold Therapy</option></select>
         <select id="trt-staff" class="input"><option value="">— Same as visit —</option>${so}</select>

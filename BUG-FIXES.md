@@ -27,3 +27,19 @@
 ## BUG-7: Staff hours use wall-clock time instead of treatment durations [x] FIXED
 **Where:** `get_staff_hours()` — sums `service_end_time - service_start_time`. Shows "3m" when treatments were 30m+50m.
 **Fix:** Sum `VisitTreatment.duration_minutes` per therapist. Fall back to visit duration only if no treatment records exist.
+
+---
+
+## New Feature Requests
+
+### FEATURE-1: Staff setup should include supported service types [ ] TODO
+**Need:** When creating or editing a staff member, admin should be able to assign one or more service types that this staff member can perform.
+**Why:** Staff capability should be defined in the system instead of relying on manual knowledge.
+
+### FEATURE-2: Staff picker should be filtered by selected service type [ ] TODO
+**Need:** In workflows that assign a staff member, users should choose a service type first, and then only see staff members who are qualified for that service type.
+**Why:** Prevent invalid assignments and make service assignment faster.
+
+### FEATURE-3: Admin should be able to manage service types [ ] TODO
+**Need:** Admin can add, edit, and retire service types instead of relying on a hard-coded list.
+**Why:** The clinic can expand offerings without code changes.

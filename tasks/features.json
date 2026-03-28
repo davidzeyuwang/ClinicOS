@@ -313,6 +313,31 @@
     "verify_manual": "Open patient detail → check 2 visits → Download Selected PDF → PDF contains only those 2 visits",
     "passes": true,
     "status": "COMPLETE - see PRD005-P4-01"
+  },
+  {
+    "id": "NEXT-P1-01",
+    "title": "Admin-managed service types",
+    "description": "Allow admins to create, edit, activate, and retire service types instead of relying on hard-coded frontend lists. This makes service offerings configurable without code changes.",
+    "phase": 5,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [],
+    "verify": "Admin creates a new service type → it appears in service-type dropdowns",
+    "verify_manual": "Add service type 'Lymphatic Massage' in admin UI → reopen check-in/start-service modal → new option is available",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "NEXT-P1-02",
+    "title": "Staff qualification by service type",
+    "description": "Store which service types each staff member can perform. In assignment flows, users choose a service type first and then only see qualified staff for that service.",
+    "phase": 5,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": ["NEXT-P1-01"],
+    "verify": "Assign service type first → staff dropdown only includes staff linked to that service type",
+    "verify_manual": "Mark Staff A = PT only, Staff B = Acupuncture only → choose PT → only Staff A is selectable",
+    "passes": false,
+    "status": "TODO"
   }
 ]
-

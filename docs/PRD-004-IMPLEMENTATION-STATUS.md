@@ -1,6 +1,6 @@
 # PRD-004 Implementation Status — What's Fixed vs What's Missing
 
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-03-28
 
 ---
 
@@ -314,6 +314,44 @@ CREATE TABLE patient_signatures (
 
 ---
 
+### Beyond PRD-004 — Service Type Management + Staff Qualification Rules
+
+**Current State:**
+- ❌ Service types are still hard-coded in several UI flows
+- ❌ Staff records do not define which service types they are allowed to perform
+- ❌ Staff selection is not constrained by the selected service type
+
+**Requested Behavior:**
+- Admin can create and maintain the list of service types
+- Each staff member can be assigned one or more supported service types
+- In service assignment flows, users select the service type first
+- After a service type is selected, the staff dropdown only shows qualified staff
+
+**Suggested Data Model:**
+```sql
+CREATE TABLE service_types (
+    service_type_id UUID PRIMARY KEY,
+    code            VARCHAR(50) UNIQUE NOT NULL,
+    name            VARCHAR(100) NOT NULL,
+    is_active       BOOLEAN DEFAULT TRUE,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE staff_service_types (
+    staff_id        UUID NOT NULL REFERENCES staff(staff_id),
+    service_type_id UUID NOT NULL REFERENCES service_types(service_type_id),
+    PRIMARY KEY (staff_id, service_type_id)
+);
+```
+
+**UI Changes:**
+- Staff create/edit modal: multi-select supported service types
+- Admin area: service type CRUD
+- Check-in / start-service / assignment flows: service type selected first, then filtered staff list
+
+---
+
 ## Summary Table: PRD-004 Implementation Status
 
 | Feature | Priority | Status | Phase |
@@ -332,6 +370,8 @@ CREATE TABLE patient_signatures (
 | Eligibility workflow | P1 | ❌ TODO | Phase 3 |
 | Digital signatures | P2 | ❌ TODO | Phase 3 |
 | Patient network status | P1 | ❌ TODO | Phase 2 |
+| Service type admin management | P1 | ❌ TODO | Beyond PRD-004 |
+| Staff qualification by service type | P1 | ❌ TODO | Beyond PRD-004 |
 
 ---
 
@@ -391,11 +431,13 @@ If PRD-004 gaps are acceptable, move to next milestone features:
 - Staff scheduling
 - Patient portal
 - Clinical note templates
+- Service type admin management
+- Staff-to-service qualification rules with filtered staff selection
 
 ---
 
-**Report Generated:** 2026-03-27  
-**Total PRD-004 Features:** 14  
+**Report Generated:** 2026-03-28  
+**Total PRD-004 Features:** 16  
 **Implemented:** 7 (50%)  
-**Remaining:** 7 (50%)  
+**Remaining:** 9 (56%)  
 **P0 Features Remaining:** 2 (insurance fields, dual insurance)

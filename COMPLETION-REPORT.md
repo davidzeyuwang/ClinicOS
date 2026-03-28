@@ -196,6 +196,94 @@
 
 ---
 
+## Database Schema
+
+### visit_treatments Table
+
+```sql
+CREATE TABLE visit_treatments (
+- **Test Suite:** `tests/test_treatments.py`
+  - ✅ `test_prd005_multiple_treatments_workflow` — PASSED (1.29s)
+  - ✅ `test_cannot_add_treatment_to_checked_out_visit` — PASSED
+  - ✅ `test_treatment_without_therapist_defaults_to_actor` — PASSED
+  - ✅ `test_treatment_records_date_filter` — PASSED
+  - **Result:** 4/4 new tests passing
+
+### Production Testing ✅
+- Health check: OK
+- PDF generation: Working (1.9KB typical size)
+- Treatment endpoints: All 5 functional
+- Selective PDF: Tested with 2/5 visits selected
+- No errors in production logs
+- **Production API Tests:**
+  - ✅ Create Room → SUCCESS
+  - ✅ Create Staff → SUCCESS
+  - ✅ Create Patient → SUCCESS
+  - ✅ Check In Patient → SUCCESS
+  - ✅ Start Service → in_service status
+  - ✅ Add Treatment 1 (PT, 30 min) → SUCCESS
+  - ✅ Add Treatment 2 (E-stim, 15 min) → SUCCESS
+  - ✅ List Treatments → 2 treatments returned with enriched data
+  - ✅ Query Treatment Records → Filters working
+  - **Result:** ALL PRODUCTION APIs WORKING ✅,
+  notes            TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_visit_treatments_visit ON visit_treatments(visit_id);
+CREATE INDEX idx_visit_treatments_therapist ON visit_treatments(therapist_id);
+```
+
+**Modalities Supported:**
+- PT (Physical Therapy)
+- OT (Occupational Therapy)
+- E-stim (Electrical Stimulation)
+- Massage
+- Cupping
+- Acupuncture
+- Heat Therapy
+- Cold Therapy
+
+**Status:** ✅ Created in production Supabase database
+
+---
+Git Commit History
+
+## Progress Tracking Files
+
+**Active Files:**
+1. **tasks/IMPLEMENTATION-PLAN.md** — Current implementation status (13/13 tasks complete)
+2. **tasks/features.json** — Machine-readable completion (15/24 tasks: 6 foundation + 9 PRD-005)ormat, add PDF button to checkout`
+   - Removed verbose headers and staff column
+   - Added PDF download in checkout modal
+
+3. **21d7000** — `feat(phase2-3): multiple treatments UI + treatment records page`
+   - Treatment management buttons (➕ Tx, 📋)
+   - Treatment records tab with filters
+   - Checkout shows treatments
+
+4. **cb47d28** — `docs: Phase 1-3 completion summary and progress tracking`
+   - Updated all progress files
+
+5. **d4c3cd1** — `feat: Phase 4 - selective PDF with visit checkboxes`
+   - Visit selection checkboxes
+   - Backend visit_ids parameter
+   - "Selected (N) PDF" button
+
+6. **aeff882** — `docs: update all progress tracking files - 13/13 tasks complete`
+
+7. **f60425a** — `docs: restructure features.json to show foundation → PRD-005 progression`
+   - Added 6 ROADMAP-P1-* foundation tasks
+   - Marked M1-* tasks as DEFERRED
+
+8. **c340e6b** — `docs: consolidate progress tracking into single IMPLEMENTATION-PLAN.md`
+   - Merged 3 tracking files into 1
+
+---
+
+## Progress Tracking Files
 ## Testing Results
 
 ### Local Testing ✅

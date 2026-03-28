@@ -267,19 +267,35 @@ async def get_patient_visits(patient_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/patients/{patient_id}/sign-sheet.pdf")
-async def get_patient_sign_sheet(patient_id: str, db: AsyncSession = Depends(get_db)):
-    """Generate a printable individual sign sheet PDF (个人签字表) for a patient."""
+async def get_patient_sign_sheet(
+    patient_id: str, 
+    visit_ids: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate a printable individual sign sheet PDF (个人签字表) for a patient.
+    
+    Args:
+        patient_id: Patient ID
+        visit_ids: Optional comma-separated list of visit IDs to include (default: all visits)
+    """
     from app.services import pdf_service
     patient = await db_service.get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     visits = await db_service.get_patient_visits(db, patient_id=patient_id)
+    
+    # Filter visits if visit_ids provided
+    if visit_ids:
+        selected_ids = set(visit_ids.split(','))
+        visits = [v for v in visits if v.get('visit_id') in selected_ids]
+    
     policies = await db_service.list_insurance_policies(db, patient_id=patient_id)
     pdf_bytes = pdf_service.generate_sign_sheet(patient, visits, policies)
+    filename_suffix = f"_selected_{len(visits)}" if visit_ids else ""
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="sign_sheet_{patient_id[:8]}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="sign_sheet_{patient_id[:8]}{filename_suffix}.pdf"'},
     )
 
 

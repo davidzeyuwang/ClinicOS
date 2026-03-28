@@ -694,15 +694,15 @@ async function openPatientDetail(pid){
     if(pols.length) h+=pols.map(i=>`<div class="bg-gray-50 rounded p-3 mb-2 text-sm"><div class="font-medium">${i.carrier_name} <span class="text-xs text-gray-400">${i.priority||'primary'}</span> <span class="badge badge-${i.eligibility_status}">${i.eligibility_status}</span></div><div class="text-gray-500">Member: ${i.member_id||'-'} · Copay: $${i.copay_amount||0} · Visits: ${i.visits_used||0}/${i.visits_authorized||'?'}</div></div>`).join('');
     else h+='<p class="text-gray-400 text-sm">No insurance on file.</p>';
     h+=`<button onclick="openAddInsurance('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Insurance</button></div>`;
-    // Visit history
+    // Visit history with selective PDF
     const totCopay=visList.filter(v=>v.status==='checked_out').reduce((s,v)=>s+(v.copay_collected||0),0);
-    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-blue">📄 Download Sign Sheet PDF</a></div>`;
+    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><div class="flex gap-2"><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-outline">📄 All Visits PDF</a><button id="sel-pdf-btn" onclick="downloadSelectedPDF('${pid}')" class="btn btn-xs btn-blue" disabled>📄 Selected PDF</button></div></div>`;
     if(visList.length){
       h+=`<div class="text-xs text-gray-500 mb-1">Total copay collected: <strong>$${totCopay.toFixed(2)}</strong></div>`;
-      h+=`<table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1">Date</th><th class="pb-1">Service</th><th class="pb-1">Status</th><th class="pb-1">CC</th><th class="pb-1">WD</th><th class="pb-1">Signed</th></tr></thead><tbody>`;
+      h+=`<table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1 w-8"><input type="checkbox" id="select-all-visits" onchange="toggleAllVisits(this)"></th><th class="pb-1">Date</th><th class="pb-1">Service</th><th class="pb-1">Status</th><th class="pb-1">CC</th><th class="pb-1">WD</th><th class="pb-1">Signed</th></tr></thead><tbody>`;
       visList.forEach(v=>{
         const dt=v.check_in_time?new Date(v.check_in_time).toLocaleDateString():'-';
-        h+=`<tr class="border-b border-gray-100"><td class="py-1">${dt}</td><td class="py-1">${v.service_type||'-'}</td><td class="py-1"><span class="badge badge-${v.status}">${v.status}</span></td><td class="py-1">${v.copay_collected!=null?'$'+Number(v.copay_collected).toFixed(2):'-'}</td><td class="py-1 text-center">${v.wd_verified?'✓':''}</td><td class="py-1 text-center">${v.patient_signed?'✓':''}</td></tr>`;
+        h+=`<tr class="border-b border-gray-100"><td class="py-1"><input type="checkbox" class="visit-checkbox" data-visit-id="${v.visit_id}" onchange="updateSelectedPDFButton()"></td><td class="py-1">${dt}</td><td class="py-1">${v.service_type||'-'}</td><td class="py-1"><span class="badge badge-${v.status}">${v.status}</span></td><td class="py-1">${v.copay_collected!=null?'$'+Number(v.copay_collected).toFixed(2):'-'}</td><td class="py-1 text-center">${v.wd_verified?'✓':''}</td><td class="py-1 text-center">${v.patient_signed?'✓':''}</td></tr>`;
       });
       h+='</tbody></table>';
     }else h+='<p class="text-gray-400 text-sm">No visit history.</p>';
@@ -723,6 +723,26 @@ function openAddDoc(pid){closeModal();openModal('Add Document',`<div class="spac
   <select id="ad-type" class="input"><option value="intake">Intake</option><option value="consent">Consent</option><option value="visitsign">Visit Sign</option><option value="insurance_card">Insurance Card</option><option value="attachment">Attachment</option></select>
   <button onclick="createDoc('${pid}')" class="btn btn-primary w-full">+ Create</button></div>`);}
 async function createDoc(pid){try{await POST('/documents',{patient_id:pid,document_type:document.getElementById('ad-type').value});toast('Document created');closeModal();openPatientDetail(pid);}catch(e){toast(e.message,'error');}}
+
+// Selective PDF functions
+function toggleAllVisits(checkbox){
+  document.querySelectorAll('.visit-checkbox').forEach(cb=>cb.checked=checkbox.checked);
+  updateSelectedPDFButton();
+}
+function updateSelectedPDFButton(){
+  const checked=document.querySelectorAll('.visit-checkbox:checked').length;
+  const btn=document.getElementById('sel-pdf-btn');
+  if(btn){
+    btn.disabled=checked===0;
+    btn.textContent=checked===0?'📄 Selected PDF':`📄 Selected (${checked}) PDF`;
+  }
+}
+function downloadSelectedPDF(pid){
+  const selected=Array.from(document.querySelectorAll('.visit-checkbox:checked')).map(cb=>cb.dataset.visitId);
+  if(!selected.length)return toast('Select at least one visit','error');
+  const url=`${API}/patients/${pid}/sign-sheet.pdf?visit_ids=${selected.join(',')}`;
+  window.open(url,'_blank');
+}
 
 // ==================== APPOINTMENTS (§11.2) ====================
 async function loadAppointments(){

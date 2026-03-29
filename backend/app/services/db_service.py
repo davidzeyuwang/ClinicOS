@@ -1584,12 +1584,14 @@ async def list_visits_with_treatments(
             if col in col_therapist:
                 col_therapist[col] = primary
 
-        # Build display strings: "Alice PT / 30m" or "Alice PT" if no duration
+        # Build display strings: "Alice PT / 30m", "Alice PT", or "45m" if no therapist
         def _col_display(col_key: str) -> str:
             name = col_therapist[col_key]
             mins = col_minutes[col_key]
-            if not name:
+            if not name and not mins:
                 return ""
+            if not name:
+                return str(mins) + "m"
             return (name + " / " + str(mins) + "m") if mins else name
 
         patient_name = patient_map.get(v.patient_id, "") if v.patient_id else (v.patient_name or "")

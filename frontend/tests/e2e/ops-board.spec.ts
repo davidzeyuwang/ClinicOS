@@ -463,8 +463,8 @@ test.describe("ClinicOS UI harness", () => {
     await expect(rows.first()).not.toContainText("| - |");
     const dateCell = rows.first().locator("td").nth(1);
     await expect(dateCell).not.toHaveText("-");
-    // Duration should format as 1h30m not "90m"
-    await expect(table).toContainText("1h30m");
+    // Total duration = initial 30m + added 90m = 120m → shown as "2h"
+    await expect(table).toContainText("2h");
   });
 
   // ── 18. Treatment Records table has all required column headers ─────────────
@@ -484,7 +484,7 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByRole("button", { name: /search/i }).click();
 
     const headers = page.locator("#treatment-records-list thead th");
-    await expect(headers).toContainText(["#", "Date", "Patient", "Service", "生诊医生", "Modality", "Therapist", "Duration", "Room", "Notes"]);
+    await expect(headers).toContainText(["#", "Date", "Patient", "生诊医生", "A", "PT", "CP", "TN", "Room", "Duration", "Note"]);
   });
 
   // ── 19. Walk-in patient name appears in treatment records ──────────────────
@@ -505,7 +505,7 @@ test.describe("ClinicOS UI harness", () => {
 
     const table = page.locator("#treatment-records-list");
     await expect(table).toContainText("Walkin Wayne");
-    await expect(table).toContainText("Massage");
+    // "Massage" maps to TN column → shows as "Staff / 45m"; total = 30m initial + 45m = 1h15m
     await expect(table).toContainText("45m");
   });
 

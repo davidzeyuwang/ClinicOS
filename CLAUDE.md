@@ -71,7 +71,8 @@ These come from `docs/ADR/001-event-sourcing.md`. Violating them breaks the audi
 CLAUDE.md                    ← you are here (project contract)
 SESSION.md                   ← last session's state + next steps (read first!)
 init.sh                      ← one-command startup
-tasks/features.json          ← M1 completion status (machine-verifiable)
+tasks/features.json          ← completed features (machine-verifiable, features only)
+tasks/bugs.json              ← all bugs fixed (each linked to a feature_ref)
 tasks/tracker.md             ← task board
 tasks/progress-dashboard.md  ← high-level milestone progress
 
@@ -107,6 +108,27 @@ frontend/index.v1.html       ← single-file UI prototype
 | `reviewer` | `.claude/agents/reviewer.md` | Code review gate |
 | `compliance` | `.claude/agents/compliance.md` | PHI/RBAC audit |
 | `manager` | `.claude/agents/manager.md` | Orchestrate phases, update tracker |
+
+---
+
+## Harness Engineering — Required Every Session
+
+After **implementing a feature**, add an entry to `tasks/features.json`:
+```json
+{ "id": "...", "title": "...", "description": "...", "feature_ref": "...",
+  "verify": "<shell command>", "passes": true, "completed": "YYYY-MM-DD" }
+```
+
+After **fixing a bug**, add an entry to `tasks/bugs.json`:
+```json
+{ "id": "BUG-N", "title": "...", "status": "fixed", "feature_ref": "<feature id>",
+  "date_fixed": "YYYY-MM-DD", "root_cause": "...", "fix": "...",
+  "files": [...], "regression_test": "<shell command>" }
+```
+
+- `feature_ref` in bugs.json must point to an existing `id` in features.json.
+- `bugs.json` is for bugs only — never add bugs to features.json.
+- `features.json` is for features only — never add bugs or fix batches to features.json.
 
 ---
 

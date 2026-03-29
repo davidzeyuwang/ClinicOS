@@ -1,0 +1,127 @@
+[
+  {
+    "id": "BUG-1",
+    "title": "Check-in modal missing service options",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-02",
+    "date_fixed": "2026-03-28",
+    "root_cause": "openRoomCheckin() <select id=\"rc-svc\"> only listed PT/OT/Eval/Re-eval/Speech. Acupuncture, Cupping, Massage, E-stim were absent.",
+    "fix": "Added the missing options to match the Start Service modal.",
+    "files": ["frontend/index.html"],
+    "regression_test": "npx playwright test --grep \"check-in\""
+  },
+  {
+    "id": "BUG-2",
+    "title": "Checkout and Treatment modals missing initial service",
+    "status": "fixed",
+    "feature_ref": "PRD005-P2-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "openCheckout() and openTreatments() only fetched VisitTreatment rows. The initial service_type set at ServiceStart lived on the Visit record and was never shown.",
+    "fix": "Removed special-case display logic. doRoomCheckin() and doAssignSvc() now POST /visits/{vid}/treatments/add immediately after service/start, persisting the initial service as a real VisitTreatment.",
+    "files": ["frontend/index.html"],
+    "regression_test": "npx playwright test --grep \"treatment\""
+  },
+  {
+    "id": "BUG-3",
+    "title": "Sign sheet PDF — treatments grouped on one row instead of separate lines",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-04",
+    "date_fixed": "2026-03-28",
+    "root_cause": "generate_sign_sheet() built one row per visit, joining all treatment modalities with ', '.",
+    "fix": "Expanded to one row per treatment. Falls back to one row with service_type when no VisitTreatment records exist.",
+    "files": ["backend/app/services/pdf_service.py"],
+    "regression_test": "npx playwright test --grep \"sign sheet PDF\""
+  },
+  {
+    "id": "BUG-4",
+    "title": "Sign sheet PDF — missing duration on each row",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-04",
+    "date_fixed": "2026-03-28",
+    "root_cause": "Service column in generate_sign_sheet() showed modality name only, no duration.",
+    "fix": "Format Service cell as 'PT (30m)' or 'Acupuncture (20m)'. Widened Service column from 24mm to 30mm.",
+    "files": ["backend/app/services/pdf_service.py"],
+    "regression_test": "npx playwright test --grep \"sign sheet PDF\""
+  },
+  {
+    "id": "BUG-5",
+    "title": "Treatment tab A/PT/CP/TN columns missing duration",
+    "status": "fixed",
+    "feature_ref": "PRD005-P3-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "_col_display() in list_visits_with_treatments() returned only the therapist name; duration_minutes was not included in the cell string.",
+    "fix": "_col_display() now returns 'Name / Xm'. Added GET /visit-records endpoint. Frontend loadTreatmentRecords() rewritten to one-row-per-visit with A/PT/CP/TN columns.",
+    "files": [
+      "backend/app/services/db_service.py",
+      "backend/app/routers/db_routes.py",
+      "frontend/index.html"
+    ],
+    "regression_test": "npx playwright test --grep \"treatment records\""
+  },
+  {
+    "id": "BUG-6",
+    "title": "Daily summary total payment excludes copay",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-05",
+    "date_fixed": "2026-03-28",
+    "root_cause": "get_daily_summary() summed only payment_amount; copay_collected was a separate field and was not included.",
+    "fix": "payment_total = sum(copay_collected + payment_amount) for each checked-out visit.",
+    "files": ["backend/app/services/db_service.py"],
+    "regression_test": "cd backend && python -m pytest tests/test_prototype_e2e.py -k daily_summary -q"
+  },
+  {
+    "id": "BUG-7",
+    "title": "Staff hours use wall-clock time instead of treatment durations",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-05",
+    "date_fixed": "2026-03-28",
+    "root_cause": "get_staff_hours() summed service_end_time - service_start_time (wall-clock). Showed '3m' when actual treatment durations were 30m + 50m.",
+    "fix": "Rewrote to sum VisitTreatment.duration_minutes per therapist_id. Falls back to wall-clock only when no treatment records exist.",
+    "files": ["backend/app/services/db_service.py"],
+    "regression_test": "cd backend && python -m pytest tests/test_prototype_e2e.py -k staff_hours -q"
+  },
+  {
+    "id": "BUG-8",
+    "title": "Check-in and Start Service modals missing duration field",
+    "status": "fixed",
+    "feature_ref": "PRD005-P2-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "openRoomCheckin() and openAssignSvc() had no input for treatment duration. Duration was not captured at the point of service start.",
+    "fix": "Added <input id=\"rc-dur\"> (default 30) to check-in modal and <input id=\"as-dur\"> (default 30) to Start Service modal. Value passed to auto-created VisitTreatment.",
+    "files": ["frontend/index.html"],
+    "regression_test": "npx playwright test --grep \"check-in\""
+  },
+  {
+    "id": "BUG-9",
+    "title": "Initial service never persisted as VisitTreatment",
+    "status": "fixed",
+    "feature_ref": "PRD005-BE-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "doRoomCheckin() and doAssignSvc() only called POST /portal/service/start. The service_type lived on the Visit model only, making it invisible in treatment modal, checkout summary, sign-sheet PDF, and treatment records tab.",
+    "fix": "Both functions now POST /visits/{vid}/treatments/add immediately after service/start. Removed all 'prepend initial service' display hacks from openTreatments() and openCheckout().",
+    "files": ["frontend/index.html"],
+    "regression_test": "npx playwright test --grep \"treatment\""
+  },
+  {
+    "id": "BUG-10",
+    "title": "Treatment column blank when no therapist assigned even if duration exists",
+    "status": "fixed",
+    "feature_ref": "PRD005-P3-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "_col_display() returned '' whenever therapist_id was null, even when duration_minutes > 0. Duration was accumulated in totals but silently dropped from the A/PT/CP/TN cell.",
+    "fix": "_col_display() now returns 'Xm' (e.g. '45m') when duration exists but no therapist is assigned.",
+    "files": ["backend/app/services/db_service.py"],
+    "regression_test": "npx playwright test --grep \"walk-in treatment\""
+  },
+  {
+    "id": "BUG-11",
+    "title": "E2E Playwright tests failing after treatment tab redesign",
+    "status": "fixed",
+    "feature_ref": "PRD005-P3-01",
+    "date_fixed": "2026-03-28",
+    "root_cause": "Three tests were written against the old per-treatment-row design. After redesign to per-visit grouped layout with A/PT/CP/TN columns: (1) expected duration '1h30m' but initial 30m + added 90m = '2h'; (2) expected old column headers; (3) expected 'Massage' as plain text (now in TN column) and '45m' was blank due to BUG-10.",
+    "fix": "Updated assertions: duration '1h30m' → '2h'; headers updated to ['#','Date','Patient','生诊医生','A','PT','CP','TN','Room','Duration','Note']; removed Massage text assertion; '45m' now visible after BUG-10 fix.",
+    "files": ["frontend/tests/e2e/ops-board.spec.ts"],
+    "regression_test": "npx playwright test --grep \"treatment records\""
+  }
+]

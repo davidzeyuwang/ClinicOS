@@ -9,7 +9,7 @@
     "fix": "Added the missing options to match the Start Service modal.",
     "files": ["frontend/index.html"],
     "api_test": null,
-    "ui_test": "npx playwright test --grep \"check-in\""
+    "ui_test": "npx playwright test --grep \"check-in modal service dropdown includes acupuncture\""
   },
   {
     "id": "BUG-2",
@@ -85,7 +85,7 @@
     "fix": "Rewrote to sum VisitTreatment.duration_minutes per therapist_id. Falls back to wall-clock only when no treatment records exist.",
     "files": ["backend/app/services/db_service.py"],
     "api_test": "cd backend && python -m pytest tests/test_prototype_e2e.py -q",
-    "ui_test": null
+    "ui_test": "npx playwright test --grep \"report staff hours reflect treatment duration\""
   },
   {
     "id": "BUG-8",

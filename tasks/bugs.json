@@ -166,13 +166,14 @@
   {
     "id": "BUG-13",
     "title": "Insurance copay not pre-filled at checkout",
-    "status": "open",
+    "status": "fixed",
     "feature_ref": "GAP-INS-11",
     "date_identified": "2026-03-29",
-    "root_cause": "Checkout modal copay_collected field is blank. Insurance policy copay_amount exists in database but not auto-populated. Staff must manually look up paper ledger and type copay amount.",
-    "fix": "TBD - See GAP-INS-11 for implementation",
-    "files": ["frontend/index.html", "backend/app/routers/db_routes.py"],
-    "regression_test": "Manual: Patient with $35 copay → checkout → copay field auto-fills $35"
+    "date_fixed": "2026-03-29",
+    "root_cause": "Checkout modal copay_collected field was blank. Insurance copay_amount existed in DB but was not fetched or displayed. Staff had to manually look up and type copay, causing mismatch with sign sheet CC column.",
+    "fix": "openCheckout() now fetches the patient's primary insurance policy and pre-fills #co-cc with copay_amount and auto-selects payment_status='copay_collected'. Staff can still override the amount.",
+    "files": ["frontend/index.html"],
+    "regression_test": "Manual: Patient with $30 insurance copay → checkout modal opens → copay field shows $30, status = Copay Collected"
   },
   {
     "id": "BUG-14",

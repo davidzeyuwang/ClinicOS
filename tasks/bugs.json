@@ -139,7 +139,7 @@
       "frontend/tests/e2e/ops-board.spec.ts",
       "frontend/tests/e2e/helpers.ts"
     ],
-    "regression_test": "npx playwright test && cd backend && python -m pytest tests/ -x -q"
+    "regression_test": "npx playwright test --grep \"patient creation requires date of birth and phone\""
   },
   {
     "id": "BUG-16",
@@ -150,7 +150,7 @@
     "root_cause": "pdf_service.generate_sign_sheet() only showed copay_collected in the CC column for status=checked_out. Non-checked-out visits showed empty CC, giving staff no indication of expected copay amount when the patient signs.",
     "fix": "For non-checked-out visits, CC column now shows the primary insurance copay_amount as the expected amount. Actual copay_collected still shown for checked-out visits.",
     "files": ["backend/app/services/pdf_service.py"],
-    "regression_test": "npx playwright test --grep \"sign sheet PDF\""
+    "regression_test": "npx playwright test --grep \"sign sheet PDF shows expected copay from insurance for unchecked-out visits\""
   },
   {
     "id": "BUG-12",
@@ -173,7 +173,7 @@
     "root_cause": "Checkout modal copay_collected field was blank. Insurance copay_amount existed in DB but was not fetched or displayed. Staff had to manually look up and type copay, causing mismatch with sign sheet CC column.",
     "fix": "openCheckout() now fetches the patient's primary insurance policy and pre-fills #co-cc with copay_amount and auto-selects payment_status='copay_collected'. Staff can still override the amount.",
     "files": ["frontend/index.html"],
-    "regression_test": "Manual: Patient with $30 insurance copay → checkout modal opens → copay field shows $30, status = Copay Collected"
+    "regression_test": "npx playwright test --grep \"checkout modal pre-fills copay amount from patient insurance\""
   },
   {
     "id": "BUG-14",

@@ -170,6 +170,7 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByRole("button", { name: /new/i }).click();
     await page.locator("#np-fn").fill("History");
     await page.locator("#np-ln").fill("Patient");
+    await page.locator("#np-dob").fill("1990-05-15");
     await page.locator("#np-phone").fill("555-9999");
     await page.getByRole("button", { name: /create patient/i }).click();
     await expectToast(page, "Patient created");
@@ -212,6 +213,8 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByRole("button", { name: /new/i }).click();
     await page.locator("#np-fn").fill("PDF");
     await page.locator("#np-ln").fill("Downloader");
+    await page.locator("#np-dob").fill("1985-03-20");
+    await page.locator("#np-phone").fill("555-8888");
     await page.getByRole("button", { name: /create patient/i }).click();
     await expectToast(page, "Patient created");
 
@@ -310,6 +313,8 @@ test.describe("ClinicOS UI harness", () => {
     await page.getByRole("button", { name: /new/i }).click();
     await page.locator("#np-fn").fill("Ghost");
     await page.locator("#np-ln").fill("Patient");
+    await page.locator("#np-dob").fill("1975-11-30");
+    await page.locator("#np-phone").fill("555-7777");
     await page.getByRole("button", { name: /create patient/i }).click();
     await expectToast(page, "Patient created");
 
@@ -563,6 +568,7 @@ test.describe("ClinicOS UI harness", () => {
     const patient = await apiPost(request, "/patients", {
       first_name: "PDF",
       last_name: "Tester",
+      date_of_birth: "1980-06-01",
       phone: "555-0001",
     });
 
@@ -580,6 +586,7 @@ test.describe("ClinicOS UI harness", () => {
     const patient = await apiPost(request, "/patients", {
       first_name: "Status",
       last_name: "Label",
+      date_of_birth: "1992-09-15",
       phone: "555-0002",
     });
 

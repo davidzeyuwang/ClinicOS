@@ -64,9 +64,9 @@ class StaffUpdate(BaseModel):
 class PatientCreate(BaseModel):
     first_name: str
     last_name: str
-    date_of_birth: Optional[str] = None
+    date_of_birth: str
+    phone: str
     gender: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
     mrn: Optional[str] = None

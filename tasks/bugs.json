@@ -123,5 +123,66 @@
     "fix": "Updated assertions: duration '1h30m' → '2h'; headers updated to ['#','Date','Patient','生诊医生','A','PT','CP','TN','Room','Duration','Note']; removed Massage text assertion; '45m' now visible after BUG-10 fix.",
     "files": ["frontend/tests/e2e/ops-board.spec.ts"],
     "regression_test": "npx playwright test --grep \"treatment records\""
+  },
+  {
+    "id": "BUG-15",
+    "title": "Patient creation does not require DOB or phone",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-01",
+    "date_fixed": "2026-03-29",
+    "root_cause": "createPatient() only validated first/last name. date_of_birth and phone were optional in both the frontend form and PatientCreate Pydantic schema. Patients could be created with no contact info or DOB, leaving sign sheets and records incomplete.",
+    "fix": "Moved DOB and phone to required fields in PatientCreate schema. Frontend createPatient() now validates both before submitting. Form layout updated to show DOB and phone on the same row. Tests and seed data updated with date_of_birth and phone.",
+    "files": [
+      "frontend/index.html",
+      "backend/app/schemas/prototype.py",
+      "backend/app/services/db_service.py",
+      "frontend/tests/e2e/ops-board.spec.ts",
+      "frontend/tests/e2e/helpers.ts"
+    ],
+    "regression_test": "npx playwright test && cd backend && python -m pytest tests/ -x -q"
+  },
+  {
+    "id": "BUG-16",
+    "title": "Sign sheet PDF CC column blank for non-checked-out visits even when insurance copay is known",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-04",
+    "date_fixed": "2026-03-29",
+    "root_cause": "pdf_service.generate_sign_sheet() only showed copay_collected in the CC column for status=checked_out. Non-checked-out visits showed empty CC, giving staff no indication of expected copay amount when the patient signs.",
+    "fix": "For non-checked-out visits, CC column now shows the primary insurance copay_amount as the expected amount. Actual copay_collected still shown for checked-out visits.",
+    "files": ["backend/app/services/pdf_service.py"],
+    "regression_test": "npx playwright test --grep \"sign sheet PDF\""
+  },
+  {
+    "id": "BUG-12",
+    "title": "Room board not grouped by floor despite floor data existing",
+    "status": "open",
+    "feature_ref": "GAP-UI-01",
+    "date_identified": "2026-03-29",
+    "root_cause": "Database rooms table has floor field (16F, 18F) but frontend displays flat list. Paper room chart clearly separates 16F (1601-1609) from 18F (1801-1810). Data exists, just not grouped in UI.",
+    "fix": "TBD - See GAP-UI-01 for implementation",
+    "files": ["frontend/index.html"],
+    "regression_test": "Manual: Ops Board → Rooms section shows '=== 16F ===' and '=== 18F ===' headers"
+  },
+  {
+    "id": "BUG-13",
+    "title": "Insurance copay not pre-filled at checkout",
+    "status": "open",
+    "feature_ref": "GAP-INS-11",
+    "date_identified": "2026-03-29",
+    "root_cause": "Checkout modal copay_collected field is blank. Insurance policy copay_amount exists in database but not auto-populated. Staff must manually look up paper ledger and type copay amount.",
+    "fix": "TBD - See GAP-INS-11 for implementation",
+    "files": ["frontend/index.html", "backend/app/routers/db_routes.py"],
+    "regression_test": "Manual: Patient with $35 copay → checkout → copay field auto-fills $35"
+  },
+  {
+    "id": "BUG-14",
+    "title": "Secondary insurance not displayed in patient modal",
+    "status": "open",
+    "feature_ref": "GAP-INS-09",
+    "date_identified": "2026-03-29",
+    "root_cause": "Patient modal only shows primary insurance (priority=1). Patients with secondary insurance (priority=2) have it in database but UI doesn't display. Paper ledger has dedicated Primary/Secondary sections.",
+    "fix": "TBD - See GAP-INS-09 for implementation",
+    "files": ["frontend/index.html"],
+    "regression_test": "Manual: Patient with 2 policies → Patient modal shows both Primary and Secondary sections"
   }
 ]

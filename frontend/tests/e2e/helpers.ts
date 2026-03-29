@@ -26,6 +26,8 @@ export async function seedPatient(
   return apiPost(request, "/patients", {
     first_name: firstName,
     last_name: lastName,
+    date_of_birth: "1990-01-01",
+    phone: "555-0000",
     mrn,
   });
 }

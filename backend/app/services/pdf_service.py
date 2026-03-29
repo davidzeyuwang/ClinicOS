@@ -105,13 +105,24 @@ def generate_sign_sheet(patient, visits, policies):
 
     ROW_H = 9   # tall enough to write a real signature
 
+    # Insurance copay amount to pre-fill expected copay on unchecked-out rows
+    ins_copay_amount = None
+    if policies:
+        pri = next((p for p in policies if str(p.get("priority") or "").lower() == "primary"), policies[0])
+        ins_copay_amount = pri.get("copay_amount")
+
     # Expand visits: one row per treatment (or one row per visit if no treatments)
     rows = []
     for v in visits:
         status   = str(v.get("status") or "")
         date_str = _fmt_dt(v.get("check_in_time"), "%m/%d/%y")
         w_val    = "v" if (status == "checked_out" and v.get("wd_verified")) else ""
-        cc_val   = _money(v.get("copay_collected")) if status == "checked_out" else ""
+        if status == "checked_out":
+            cc_val = _money(v.get("copay_collected"))
+        elif ins_copay_amount:
+            cc_val = _money(ins_copay_amount)  # expected copay from insurance
+        else:
+            cc_val = ""
 
         treatments = v.get("treatments") or []
         if treatments:

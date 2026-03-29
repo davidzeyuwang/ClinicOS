@@ -680,16 +680,19 @@ function renderPatients(pts){
 function openNewPatient(){
   openModal('New Patient',`<div class="space-y-3">
     <div class="grid grid-cols-2 gap-2"><input id="np-fn" class="input" placeholder="First name *"><input id="np-ln" class="input" placeholder="Last name *"></div>
-    <div class="grid grid-cols-2 gap-2"><input id="np-dob" type="date" class="input"><input id="np-mrn" class="input" placeholder="MRN"></div>
-    <div class="grid grid-cols-2 gap-2"><input id="np-phone" class="input" placeholder="Phone"><input id="np-email" class="input" placeholder="Email"></div>
+    <div class="grid grid-cols-2 gap-2"><input id="np-dob" type="date" class="input" title="Date of birth"><input id="np-phone" class="input" placeholder="Phone *"></div>
+    <div class="grid grid-cols-2 gap-2"><input id="np-mrn" class="input" placeholder="MRN"><input id="np-email" class="input" placeholder="Email"></div>
     <textarea id="np-addr" class="input" placeholder="Address" rows="2"></textarea>
     <button onclick="createPatient()" class="btn btn-primary w-full">+ Create Patient</button>
   </div>`);
 }
 async function createPatient(force){
   const fn=document.getElementById('np-fn').value.trim(),ln=document.getElementById('np-ln').value.trim();
+  const dob=document.getElementById('np-dob').value,ph=document.getElementById('np-phone').value.trim();
   if(!fn||!ln)return toast('First & last name required','error');
-  const data={first_name:fn,last_name:ln,date_of_birth:document.getElementById('np-dob').value||null,mrn:document.getElementById('np-mrn').value||null,phone:document.getElementById('np-phone').value||null,email:document.getElementById('np-email').value||null,address:document.getElementById('np-addr').value||null};
+  if(!dob)return toast('Date of birth required','error');
+  if(!ph)return toast('Phone required','error');
+  const data={first_name:fn,last_name:ln,date_of_birth:dob,phone:ph,mrn:document.getElementById('np-mrn').value||null,email:document.getElementById('np-email').value||null,address:document.getElementById('np-addr').value||null};
   try{
     const url='/patients'+(force?'?force=true':'');
     await POST(url,data);toast('Patient created');closeModal();loadPatientsList();

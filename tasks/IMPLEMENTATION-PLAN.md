@@ -180,7 +180,7 @@ This document tracks the complete implementation of PRD-005 (Multiple Treatments
 
 ---
 
-## Success Criteria
+## Success Criteria (PRD-005)
 
 ✅ PDF shows only: Date, Service, Room, Copay, WD, Sign, Checkout  
 ✅ Checkout works without errors  
@@ -191,15 +191,196 @@ This document tracks the complete implementation of PRD-005 (Multiple Treatments
 ✅ Treatment Records page shows all treatments with filters  
 ✅ Can select specific visits and generate partial PDF  
 ✅ All changes tested locally and in production  
-✅ **ALL 13 TASKS COMPLETE - 100% DONE!** 🎉
-✅ PDF shows only: Date, Service, Room, Copay, WD, Sign, Checkout  
-✅ Checkout works without errors  
-✅ Can download PDF from checkout modal  
-✅ Can add multiple treatments to active visit  
-✅ Can edit treatment duration and notes  
-✅ Checkout shows all treatments performed  
-✅ Treatment Records page shows all treatments with filters  
-✅ Can select specific visits and generate partial PDF  
-✅ All changes tested locally and in production  
 ✅ Progress tracking updated in all files  
-✅ **ALL 13 TASKS COMPLETE - 100% DONE!**
+✅ **ALL 13 PRD-005 TASKS COMPLETE - 100% DONE!**
+
+---
+
+# Gap Analysis: Real-World Form Compliance
+
+**Analysis Date:** 2026-03-29  
+**Method:** Field-by-field comparison with 5 actual clinic paper forms  
+**Current Coverage:** ~60% field parity  
+**Gap Status:** 16 features + 3 display bugs identified
+
+---
+
+## Gap Summary by Priority
+
+| Priority | Count | Description | Business Impact |
+|----------|-------|-------------|-----------------|
+| **P0** | 10 tasks | Missing insurance fields + eligibility workflow | **Blocking full digitization** - staff still use paper ledger daily |
+| **P1** | 4 tasks | UI enhancements + treatment columns | Operational inefficiency - data exists but UI doesn't match paper workflow |
+| **P2** | 2 tasks | Document archive + pharmacy fields | Nice-to-have for full paper elimination |
+
+---
+
+## Forms Analyzed
+
+1. **Daily Sign-In Sheet** (clipboard paper form) - ✅ 70% coverage
+2. **Insurance Ledger** (detailed spreadsheet) - ❌ **40% coverage** (15 fields missing)
+3. **Individual Treatment Record** (诊疗记录表) - ✅ 80% coverage (H/A/D/P columns unclear)
+4. **Room Availability** (Google Sheets 16F/18F) - ✅ 90% coverage (floor grouping not shown in UI)
+5. **Digital Signature Archive** (Notability 317 notebooks) - ❌ **0% coverage** (no document management)
+
+---
+
+## Phase 5: Insurance Field Completion (P0) 🚨
+
+**Goal:** Achieve 100% parity with paper insurance ledger  
+**Status:** ⏳ TODO - 0/12 tasks complete  
+**Est. Duration:** 8-12 hours development + 4 hours testing  
+**Priority:** **P0 - Blocking full digitization**
+
+### Critical Insurance Fields (P0)
+
+| Task ID | Field | Paper Column Name | Business Reason |
+|---------|-------|-------------------|-----------------|
+| GAP-INS-01 | `deductible_met` | "Deductible Met (IND)" | Handwritten daily - determines if copay or coinsurance applies |
+| GAP-INS-02 | `oop_max`, `oop_met` | "OOP MAX", "OOP MET" | Patient stops paying after OOP limit reached |
+| GAP-INS-03 | `coverage_pct` | "% after deductible" | Calculate patient responsibility (e.g., 80/20 split) |
+| GAP-INS-04 | `preauth_required` | "Preauth Req?" | Block service without pre-authorization number |
+| GAP-INS-05 | `referral_required` | "Referral Req?" | Block service without physician referral |
+| GAP-INS-06 | `effective_date_start/end` | "Eff Date", "Term Date" | Verify coverage active on service date |
+| GAP-INS-07 | `plan_code` | "Plan" | Plan identification (EPO, PPO, HMO) |
+| GAP-INS-08 | `coinsurance` | "Coins %" | Alternative to flat copay (percentage-based) |
+| GAP-INS-09 | Dual insurance UI | "Primary" + "Secondary" sections | Display both insurances side-by-side |
+
+### Operational Enhancements (P1)
+
+| Task ID | Field | Paper Process | Impact |
+|---------|-------|---------------|--------|
+| GAP-INS-10 | `sessions_used_this_year` | Handwritten count | Track yearly utilization vs authorization |
+| GAP-INS-11 | Auto-fill copay at checkout | Staff look up ledger → type amount | Reduce manual entry errors |
+
+### Nice-to-Have (P2)
+
+| Task ID | Field | Paper Column | Use Case |
+|---------|-------|--------------|----------|
+| GAP-INS-12 | `rx_bin`, `rx_pcn`, `rx_grp` | "Pharmacy" section | Not critical for clinic ops but on paper form |
+
+**Dependencies:**  
+- All depend on ROADMAP-P1-01 (Patient Master File)  
+- GAP-INS-08 depends on GAP-INS-03 (coverage_pct)
+
+**Testing Plan:**  
+- Unit tests: Field validations, constraint checks  
+- Integration tests: Checkout calculations with new fields  
+- Manual regression: Enter all fields → save → verify display → test checkout logic  
+
+---
+
+## Phase 6: Workflow Digitization (P0-P1) 📋
+
+**Goal:** Replace manual Asana + paper workflows  
+**Status:** ⏳ TODO - 0/3 tasks complete  
+**Est. Duration:** 1-2 weeks  
+**Priority:** **Mixed P0/P1**
+
+### Eligibility Verification (P0 - Critical)
+
+**Task:** GAP-ELIG-01  
+**Current State:** 100% manual via Asana  
+**Paper Process:**  
+1. Receive patient inquiry (phone/walk-in)  
+2. Create Asana task with name, DOB, insurance info  
+3. Staff calls insurance to verify eligibility  
+4. Mark verified/denied in Asana  
+5. If verified → add to scheduling system  
+
+**Required Implementation:**  
+- Create `eligibility_requests` table (name, dob, insurance_info, status, notes, verified_by, verified_at)  
+- Add "Eligibility" tab to frontend (table view with status filters)  
+- States: New → Pending (staff called) → Verified → Denied  
+- Action buttons: "Mark Verified", "Mark Denied", "Add Notes"  
+- After verified → button to "Create Patient Record" (pre-fill from eligibility data)
+
+**Why P0:** Every new patient goes through this workflow. Currently 100% manual external tool.
+
+### UI Enhancements (P1)
+
+| Task ID | Enhancement | Current vs Target | Effort |
+|---------|-------------|-------------------|--------|
+| GAP-UI-01 | Floor grouping (16F/18F) | Flat room list → Grouped by floor with headers | 2 hours |
+| GAP-TX-01 | H/A/D/P treatment columns | Treatment tab missing columns from paper form | **BLOCKED** - need user clarification on H/A/D/P meaning |
+
+---
+
+## Phase 7: Document Management (P2) 📄
+
+**Goal:** Replace Notability paper signature archive (317 patient notebooks)  
+**Status:** ⏳ TODO - 0/1 task complete  
+**Est. Duration:** 1-2 weeks  
+**Priority:** **P2 - Future enhancement**
+
+**Task:** GAP-DOC-01  
+**Current State:** All signed forms stored in Notability iPad app (317 separate patient notebooks)  
+**Document Types:**  
+- Daily sign sheets (generated from ClinicOS)  
+- Consent forms
+- Prescriptions
+- Insurance cards (scanned)  
+- Referral letters
+
+**Required Implementation:**  
+1. Enhance `documents` table:
+   - `patient_id` (FK to patients)
+   - `document_type` (sign_sheet, consent, prescription, insurance_card, referral, other)
+   - `file_url` (Supabase storage path)
+   - `signed_date` DATE
+   - `uploaded_by`, `uploaded_at`
+   - `notes` TEXT
+
+2. Add "Documents" tab to frontend:
+   - Upload button (multi-file drag-drop)
+   - Filter by patient, date range, document type
+   - Thumbnail grid view
+   - Click to view/download full PDF/image
+
+3. Integrate with existing workflows:
+   - After patient signs PDF → "Upload to Documents" button
+   - Checkout → auto-link generated sign sheet to patient documents
+
+**Why P2:** Not blocking core operations. Notability works fine for now. Can defer until Phase 5-6 complete.
+
+---
+
+## Display Bugs Identified
+
+| Bug ID | Issue | Status | Feature Ref |
+|--------|-------|--------|-------------|
+| BUG-12 | Room board not grouped by floor | Open | GAP-UI-01 |
+| BUG-13 | Insurance copay not pre-filled at checkout | Open | GAP-INS-11 |
+| BUG-14 | Secondary insurance not displayed | Open | GAP-INS-09 |
+
+**Note:** These are classified as "bugs" because the data exists in the database but UI doesn't display it correctly per paper workflow.
+
+---
+
+## Implementation Prioritization
+
+### Immediate (This Week)
+1. ✅ ~~Document gaps in features.json + bugs.json~~ (DONE)
+2. ⏳ **GAP-INS-01 through GAP-INS-09** (P0 insurance fields) - 8 hours
+3. ⏳ **GAP-INS-10, GAP-INS-11** (P1 operational efficiency) - 2 hours
+
+### Next Sprint (Week 2)
+4. ⏳ **GAP-ELIG-01** (Eligibility workflow) - 1 week
+5. ⏳ **GAP-UI-01** (Floor grouping) - 2 hours
+6. ⏳ **GAP-TX-01** (H/A/D/P columns) - **BLOCKED** pending user clarification
+
+### Future (Month 2)
+7. ⏳ **GAP-DOC-01** (Document archive) - 1-2 weeks
+8. ⏳ **GAP-INS-12** (Pharmacy fields) - 1 hour
+
+---
+
+## Updated Progress Metrics
+
+**Foundation (ROADMAP-P1):** 6/6 tasks (100%) ✅  
+**PRD-005 (Multiple Treatments):** 13/13 tasks (100%) ✅  
+**Gap Features (Insurance + Workflows):** 0/16 tasks (0%) ⏳  
+**Total Coverage:** ~60% field parity with paper forms
+
+**Next Milestone:** Achieve 100% insurance ledger parity (Gap Phase 5)
+

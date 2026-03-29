@@ -30,8 +30,8 @@ DEFAULT_ROOMS = (
 )
 
 DEFAULT_PATIENTS = (
-    {"first_name": "Demo",   "last_name": "Patient",  "phone": "555-0001", "mrn": "MRN-DEMO-1"},
-    {"first_name": "Walk-in","last_name": "Example",  "phone": "555-0002", "mrn": "MRN-DEMO-2"},
+    {"first_name": "Demo",   "last_name": "Patient",  "date_of_birth": "1985-01-15", "phone": "555-0001", "mrn": "MRN-DEMO-1"},
+    {"first_name": "Walk-in","last_name": "Example",  "date_of_birth": "1990-06-20", "phone": "555-0002", "mrn": "MRN-DEMO-2"},
 )
 
 

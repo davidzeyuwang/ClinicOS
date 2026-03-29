@@ -86,7 +86,7 @@
 | 字段 | 英文标签 | 当前状态 | 说明 |
 |------|----------|----------|------|
 | 就诊日期 | Date of Service | ✅ 已有（check_in_time） | - |
-| WD 字段 | WD（待定：Waived Deductible / Verified Date） | ❌ 缺失 | 可能表示"当日免赔额已核"或"验证日" |
+| W / D 字段 | W、D（纸质表单中为两个独立列，业务含义待确认） | ❌ 缺失 | 当前系统曾将其合并理解为一个 `WD` 字段，此含义尚未得到业务确认 |
 | 患者手写签字 | Patient Signature | ❌ 缺失 | 数字签名或确认点击 |
 | 共付额已收款 | CC（Copay Collected，金额） | ❌ 缺失 | 当次实际收取金额 |
 | 备注 | Note | ⚠️ 部分（visit notes） | 需在签到行级别支持 |
@@ -254,7 +254,7 @@ ALTER TABLE insurance_policies ADD COLUMN is_in_network BOOLEAN DEFAULT TRUE;
 ALTER TABLE visits ADD COLUMN copay_collected NUMERIC(10,2);    -- CC: 实收共付额
 ALTER TABLE visits ADD COLUMN patient_signed BOOLEAN DEFAULT FALSE;
 ALTER TABLE visits ADD COLUMN patient_signature_at TIMESTAMPTZ;
-ALTER TABLE visits ADD COLUMN wd_verified BOOLEAN DEFAULT FALSE; -- WD: 免赔额已核
+ALTER TABLE visits ADD COLUMN wd_verified BOOLEAN DEFAULT FALSE; -- 临时字段：当前实现将纸质表单中的 W/D 合并为单一布尔值，待业务确认后应重构
 ```
 
 ### 4.3 需新建表：`visit_treatments`（治疗项目多对一）
@@ -321,7 +321,7 @@ ALTER TABLE patients ADD COLUMN secondary_insurance_id UUID; -- FK to insurance_
 
 在签到/就诊记录中：
 - `CC (Copay Collected)` 输入框：当次实收金额
-- `WD Verified` 复选框：免赔额当日已核确认
+- `W / D` 字段：纸质表单存在两个列，当前业务含义未确认，不应继续假设其等同于单一 `WD Verified`
 - `Patient Signed` 状态标记（Phase 2 支持数字签名）
 
 ### 5.3 就诊记录——新增多模态治疗项目记录
@@ -378,7 +378,7 @@ TREATMENT_RECORDED      -- 治疗项目记录
 
 ### Phase 1（当前原型补充，紧急）
 1. `insurance_policies` 表字段全量补充 — 立即支持前台日常操作
-2. `visits.copay_collected` + `visits.wd_verified` — 每次就诊必须记录实收额
+2. `visits.copay_collected` + `W/D` 字段定义确认 — 每次就诊金额记录已实现，但 W/D 的准确业务含义仍需确认
 3. 患者详情页保险信息 Tab — 替代 Notability 的表头填写
 
 ### Phase 2（下一轮迭代）

@@ -56,7 +56,7 @@ class Visit(Base):
 
 **Purpose:**
 - `copay_collected` — Actual $ amount collected at front desk during checkout
-- `wd_verified` — "WD" checkbox from paper form (Waived Deductible / Verified Date)
+- `wd_verified` — current implementation's single boolean for the paper-form W/D area; exact business meaning remains unconfirmed
 - `patient_signed` — Patient signature confirmation at checkout
 
 ---

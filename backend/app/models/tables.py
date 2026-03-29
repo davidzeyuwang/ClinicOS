@@ -136,7 +136,7 @@ class Visit(Base):
     payment_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     payment_method: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # cash | card | insurance | no_charge
     copay_collected: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # actual copay amount collected at desk
-    wd_verified: Mapped[bool] = mapped_column(Boolean, default=False)  # WD (waived deductible / verified date) checked
+    wd_verified: Mapped[bool] = mapped_column(Boolean, default=False)  # Temporary legacy field: current implementation merged paper-form W/D into one boolean
     patient_signed: Mapped[bool] = mapped_column(Boolean, default=False)  # patient signed at checkout
     supervising_staff_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # 生诊医生 — supervising/attending physician
 

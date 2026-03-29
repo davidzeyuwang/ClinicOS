@@ -113,22 +113,48 @@ frontend/index.v1.html       ← single-file UI prototype
 
 ## Harness Engineering — Required Every Session
 
-After **implementing a feature**, add an entry to `tasks/features.json`:
+### Entry schemas
+
+**Feature entry** (`tasks/features.json`):
 ```json
-{ "id": "...", "title": "...", "description": "...", "feature_ref": "...",
-  "verify": "<shell command>", "passes": true, "completed": "YYYY-MM-DD" }
+{ "id": "...", "title": "...", "description": "...",
+  "api_test": "cd backend && python -m pytest tests/test_X.py -q",
+  "ui_test":  "npx playwright test --grep \"<test name>\"",
+  "verify": "<human-readable description of what to check>",
+  "passes": true, "completed": "YYYY-MM-DD" }
 ```
 
-After **fixing a bug**, add an entry to `tasks/bugs.json`:
+**Bug entry** (`tasks/bugs.json`):
 ```json
 { "id": "BUG-N", "title": "...", "status": "fixed", "feature_ref": "<feature id>",
   "date_fixed": "YYYY-MM-DD", "root_cause": "...", "fix": "...",
-  "files": [...], "regression_test": "<shell command>" }
+  "files": [...],
+  "api_test": "cd backend && python -m pytest tests/test_X.py -q",
+  "ui_test":  "npx playwright test --grep \"<test name>\"" }
 ```
 
+### Rules
+
+- **Both `api_test` and `ui_test` are required.** Use `null` only when a layer genuinely has no test (e.g. a pure-backend-only change has no UI interaction to cover, or vice versa).
 - `feature_ref` in bugs.json must point to an existing `id` in features.json.
 - `bugs.json` is for bugs only — never add bugs to features.json.
 - `features.json` is for features only — never add bugs or fix batches to features.json.
+
+### On every code change — run related tests before committing
+
+| File changed | Tests to run |
+|---|---|
+| `backend/app/services/db_service.py` | `cd backend && python -m pytest tests/ -x -q` + `npx playwright test` |
+| `backend/app/services/pdf_service.py` | `cd backend && python -m pytest tests/test_pdf_who_what_when_where.py tests/test_prd004_features.py -q` + `npx playwright test --grep "sign sheet PDF"` |
+| `backend/app/routers/db_routes.py` | `cd backend && python -m pytest tests/ -x -q` |
+| `backend/app/schemas/prototype.py` | `cd backend && python -m pytest tests/ -x -q` |
+| `frontend/index.html` | `npx playwright test` (from repo root) |
+| `frontend/tests/e2e/*.ts` | `npx playwright test` (from repo root) |
+
+**Full suite (always run before commit):**
+```bash
+cd backend && python -m pytest tests/ -x -q && cd .. && npx playwright test
+```
 
 ---
 

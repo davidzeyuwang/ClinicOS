@@ -56,6 +56,7 @@ async def test_prd005_multiple_treatments_workflow():
         patient = await client.post("/prototype/patients", json={
             "first_name": "John",
             "last_name": "Doe",
+            "date_of_birth": "1985-03-10",
             "phone": "555-1234"
         })
         assert patient.status_code == 200
@@ -230,7 +231,7 @@ async def test_cannot_add_treatment_to_checked_out_visit():
         staff_id = staff.json()["staff_id"]
         
         patient = await client.post("/prototype/patients", json={
-            "first_name": "Jane", "last_name": "Smith", "phone": "555-9999"
+            "first_name": "Jane", "last_name": "Smith", "date_of_birth": "1990-07-22", "phone": "555-9999"
         })
         patient_id = patient.json()["patient_id"]
         
@@ -307,7 +308,7 @@ async def test_treatment_without_therapist_defaults_to_actor():
         staff_id = staff.json()["staff_id"]
         
         patient = await client.post("/prototype/patients", json={
-            "first_name": "Auto", "last_name": "Test", "phone": "555-0000"
+            "first_name": "Auto", "last_name": "Test", "date_of_birth": "1980-11-05", "phone": "555-0000"
         })
         patient_id = patient.json()["patient_id"]
         
@@ -370,7 +371,7 @@ async def test_treatment_records_date_filter():
         staff_id = staff.json()["staff_id"]
         
         patient = await client.post("/prototype/patients", json={
-            "first_name": "Date", "last_name": "Filter", "phone": "555-DATE"
+            "first_name": "Date", "last_name": "Filter", "date_of_birth": "1995-09-15", "phone": "555-3283"
         })
         patient_id = patient.json()["patient_id"]
         

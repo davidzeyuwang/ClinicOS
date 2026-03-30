@@ -18,7 +18,7 @@ export default defineConfig({
   webServer: {
     command: backendCommand,
     url: "http://127.0.0.1:8000/health",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 120 * 1000,
   },
   projects: [

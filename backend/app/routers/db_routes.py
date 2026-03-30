@@ -224,30 +224,12 @@ async def change_room_status(payload: RoomStatusChange, db: AsyncSession = Depen
 
 @router.get("/projections/room-board")
 async def get_room_board(db: AsyncSession = Depends(get_db)):
-    # Debug: try to call get_room_board with full error catching
-    if not _IS_SUPABASE:
-        # Local mode - call normally
+    try:
         rooms = await db_service.get_room_board(db)
         return {"rooms": rooms}
-    
-    # Supabase mode - add defensive checks
-    try:
-        from app.database import get_supabase
-        supa = get_supabase()
-        # Test rooms query in isolation
-        rooms_raw = await supa.select("rooms", {})
-        return {
-            "debug": "supa query worked",
-            "room_count": len(rooms_raw),
-            "first_room_keys": list(rooms_raw[0].keys()) if rooms_raw else []
-        }
-    except Exception as e:
+    except BaseException as e:
         import traceback
-        return {
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "traceback": traceback.format_exc()[:1000]
-        }
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/projections/active-visits")

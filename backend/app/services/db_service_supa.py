@@ -110,20 +110,15 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 
 
 async def get_room_board(db) -> list:
-    """Room board projection - single-pass: rooms + active visits with server-side filtering."""
+    """Room board projection - parallel fetch: rooms + active visits concurrently."""
     supa = get_supabase()
 
-    # Fetch ALL rooms without filter, then filter client-side
-    # Pass empty dict as filters to use positional args correctly    all_rooms = await supa.select("rooms", {})
-    rooms = [r for r in all_rooms if r.get("active") is True]
-
-    # Server-side filter: only fetch active visits (avoids Vercel timeout on large tables)
-    active_visits = await supa.select(
-        "visits",
-        status_in=["checked_in", "in_service", "service_completed"],
-        limit=500
+    # Fetch rooms and active visits concurrently to minimize latency
+    all_rooms, active_visits = await asyncio.gather(
+        supa.select("rooms", {}),
+        supa.select("visits", status_in=["checked_in", "in_service", "service_completed"], limit=500),
     )
-    # Further filter for visits with room_id (client-side is cheap for small result set)
+    rooms = [r for r in all_rooms if r.get("active") is True]
     active_visits = [v for v in active_visits if v.get("room_id")]
 
     # Build room -> visit mapping

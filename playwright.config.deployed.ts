@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // Config for testing deployed application at https://clinicos-psi.vercel.app
 export default defineConfig({
   testDir: "./frontend/tests/e2e",
+  testIgnore: ["**/ops-board.spec.ts", "**/debug-room.spec.ts"],
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],

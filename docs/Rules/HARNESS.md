@@ -10,7 +10,7 @@ This repo now includes a lightweight local harness for UI-driven regression test
   - Installs npm dependencies and the Chromium browser used by Playwright
 - `scripts/test-ui.sh`
   - Runs the Playwright suite
-- `scripts/setup-hooks.sh` ✨ **NEW**
+ - `scripts/setup-hooks.sh` ✨ **NEW**
   - Installs pre-commit hook for automatic test running
 - `scripts/pre-commit.sh` ✨ **NEW**
   - Pre-commit hook that runs tests before allowing commit

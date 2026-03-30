@@ -207,7 +207,8 @@ async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Opt
 
 
 async def service_start(db, visit_id: str, actor_id: str, staff_id: Optional[str] = None,
-                        room_id: Optional[str] = None, service_type: Optional[str] = None) -> Optional[dict]:
+                        room_id: Optional[str] = None, service_type: Optional[str] = None,
+                        supervising_staff_id: Optional[str] = None) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -222,6 +223,8 @@ async def service_start(db, visit_id: str, actor_id: str, staff_id: Optional[str
         "service_type": service_type,
         "service_start_time": _utc_now(),
     }
+    if supervising_staff_id:
+        updates["supervising_staff_id"] = supervising_staff_id
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if room_id:
         await supa.update("rooms", "room_id", room_id, {"status": "occupied", "updated_at": _utc_now()})
@@ -882,10 +885,125 @@ async def list_treatment_records(
             staff_rows = await supa.select("staff", {"staff_id": t["therapist_id"]})
             if staff_rows:
                 t["therapist_name"] = staff_rows[0].get("name")
-        
+
         enriched.append(t)
-    
+
     # Sort by visit date descending
     enriched.sort(key=lambda x: x.get("visit_date", ""), reverse=True)
-    
+
     return enriched
+
+
+def _modality_to_col(modality: str) -> str:
+    m = (modality or "").lower()
+    if "acupuncture" in m or m == "a":
+        return "A"
+    if any(x in m for x in ["pt", "ot", "eval", "physical", "occupational", "speech"]):
+        return "PT"
+    if any(x in m for x in ["cupping", "cup", "cp"]):
+        return "CP"
+    if any(x in m for x in ["massage", "tui", "tn"]):
+        return "TN"
+    return "other"
+
+
+async def list_visits_with_treatments(
+    db,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    patient_id: Optional[str] = None,
+    staff_id: Optional[str] = None,
+) -> list:
+    """Return one record per visit with treatments organized by modality column (A/PT/CP/TN)."""
+    supa = get_supabase()
+
+    filters: Dict[str, Any] = {}
+    if patient_id:
+        filters["patient_id"] = patient_id
+
+    visits_raw, all_staff, all_rooms = await asyncio.gather(
+        supa.select("visits", filters, limit=2000),
+        supa.select("staff", {}),
+        supa.select("rooms", {}),
+    )
+
+    staff_map = {s["staff_id"]: s["name"] for s in all_staff}
+    room_map = {r["room_id"]: r["name"] for r in all_rooms}
+
+    if date_from:
+        visits_raw = [v for v in visits_raw if (v.get("check_in_time") or "") >= date_from]
+    if date_to:
+        visits_raw = [v for v in visits_raw if (v.get("check_in_time") or "") <= date_to + " 23:59:59"]
+
+    visits_raw.sort(key=lambda v: v.get("check_in_time") or "", reverse=True)
+
+    all_treatments = await supa.select("visit_treatments", {}, limit=5000)
+    tx_by_visit: Dict[str, list] = {}
+    for t in all_treatments:
+        vid = t.get("visit_id")
+        if vid:
+            tx_by_visit.setdefault(vid, []).append(t)
+
+    records = []
+    for v in visits_raw:
+        treatments = tx_by_visit.get(v["visit_id"], [])
+
+        if staff_id:
+            if v.get("staff_id") != staff_id and not any(t.get("therapist_id") == staff_id for t in treatments):
+                continue
+
+        col_therapist: Dict[str, str] = {"A": "", "PT": "", "CP": "", "TN": ""}
+        col_minutes: Dict[str, int] = {"A": 0, "PT": 0, "CP": 0, "TN": 0}
+        other_modalities: list = []
+        notes_parts: list = []
+        total_minutes = 0
+
+        for t in treatments:
+            col = _modality_to_col(t.get("modality") or "")
+            tname = staff_map.get(t.get("therapist_id") or "", "")
+            dur = t.get("duration_minutes") or 0
+            if col == "other":
+                other_modalities.append(t.get("modality") or "")
+            else:
+                if not col_therapist[col]:
+                    col_therapist[col] = tname
+                col_minutes[col] += dur
+            if t.get("notes"):
+                notes_parts.append(t["notes"])
+            total_minutes += dur
+
+        if not treatments and v.get("service_type"):
+            col = _modality_to_col(v["service_type"])
+            primary = staff_map.get(v.get("staff_id") or "", "")
+            if col in col_therapist:
+                col_therapist[col] = primary
+
+        def _col_display(col_key: str) -> str:
+            name = col_therapist[col_key]
+            mins = col_minutes[col_key]
+            if not name and not mins:
+                return ""
+            if not name:
+                return str(mins) + "m"
+            return (name + " / " + str(mins) + "m") if mins else name
+
+        records.append({
+            "visit_id": v["visit_id"],
+            "patient_id": v.get("patient_id"),
+            "patient_name": v.get("patient_name") or "",
+            "check_in_time": v.get("check_in_time"),
+            "status": v.get("status"),
+            "supervising_doctor": staff_map.get(v.get("supervising_staff_id") or "", ""),
+            "primary_therapist": staff_map.get(v.get("staff_id") or "", ""),
+            "room_name": room_map.get(v.get("room_id") or "", ""),
+            "service_type": v.get("service_type") or "",
+            "col_A": _col_display("A"),
+            "col_PT": _col_display("PT"),
+            "col_CP": _col_display("CP"),
+            "col_TN": _col_display("TN"),
+            "other_modalities": ", ".join(other_modalities),
+            "notes": "; ".join(notes_parts),
+            "total_minutes": total_minutes,
+        })
+
+    return records

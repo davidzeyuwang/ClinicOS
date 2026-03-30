@@ -1,26 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const backendCommand = "bash ./scripts/start-backend.sh";
-
+// Config for testing deployed application at https://clinicos-psi.vercel.app
 export default defineConfig({
   testDir: "./frontend/tests/e2e",
-  testIgnore: ["**/deployed-workflow.spec.ts", "**/debug-room.spec.ts"],
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:8000",
+    baseURL: "https://clinicos-psi.vercel.app",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     viewport: { width: 1280, height: 900 },
   },
-  webServer: {
-    command: backendCommand,
-    url: "http://127.0.0.1:8000/health",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  // No webServer - testing deployed app
   projects: [
     {
       name: "chromium",

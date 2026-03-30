@@ -196,10 +196,14 @@ async def change_room_status(payload: RoomStatusChange, db: AsyncSession = Depen
 @router.get("/projections/room-board")
 async def get_room_board(db: AsyncSession = Depends(get_db)):
     try:
-        return {"rooms": await db_service.get_room_board(db)}
-    except Exception as e:
+        rooms = await db_service.get_room_board(db)
+        return {"rooms": rooms}
+    except BaseException as e:
         import traceback
-        return {"error": str(e), "traceback": traceback.format_exc(), "type": type(e).__name__}
+        raise HTTPException(
+            status_code=500,
+            detail=f"{type(e).__name__}: {e} | {traceback.format_exc()[-300:]}"
+        )
 
 
 @router.get("/projections/active-visits")

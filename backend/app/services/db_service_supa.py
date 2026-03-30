@@ -110,22 +110,23 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 
 
 async def get_room_board(db) -> list:
-    """Room board projection - uses supa.select() instead of raw httpx for Lambda compatibility."""
+    """Room board projection - single-pass: rooms + active visits via proven queries."""
     supa = get_supabase()
-    
-    # Fetch rooms and active visits sequentially using wrapper methods
+
+    # Fetch rooms (small, fast)
     rooms = await supa.select("rooms", {"active": True})
-    
-    # Get visits with specific columns and filters
-    all_visits = await supa.select("visits", {}, limit=10000)
+
+    # Reuse the same query path as get_active_visits (proven to work within Vercel timeout)
+    all_visits = await supa.select("visits", {})
     active_visits = [
-        v for v in all_visits 
-        if v.get("status") != "checked_out" and v.get("room_id")
+        v for v in all_visits
+        if v.get("status") in ("checked_in", "in_service", "service_completed")
+        and v.get("room_id")
     ]
-    
+
     # Build room -> visit mapping
     visits_by_room = {v["room_id"]: v for v in active_visits}
-    
+
     for room in rooms:
         v = visits_by_room.get(room["room_id"])
         if v:

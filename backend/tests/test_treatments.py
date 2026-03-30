@@ -407,9 +407,9 @@ async def test_treatment_records_date_filter():
             "actor_id": staff_id
         })
         
-        # Query with today's date
-        from datetime import date
-        today = date.today().isoformat()
+        # Query with today's date (use UTC date to match how visits are stored)
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).date().isoformat()
         
         records_today = await client.get(f"/prototype/treatment-records?date_from={today}&date_to={today}")
         assert records_today.status_code == 200

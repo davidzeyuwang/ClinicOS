@@ -1437,9 +1437,13 @@ async def list_treatment_records(
     query = select(VisitTreatment).join(Visit, Visit.visit_id == VisitTreatment.visit_id)
     
     if date_from:
-        query = query.where(Visit.check_in_time >= date_from)
+        # Parse string date to datetime for proper comparison
+        from_dt = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
+        query = query.where(Visit.check_in_time >= from_dt)
     if date_to:
-        query = query.where(Visit.check_in_time <= date_to + " 23:59:59")
+        # Parse string date and set to end of day (23:59:59) for proper comparison
+        to_dt = datetime.fromisoformat(date_to + "T23:59:59").replace(tzinfo=timezone.utc)
+        query = query.where(Visit.check_in_time <= to_dt)
     if patient_id:
         query = query.where(Visit.patient_id == patient_id)
     if staff_id:

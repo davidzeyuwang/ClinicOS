@@ -322,9 +322,8 @@ def test_daily_summary_copay_total(client):
             "copay_collected": copay,
         })
 
-    # Get daily summary
-    today = date.today().isoformat()
-    summary = get(client, f"/projections/daily-summary?date={today}")
+    # Get daily summary (don't pass date to avoid timezone mismatch - defaults to UTC today)
+    summary = get(client, "/projections/daily-summary")
     
     assert summary["total_checked_out"] == 3
     assert summary["copay_total"] == 65.5

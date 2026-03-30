@@ -131,11 +131,11 @@ async def get_room_board(db) -> list:
     for room in rooms:
         v = visits_by_room.get(room["room_id"])
         if v:
-            room["visit_id"] = v["visit_id"]
-            room["patient_id"] = v["patient_id"]
-            room["patient_name"] = v["patient_name"]
-            room["service_type"] = v["service_type"]
-            room["visit_status"] = v["status"]
+            room["visit_id"] = v.get("visit_id")
+            room["patient_id"] = v.get("patient_id")
+            room["patient_name"] = v.get("patient_name")
+            room["service_type"] = v.get("service_type")
+            room["visit_status"] = v.get("status")
         else:
             room["visit_id"] = None
             room["patient_id"] = None

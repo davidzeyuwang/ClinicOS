@@ -58,6 +58,35 @@ async def httpx_test():
         return {"error": str(e), "traceback": traceback.format_exc()}
 
 
+@router.get("/debug/room-board-steps")
+async def room_board_debug():
+    """Debug endpoint: test each step of get_room_board separately."""
+    if not _IS_SUPABASE:
+        return {"skip": "only relevant in Supabase mode"}
+    from app.database import get_supabase
+    results = {}
+    try:
+        supa = get_supabase()
+        results["client_created"] = True
+    except BaseException as e:
+        results["client_error"] = str(e)
+        return results
+    try:
+        rooms = await supa.select("rooms", {"active": True})
+        results["rooms_count"] = len(rooms)
+    except BaseException as e:
+        results["rooms_error"] = f"{type(e).__name__}: {e}"
+        return results
+    try:
+        visits = await supa.select("visits", {})
+        results["visits_count"] = len(visits)
+    except BaseException as e:
+        results["visits_error"] = f"{type(e).__name__}: {e}"
+        return results
+    results["status"] = "both queries succeeded"
+    return results
+
+
 @router.post("/test/reset")
 async def reset_test_data(db: AsyncSession = Depends(get_db)):
     """Reset local demo data for browser automation. Disabled on Supabase."""

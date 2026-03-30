@@ -110,30 +110,24 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 
 
 async def get_room_board(db) -> list:
+    """Room board projection - uses supa.select() instead of raw httpx for Lambda compatibility."""
     supa = get_supabase()
-    import httpx
-    client = supa._get_client()
-
-    # Fetch rooms and active visits in parallel
-    rooms_url = f"{supa._url}/rest/v1/rooms"
-    visits_url = f"{supa._url}/rest/v1/visits"
-
-    rooms_r, visits_r = await asyncio.gather(
-        client.get(rooms_url, params={"select": "*", "active": "eq.true"}),
-        client.get(visits_url, params={
-            "select": "visit_id,patient_id,patient_name,service_type,status,staff_id,room_id",
-            "status": "neq.checked_out",
-            "room_id": "not.is.null",
-        }),
-    )
-    rooms_r.raise_for_status()
-    visits_r.raise_for_status()
-
-    rooms = rooms_r.json()
-    active_visits = {v["room_id"]: v for v in visits_r.json() if v.get("room_id")}
-
+    
+    # Fetch rooms and active visits sequentially using wrapper methods
+    rooms = await supa.select("rooms", {"active": True})
+    
+    # Get visits with specific columns and filters
+    all_visits = await supa.select("visits", {}, limit=10000)
+    active_visits = [
+        v for v in all_visits 
+        if v.get("status") != "checked_out" and v.get("room_id")
+    ]
+    
+    # Build room -> visit mapping
+    visits_by_room = {v["room_id"]: v for v in active_visits}
+    
     for room in rooms:
-        v = active_visits.get(room["room_id"])
+        v = visits_by_room.get(room["room_id"])
         if v:
             room["visit_id"] = v["visit_id"]
             room["patient_id"] = v["patient_id"]

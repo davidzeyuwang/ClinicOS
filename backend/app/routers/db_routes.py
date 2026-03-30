@@ -44,6 +44,20 @@ else:
 router = APIRouter(prefix="/prototype", tags=["prototype"])
 
 
+@router.get("/debug/httpx-test")
+async def httpx_test():
+    """Test endpoint to verify httpx works in Lambda."""
+    try:
+        import httpx
+        client = httpx.AsyncClient()
+        resp = await client.get("https://httpbin.org/get")
+        await client.aclose()
+        return {"status": "ok", "httpx_version": httpx.__version__, "test_status": resp.status_code}
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/test/reset")
 async def reset_test_data(db: AsyncSession = Depends(get_db)):
     """Reset local demo data for browser automation. Disabled on Supabase."""

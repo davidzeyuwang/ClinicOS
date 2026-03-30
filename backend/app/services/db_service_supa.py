@@ -112,7 +112,7 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 async def get_room_board(db) -> list:
     supa = get_supabase()
     import httpx
-    client = supa._client
+    client = supa._get_client()
 
     # Fetch rooms and active visits in parallel
     rooms_url = f"{supa._url}/rest/v1/rooms"
@@ -388,7 +388,7 @@ async def search_patients(db, query: str) -> list:
     supa = get_supabase()
     # Use PostgREST full-text search via ilike
     import httpx
-    client = supa._client
+    client = supa._get_client()
     url = f"{supa._url}/rest/v1/patients"
     params = {
         "select": "*",

@@ -113,8 +113,9 @@ async def get_room_board(db) -> list:
     """Room board projection - single-pass: rooms + active visits with server-side filtering."""
     supa = get_supabase()
 
-    # Fetch rooms (small, fast)
-    rooms = await supa.select("rooms", {"active": True})
+    # Fetch ALL rooms, filter client-side (rooms table is small, ~10-50 rows max)
+    all_rooms = await supa.select("rooms", limit=200)
+    rooms = [r for r in all_rooms if r.get("active") is True]
 
     # Server-side filter: only fetch active visits (avoids Vercel timeout on large tables)
     active_visits = await supa.select(
@@ -380,7 +381,8 @@ async def create_patient(db, actor_id: str, data: dict, force: bool = False) -> 
 
 async def list_patients(db) -> list:
     supa = get_supabase()
-    rows = await supa.select("patients", {"active": True})
+    all_patients = await supa.select("patients", limit=5000)
+    rows = [p for p in all_patients if p.get("active") is True]
     return [_with_full_name(p) for p in rows]
 
 
@@ -551,7 +553,8 @@ async def create_insurance_policy(db, actor_id: str, data: dict) -> dict:
 
 async def list_insurance_policies(db, patient_id: str) -> list:
     supa = get_supabase()
-    return await supa.select("insurance_policies", {"patient_id": patient_id, "active": True})
+    all_policies = await supa.select("insurance_policies", {"patient_id": patient_id}, limit=50)
+    return [p for p in all_policies if p.get("active") is True]
 
 
 async def update_insurance_policy(db, policy_id: str, actor_id: str, updates: dict) -> Optional[dict]:

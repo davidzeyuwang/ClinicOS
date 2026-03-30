@@ -265,12 +265,17 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
         "status": "checked_out",
         "check_out_time": _utc_now(),
         "payment_status": payment_status or "pending",
-        "payment_amount": payment_amount,
-        "payment_method": payment_method,
-        "copay_collected": copay_collected,
         "wd_verified": wd_verified,
         "patient_signed": patient_signed,
     }
+    # Only include optional fields if they have values (Supabase rejects explicit None)
+    if payment_amount is not None:
+        updates["payment_amount"] = payment_amount
+    if payment_method is not None:
+        updates["payment_method"] = payment_method
+    if copay_collected is not None:
+        updates["copay_collected"] = copay_collected
+    
     result = await supa.update("visits", "visit_id", visit_id, updates)
     await _append_event("PATIENT_CHECKED_OUT", actor_id, {"visit_id": visit_id, **updates})
     return result

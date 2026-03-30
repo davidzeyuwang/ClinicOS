@@ -153,25 +153,18 @@ async def service_end(payload: ServiceEnd, db: AsyncSession = Depends(get_db)):
 
 @router.post("/portal/checkout")
 async def patient_checkout(payload: PatientCheckout, db: AsyncSession = Depends(get_db)):
-    try:
-        visit = await db_service.patient_checkout(
-            db, visit_id=payload.visit_id, actor_id=payload.actor_id,
-            payment_status=payload.payment_status,
-            payment_amount=payload.payment_amount,
-            payment_method=payload.payment_method,
-            copay_collected=payload.copay_collected,
-            wd_verified=payload.wd_verified,
-            patient_signed=payload.patient_signed,
-        )
-        if not visit:
-            raise HTTPException(status_code=404, detail="Visit not found")
-        return visit
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        # Temporary: return error details for debugging Vercel issue
-        raise HTTPException(status_code=500, detail=f"Checkout error: {str(e)} | {traceback.format_exc()[-500:]}")
+    visit = await db_service.patient_checkout(
+        db, visit_id=payload.visit_id, actor_id=payload.actor_id,
+        payment_status=payload.payment_status,
+        payment_amount=payload.payment_amount,
+        payment_method=payload.payment_method,
+        copay_collected=payload.copay_collected,
+        wd_verified=payload.wd_verified,
+        patient_signed=payload.patient_signed,
+    )
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return visit
 
 
 @router.post("/portal/room-status")

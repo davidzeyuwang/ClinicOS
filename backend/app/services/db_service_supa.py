@@ -296,10 +296,17 @@ async def get_active_visits(db) -> list:
 
 
 async def get_patient_visits(db, patient_id: str) -> list:
-    """All visits for a patient, newest first."""
+    """All visits for a patient, newest first. Includes treatments for PDF generation."""
     supa = get_supabase()
     rows = await supa.select("visits", {"patient_id": patient_id})
-    return sorted(rows, key=lambda v: v.get("check_in_time") or "", reverse=True)
+    sorted_visits = sorted(rows, key=lambda v: v.get("check_in_time") or "", reverse=True)
+    
+    # Enrich each visit with treatments
+    for visit in sorted_visits:
+        treatments = await supa.select("visit_treatments", {"visit_id": visit["visit_id"]})
+        visit["treatments"] = treatments or []
+    
+    return sorted_visits
 
 
 async def get_daily_summary(db, date: Optional[str] = None) -> dict:

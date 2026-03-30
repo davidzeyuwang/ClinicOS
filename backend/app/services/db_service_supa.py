@@ -110,19 +110,20 @@ async def change_room_status(db, room_id: str, actor_id: str, status: str) -> Op
 
 
 async def get_room_board(db) -> list:
-    """Room board projection - single-pass: rooms + active visits via proven queries."""
+    """Room board projection - single-pass: rooms + active visits with server-side filtering."""
     supa = get_supabase()
 
     # Fetch rooms (small, fast)
     rooms = await supa.select("rooms", {"active": True})
 
-    # Reuse the same query path as get_active_visits (proven to work within Vercel timeout)
-    all_visits = await supa.select("visits", {})
-    active_visits = [
-        v for v in all_visits
-        if v.get("status") in ("checked_in", "in_service", "service_completed")
-        and v.get("room_id")
-    ]
+    # Server-side filter: only fetch active visits (avoids Vercel timeout on large tables)
+    active_visits = await supa.select(
+        "visits",
+        status_in=["checked_in", "in_service", "service_completed"],
+        limit=500
+    )
+    # Further filter for visits with room_id (client-side is cheap for small result set)
+    active_visits = [v for v in active_visits if v.get("room_id")]
 
     # Build room -> visit mapping
     visits_by_room = {v["room_id"]: v for v in active_visits}
@@ -290,9 +291,13 @@ async def delete_visit(db, visit_id: str, actor_id: str) -> Optional[dict]:
 
 
 async def get_active_visits(db) -> list:
+    """Fetch only active visits using server-side filtering."""
     supa = get_supabase()
-    rows = await supa.select("visits", {})
-    return [v for v in rows if v.get("status") in ("checked_in", "in_service", "service_completed")]
+    return await supa.select(
+        "visits",
+        status_in=["checked_in", "in_service", "service_completed"],
+        limit=500
+    )
 
 
 async def get_patient_visits(db, patient_id: str) -> list:

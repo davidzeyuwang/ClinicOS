@@ -64,11 +64,15 @@ class SupabaseClient:
             self._client = httpx.AsyncClient(headers=self._headers, timeout=10)
         return self._client
 
-    async def select(self, table: str, filters: dict = None, limit: int = 1000) -> list:
+    async def select(self, table: str, filters: dict = None, limit: int = 1000, status_in: list = None) -> list:
+        """Select with optional status_in for multi-value filtering (avoids fetching all rows)."""
         params = {"select": "*", "limit": limit}
         if filters:
             for k, v in filters.items():
                 params[k] = f"eq.{v}"
+        if status_in:
+            # Supabase PostgREST syntax: status=in.(value1,value2,value3)
+            params["status"] = f"in.({','.join(status_in)})"
         r = await self._get_client().get(f"{self._url}/rest/v1/{table}", params=params)
         r.raise_for_status()
         return r.json()

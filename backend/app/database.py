@@ -69,6 +69,9 @@ class SupabaseClient:
         params = {"select": "*", "limit": limit}
         if filters:
             for k, v in filters.items():
+                # PostgREST requires lowercase 'true'/'false' for booleans
+                if isinstance(v, bool):
+                    v = "true" if v else "false"
                 params[k] = f"eq.{v}"
         if status_in:
             # Supabase PostgREST syntax: status=in.("value1","value2","value3")

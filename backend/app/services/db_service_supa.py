@@ -113,8 +113,8 @@ async def get_room_board(db) -> list:
     """Room board projection - single-pass: rooms + active visits with server-side filtering."""
     supa = get_supabase()
 
-    # Fetch ALL rooms, filter client-side (rooms table is small, ~10-50 rows max)
-    all_rooms = await supa.select("rooms", limit=200)
+    # Fetch ALL rooms without filter, then filter client-side
+    # Pass empty dict as filters to use positional args correctly    all_rooms = await supa.select("rooms", {})
     rooms = [r for r in all_rooms if r.get("active") is True]
 
     # Server-side filter: only fetch active visits (avoids Vercel timeout on large tables)

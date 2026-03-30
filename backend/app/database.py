@@ -71,8 +71,9 @@ class SupabaseClient:
             for k, v in filters.items():
                 params[k] = f"eq.{v}"
         if status_in:
-            # Supabase PostgREST syntax: status=in.(value1,value2,value3)
-            params["status"] = f"in.({','.join(status_in)})"
+            # Supabase PostgREST syntax: status=in.("value1","value2","value3")
+            quoted_values = ','.join(f'"{s}"' for s in status_in)
+            params["status"] = f"in.({quoted_values})"
         r = await self._get_client().get(f"{self._url}/rest/v1/{table}", params=params)
         r.raise_for_status()
         return r.json()

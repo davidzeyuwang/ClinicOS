@@ -227,12 +227,14 @@ async def get_room_board(db: AsyncSession = Depends(get_db)):
     try:
         rooms = await db_service.get_room_board(db)
         return {"rooms": rooms}
-    except BaseException as e:
+    except Exception as e:
         import traceback
-        raise HTTPException(
-            status_code=500,
-            detail=f"{type(e).__name__}: {e} | {traceback.format_exc()[-300:]}"
-        )
+        # Return detailed error for debugging
+        return {
+            "error": str(e),
+            "type": type(e).__name__,
+            "trace": traceback.format_exc()[-500:]
+        }
 
 
 @router.get("/projections/active-visits")

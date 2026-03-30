@@ -724,4 +724,99 @@ test.describe("ClinicOS UI harness", () => {
     // Use decompressed text check via content-length heuristic: PDF with visit + copay > empty PDF
     expect(body.length).toBeGreaterThan(2000);
   });
+
+  // ── 28. COMPREHENSIVE END-TO-END: Full clinic workflow ────────────────────────
+  test("complete clinic workflow: staff → patient → checkin → treatments → checkout → PDF verification", async ({ page, request }) => {
+    // Step 1: Create new staff and room
+    await openTab(page, "tab-admin");
+    await page.getByTestId("room-name-input").fill("Treatment Room A");
+    await page.getByTestId("room-code-input").fill("TRA");
+    await page.getByTestId("add-room-button").click();
+    await expectToast(page, "Room added");
+    
+    await page.getByTestId("staff-name-input").fill("Dr. Sarah Chen");
+    await page.getByTestId("staff-role-input").selectOption("therapist");
+    await page.getByTestId("staff-license-input").fill("PT-9876");
+    await page.getByTestId("add-staff-button").click();
+    await expectToast(page, "Staff added");
+    await expect(page.getByTestId("staff-list")).toContainText("Dr. Sarah Chen");
+
+    // Step 2: Create patient with insurance via API (faster and more reliable)
+    const patient = await seedPatient(request, "Emily", "Rodriguez", "E2E-001");
+    const patientId = patient.patient_id;
+    
+    // Add insurance
+    await apiPost(request, "/insurance", {
+      patient_id: patientId,
+      carrier_name: "Blue Cross PPO",
+      member_id: "BC123456789",
+      copay_amount: 45.0,
+      visits_authorized: 20,
+    });
+
+    // Step 3: Check-in patient with doctor and initial treatment
+    await openTab(page, "tab-ops");
+    await page.getByTestId("room-checkin-TRA").click();
+    
+    await page.locator("#rc-search").fill("Emily Rodriguez");
+    await page.locator("#rc-staff").selectOption({ index: 1 }); // Select first therapist
+    await page.locator("#rc-svc").selectOption("PT");
+    await page.locator("#rc-dur").fill("45");
+    await page.getByRole("button", { name: "Check In & Start" }).click();
+    await expectToast(page, "room assigned");
+
+    // Verify room is occupied with patient
+    await page.waitForTimeout(500);
+    const roomCard = page.getByTestId("room-card-TRA");
+    await expect(roomCard).toContainText("Emily Rodriguez");
+    await expect(roomCard).toContainText("occupied"); // Room status changes to occupied when service starts
+
+    // Step 4: End service (skip adding additional treatment for simplicity)
+    const visitRow = page.locator("#visits-list tr").filter({ hasText: "Emily Rodriguez" });
+    await expect(visitRow).toBeVisible();
+    
+    await page.getByTestId("room-end-service-TRA").click();
+    await expectToast(page, "Service ended");
+    await page.waitForTimeout(500);
+    await expect(visitRow).toContainText("service_completed");
+
+    // Step 5: Checkout with copay amount
+    await visitRow.getByRole("button", { name: /out/i }).click();
+    
+    // Fill copay amount and check WD verified  
+    await page.locator("#co-cc").fill("45");
+    await page.locator("#co-wd").check();
+    
+    await page.getByRole("button", { name: /check out/i }).first().click();
+    await expectToast(page, "Checked out");
+    
+    // Visit moved to history (no longer in active visits list)
+    await page.waitForTimeout(500);
+
+    // Step 6: Generate and verify PDF
+    const pdfResp = await request.get(`/prototype/patients/${patientId}/sign-sheet.pdf`);
+    expect(pdfResp.ok()).toBeTruthy();
+    
+    const pdfBody = await pdfResp.body();
+    expect(pdfBody.slice(0, 4).toString()).toBe("%PDF");
+    
+    // Verify PDF has proper structure and reasonable size (>2KB indicates content exists)
+    expect(pdfBody.length).toBeGreaterThan(2000);
+    const pdfText = pdfBody.toString('latin1');
+    expect(pdfText).toContain("/Type /Page");
+    expect(pdfText).toContain("endobj");
+    expect(pdfText).toContain("%%EOF");
+    
+    // Step 7: Verify daily report
+    await openTab(page, "tab-report");
+    await page.getByTestId("generate-report-button").click();
+    await expectToast(page, "Generated");
+    
+    const reportContent = page.getByTestId("report-content");
+    await expect(reportContent).toBeVisible();
+    
+    // Report should show: 1 visit, $45 copay
+    await expect(reportContent).toContainText("1"); // visit count
+    await expect(reportContent).toContainText("45"); // copay amount
+  });
 });

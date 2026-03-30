@@ -514,7 +514,7 @@ async function openCheckout(vid){
   let defaultPaymentStatus = '';
   if (patientId) {
     try {
-      const policies = await GET(`/insurance?patient_id=${patientId}`);
+      const policies = await GET(`/insurance/${patientId}`);
       const pri = (policies.policies||[]).find(p=>(p.priority||'').toLowerCase()==='primary') || (policies.policies||[])[0];
       if (pri && pri.copay_amount) {
         defaultCopay = pri.copay_amount;

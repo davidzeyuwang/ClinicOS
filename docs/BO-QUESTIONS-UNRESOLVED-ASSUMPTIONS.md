@@ -90,13 +90,11 @@ There are also several other form-derived abbreviations, status vocabularies, an
 
 **Why this matters:**
 - The treatment UI uses `A`, `PT`, `CP`, `TN`, and `生诊医生`.
-- The form-gap analysis also mentions `OUT`, `WW`, `CAST/GAS`, and `Sig`.
 - The backend maps modalities into columns using string heuristics.
 
 **Questions for BO:**
 - What does each treatment-record column mean exactly?
 - What do `A`, `PT`, `CP`, and `TN` stand for?
-- What do `OUT`, `WW`, `CAST/GAS`, and `Sig` mean on the paper treatment record?
 - Which service types should map into each column?
 - Are `Eval`, `Re-eval`, `OT`, `Speech`, `E-stim`, `Heat`, and `Cold` separate columns, or should they roll up into existing columns?
 - Should “other modalities” appear in their own dedicated column instead of free text notes?
@@ -127,24 +125,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - `docs/PRD-004-IMPLEMENTATION-STATUS.md`
 - `tasks/features.json`
 
-### 6. What is the correct meaning of room-board status codes from the original sheet?
-
-**Why this matters:**
-- The original room sheet reportedly uses codes like `BA`, `RA`, `MA`, `NA`.
-- ClinicOS currently uses only `available`, `occupied`, `cleaning`, and `OOS`.
-
-**Questions for BO:**
-- What does each original room status code mean?
-- Do those original codes need to be preserved in ClinicOS?
-- Are the current 4 room states enough, or do we need more specific statuses?
-- If we keep user-friendly labels, do we also need the original abbreviations in reports or printouts?
-
-**Current references:**
-- `Files/房间排班表.png`
-- `docs/PRD/004-form-field-gap-analysis.md`
-- `backend/app/models/tables.py`
-
-### 7. What is the official eligibility workflow status vocabulary?
+### 6. What is the official eligibility workflow status vocabulary?
 
 **Why this matters:**
 - Existing code uses insurance `eligibility_status` values: `unknown | verified | denied | expired`.
@@ -164,7 +145,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - `docs/PRD-004-IMPLEMENTATION-STATUS.md`
 - `docs/PRD/004-form-field-gap-analysis.md`
 
-### 8. Should network status live on the patient, the insurance policy, or both?
+### 7. Should network status live on the patient, the insurance policy, or both?
 
 **Why this matters:**
 - One doc proposes `patients.network_status`.
@@ -180,7 +161,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - `docs/PRD/004-form-field-gap-analysis.md`
 - `docs/PRD-004-IMPLEMENTATION-STATUS.md`
 
-### 9. How should primary vs secondary insurance be modeled operationally?
+### 8. How should primary vs secondary insurance be modeled operationally?
 
 **Why this matters:**
 - The forms clearly support primary and secondary insurance.
@@ -201,7 +182,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 
 ## Priority 2 Questions
 
-### 10. What role types should staff have, and who can be selected as supervising doctor?
+### 9. What role types should staff have, and who can be selected as supervising doctor?
 
 **Why this matters:**
 - Staff role is currently free-form text.
@@ -219,7 +200,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - `backend/app/models/tables.py`
 - `frontend/tests/e2e/ops-board.spec.ts`
 
-### 11. What should happen to unresolved or future paper-form fields that are not yet modeled?
+### 10. What should happen to unresolved or future paper-form fields that are not yet modeled?
 
 **Why this matters:**
 - Some paper-form columns are visible but not yet fully understood.
@@ -234,6 +215,15 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - `Files/个人签字表.png`
 - `Files/个人诊疗记录表.png`
 - `Files/房间排班表.png`
+
+---
+
+## Removed OCR Errors
+
+These previously listed terms were identified as AI/OCR mistakes and removed from the active business-question list. They should not be treated as real business terminology:
+
+- Treatment-record misreads: `OUT`, `WW`, `CAST/GAS`, `Sig`
+- Room-sheet status-code misreads: `BA`, `RA`, `MA`, `NA`
 
 ---
 

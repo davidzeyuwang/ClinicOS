@@ -201,5 +201,20 @@
     "files": ["backend/app/services/pdf_service.py"],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py -q",
     "ui_test": "npx playwright test --grep \"sign sheet PDF shows expected copay from insurance for unchecked-out visits\""
+  },
+  {
+    "id": "BUG-17",
+    "title": "AI/OCR ghost fields incorrectly recorded as real treatment and room-sheet fields",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-02",
+    "date_fixed": "2026-03-30",
+    "root_cause": "Form-analysis documentation included AI/OCR ghost fields and abbreviations that were not actually present or confirmed on the source forms. The misreads were treatment-record fields `OUT`, `WW`, `CAST/GAS`, `Sig` and room-sheet status codes `BA`, `RA`, `MA`, `NA`. These then propagated into the unresolved-assumptions question list as if they were real business fields.",
+    "fix": "Removed the OCR-derived ghost fields `OUT`, `WW`, `CAST/GAS`, `Sig`, `BA`, `RA`, `MA`, and `NA` from the active gap-analysis tables and business-owner question list. Replaced them with explicit correction notes so the repo no longer treats those mistaken labels as real domain terms.",
+    "files": [
+      "docs/PRD/004-form-field-gap-analysis.md",
+      "docs/BO-QUESTIONS-UNRESOLVED-ASSUMPTIONS.md"
+    ],
+    "api_test": null,
+    "ui_test": null
   }
 ]

@@ -81,7 +81,9 @@ class SupabaseClient:
 
     async def update(self, table: str, pk_col: str, pk_val: str, data: dict) -> dict:
         params = {pk_col: f"eq.{pk_val}"}
-        r = await self._get_client().patch(f"{self._url}/rest/v1/{table}", params=params, json=data)
+        # Filter out None values for Supabase compatibility
+        filtered_data = {k: v for k, v in data.items() if v is not None}
+        r = await self._get_client().patch(f"{self._url}/rest/v1/{table}", params=params, json=filtered_data)
         r.raise_for_status()
         result = r.json()
         return result[0] if isinstance(result, list) and result else data

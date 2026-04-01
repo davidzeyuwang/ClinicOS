@@ -260,10 +260,13 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
         "status": "checked_out",
         "check_out_time": _utc_now(),
         "payment_status": payment_status or "pending",
-        "wd_verified": wd_verified,
-        "patient_signed": patient_signed,
     }
-    # Only include optional fields if they have values (Supabase rejects explicit None)
+    # Only include optional fields if they have non-default values
+    # (avoids 422 if these columns haven't been migrated in production yet)
+    if wd_verified:
+        updates["wd_verified"] = wd_verified
+    if patient_signed:
+        updates["patient_signed"] = patient_signed
     if payment_amount is not None:
         updates["payment_amount"] = payment_amount
     if payment_method is not None:

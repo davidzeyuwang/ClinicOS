@@ -94,13 +94,15 @@ CREATE TABLE IF NOT EXISTS visits (
   payment_method     TEXT,
   copay_collected    NUMERIC(10,2),
   wd_verified        BOOLEAN NOT NULL DEFAULT false,
-  patient_signed     BOOLEAN NOT NULL DEFAULT false
+  patient_signed     BOOLEAN NOT NULL DEFAULT false,
+  supervising_staff_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits(patient_id);
 -- Migration helper (idempotent for existing databases):
 ALTER TABLE visits ADD COLUMN IF NOT EXISTS copay_collected NUMERIC(10,2);
 ALTER TABLE visits ADD COLUMN IF NOT EXISTS wd_verified BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE visits ADD COLUMN IF NOT EXISTS patient_signed BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE visits ADD COLUMN IF NOT EXISTS supervising_staff_id TEXT;
 
 -- CLINICAL NOTES
 CREATE TABLE IF NOT EXISTS clinical_notes (

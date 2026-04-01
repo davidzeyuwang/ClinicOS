@@ -7,14 +7,17 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
-// Unique suffix for this test run so data won't clash with existing records
+// Unique suffix for this test run (shared across tests in this file)
 const RUN_ID = Date.now().toString().slice(-6);
-const ROOM_CODE = `T${RUN_ID}`;
-const ROOM_NAME = `Test Room ${RUN_ID}`;
-const STAFF_NAME = `Therapist ${RUN_ID}`;
 const PATIENT_FIRST = `TestPt`;
 const PATIENT_LAST = `${RUN_ID}`;
 const PATIENT_FULL = `${PATIENT_FIRST} ${PATIENT_LAST}`;
+
+// Per-test counter: ensures each test gets a unique room code even when run sequentially
+let _seq = 0;
+function newRoomCode() {
+  return `T${RUN_ID}${++_seq}`;
+}
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -26,34 +29,36 @@ async function expectToast(page: Page, text: string) {
   await expect(page.getByTestId("toast")).toContainText(text, { timeout: 10_000 });
 }
 
-/** Creates a unique room + staff member through the Admin tab. */
-async function setupRoomAndStaff(page: Page) {
+/** Creates a unique room + staff member through the Admin tab. Returns the room code used. */
+async function setupRoomAndStaff(page: Page, roomCode: string) {
+  const roomName = `Test Room ${roomCode}`;
+  const staffName = `Therapist ${roomCode}`;
   await openTab(page, "tab-admin");
 
-  await page.getByTestId("room-name-input").fill(ROOM_NAME);
-  await page.getByTestId("room-code-input").fill(ROOM_CODE);
+  await page.getByTestId("room-name-input").fill(roomName);
+  await page.getByTestId("room-code-input").fill(roomCode);
   await page.getByTestId("add-room-button").click();
   await expectToast(page, "Room added");
 
-  await page.getByTestId("staff-name-input").fill(STAFF_NAME);
+  await page.getByTestId("staff-name-input").fill(staffName);
   await page.getByTestId("staff-role-input").selectOption("therapist");
   await page.getByTestId("add-staff-button").click();
   await expectToast(page, "Staff added");
 }
 
-/** Check in a walk-in patient by name to the room created for this run. */
-async function checkinAndStartService(page: Page, patientName = `WalkIn ${RUN_ID}`) {
+/** Check in a walk-in patient by name to the given room. */
+async function checkinAndStartService(page: Page, roomCode: string, patientName: string) {
   await openTab(page, "tab-ops");
-  await page.getByTestId(`room-checkin-${ROOM_CODE}`).click();
+  await page.getByTestId(`room-checkin-${roomCode}`).click();
   await page.locator("#rc-search").fill(patientName);
   await page.locator("#rc-staff").selectOption({ index: 0 });
   await page.getByRole("button", { name: "Check In & Start" }).click();
   await expectToast(page, "room assigned");
 }
 
-/** End service for the room created for this run. */
-async function endService(page: Page) {
-  await page.getByTestId(`room-end-service-${ROOM_CODE}`).click();
+/** End service for the given room. */
+async function endService(page: Page, roomCode: string) {
+  await page.getByTestId(`room-end-service-${roomCode}`).click();
   await expectToast(page, "Service ended");
 }
 
@@ -84,42 +89,47 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 2. Admin: create room and staff ───────────────────────────────────────
   test("admin can create room and staff member", async ({ page }) => {
+    const rc = newRoomCode();
+    const rn = `Test Room ${rc}`;
+    const sn = `Therapist ${rc}`;
     await openTab(page, "tab-admin");
 
-    await page.getByTestId("room-name-input").fill(ROOM_NAME);
-    await page.getByTestId("room-code-input").fill(ROOM_CODE);
+    await page.getByTestId("room-name-input").fill(rn);
+    await page.getByTestId("room-code-input").fill(rc);
     await page.getByTestId("add-room-button").click();
     await expectToast(page, "Room added");
-    await expect(page.getByTestId(`room-list-item-${ROOM_CODE}`)).toContainText(ROOM_NAME);
+    await expect(page.getByTestId(`room-list-item-${rc}`)).toContainText(rn);
 
-    await page.getByTestId("staff-name-input").fill(STAFF_NAME);
+    await page.getByTestId("staff-name-input").fill(sn);
     await page.getByTestId("staff-role-input").selectOption("therapist");
     await page.getByTestId("add-staff-button").click();
     await expectToast(page, "Staff added");
-    await expect(page.getByTestId("staff-list")).toContainText(STAFF_NAME);
+    await expect(page.getByTestId("staff-list")).toContainText(sn);
   });
 
   // ── 3. Ops board: walk-in check-in shows occupied room ────────────────────
   test("walk-in check-in marks room as occupied", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const walkinName = `WalkIn ${RUN_ID}`;
-    await checkinAndStartService(page, walkinName);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const walkinName = `WalkIn ${rc}`;
+    await checkinAndStartService(page, rc, walkinName);
 
-    const roomCard = page.getByTestId(`room-card-${ROOM_CODE}`);
+    const roomCard = page.getByTestId(`room-card-${rc}`);
     await expect(roomCard).toContainText(walkinName);
     await expect(roomCard).toContainText("occupied");
   });
 
   // ── 4. Full walk-in workflow: check-in → service → skip checkout ──────────
   test("full walk-in workflow: check-in, end service, skip checkout", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const walkinName = `Skip ${RUN_ID}`;
-    await checkinAndStartService(page, walkinName);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const walkinName = `Skip ${rc}`;
+    await checkinAndStartService(page, rc, walkinName);
 
-    const roomCard = page.getByTestId(`room-card-${ROOM_CODE}`);
+    const roomCard = page.getByTestId(`room-card-${rc}`);
     await expect(roomCard).toContainText("occupied");
 
-    await endService(page);
+    await endService(page, rc);
     await openCheckoutModal(page, walkinName);
 
     await page.getByRole("button", { name: /skip/i }).click();
@@ -131,10 +141,11 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 5. Checkout with copay fields ─────────────────────────────────────────
   test("checkout collects copay, WD, and patient signed fields", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Copay ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
-    await endService(page);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Copay ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
+    await endService(page, rc);
     await openCheckoutModal(page, patientName);
 
     // Verify all copay fields are present
@@ -157,7 +168,7 @@ test.describe("Deployed UI smoke — full workflow", () => {
     await page.getByRole("button", { name: /check out/i }).first().click();
     await expectToast(page, "Checked out");
 
-    await expect(page.getByTestId(`room-card-${ROOM_CODE}`)).toContainText("available");
+    await expect(page.getByTestId(`room-card-${rc}`)).toContainText("available");
   });
 
   // ── 6. Patients tab: create and view patient ──────────────────────────────
@@ -172,10 +183,12 @@ test.describe("Deployed UI smoke — full workflow", () => {
     await page.getByRole("button", { name: /create patient/i }).click();
     await expectToast(page, "Patient created");
 
-    // Search and view
+    // Search and view by exact patient name
     await page.locator("#pt-search").fill(PATIENT_LAST);
     await page.locator("#pt-search").press("Enter");
-    await page.getByRole("button", { name: /view/i }).first().click();
+    const patientRow = page.locator("tr").filter({ hasText: PATIENT_FULL });
+    await expect(patientRow).toBeVisible({ timeout: 10_000 });
+    await patientRow.getByRole("button", { name: /view/i }).click();
 
     // Detail modal opens
     await expect(page.locator(".modal-box")).toBeVisible();
@@ -204,13 +217,13 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 8. Full workflow with copay: shows in report summary ──────────────────
   test("completed visit with copay appears in report summary", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Report ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
-    await endService(page);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Report ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
+    await endService(page, rc);
     await openCheckoutModal(page, patientName);
     await page.locator("#co-cc").fill("45");
-    await page.locator("#co-wd").check();
     await page.getByRole("button", { name: /check out/i }).first().click();
     await expectToast(page, "Checked out");
 
@@ -230,10 +243,11 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 9. Event log shows audit trail ────────────────────────────────────────
   test("event log records check-in and checkout audit trail", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Audit ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
-    await endService(page);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Audit ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
+    await endService(page, rc);
     await openCheckoutModal(page, patientName);
     await page.getByRole("button", { name: /skip/i }).click();
     await expectToast(page, "Checked out");
@@ -248,9 +262,10 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 10. Treatment modality: add and appear in records ─────────────────────
   test("can add a treatment modality and see it in treatment records", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Tx ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Tx ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
 
     const visitRow = page.locator("#visits-list tr").filter({ hasText: patientName });
     await expect(visitRow).toContainText("in_service");
@@ -273,10 +288,11 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 11. Room status buttons disabled when occupied ────────────────────────
   test("room status buttons are disabled while room is occupied", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    await checkinAndStartService(page, `Status ${RUN_ID}`);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    await checkinAndStartService(page, rc, `Status ${rc}`);
 
-    const roomCard = page.getByTestId(`room-card-${ROOM_CODE}`);
+    const roomCard = page.getByTestId(`room-card-${rc}`);
     await expect(roomCard).toContainText("occupied");
 
     await expect(roomCard.getByTitle("Free")).toBeDisabled();
@@ -286,11 +302,12 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 12. Reload persists room occupancy ───────────────────────────────────
   test("page reload keeps in-service room occupancy visible", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Persist ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Persist ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
 
-    const roomCard = page.getByTestId(`room-card-${ROOM_CODE}`);
+    const roomCard = page.getByTestId(`room-card-${rc}`);
     await expect(roomCard).toContainText(patientName);
     await expect(roomCard).toContainText("occupied");
 
@@ -301,15 +318,16 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
   // ── 13. Insurance-only checkout path ──────────────────────────────────────
   test("checkout with insurance-only payment path works", async ({ page }) => {
-    await setupRoomAndStaff(page);
-    const patientName = `Insured ${RUN_ID}`;
-    await checkinAndStartService(page, patientName);
-    await endService(page);
+    const rc = newRoomCode();
+    await setupRoomAndStaff(page, rc);
+    const patientName = `Insured ${rc}`;
+    await checkinAndStartService(page, rc, patientName);
+    await endService(page, rc);
     await openCheckoutModal(page, patientName);
 
     await page.locator("#co-ps").selectOption("insurance_only");
     await page.getByRole("button", { name: /check out/i }).first().click();
     await expectToast(page, "Checked out");
-    await expect(page.getByTestId(`room-card-${ROOM_CODE}`)).toContainText("available");
+    await expect(page.getByTestId(`room-card-${rc}`)).toContainText("available");
   });
 });

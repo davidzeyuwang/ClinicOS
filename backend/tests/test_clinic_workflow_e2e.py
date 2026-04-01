@@ -15,7 +15,7 @@ Claim submission / EOB reconciliation steps (12-17) are not yet implemented in
 the current prototype, so they are intentionally not asserted here.
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -271,7 +271,8 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
     assert claim_task_done["status"] == "completed"
 
     # Step 18: day-end report + audit trail
-    summary = get_json(client, f"/projections/daily-summary?date={date.today().isoformat()}")
+    today_utc = datetime.now(timezone.utc).date().isoformat()
+    summary = get_json(client, f"/projections/daily-summary?date={today_utc}")
     assert summary["total_check_ins"] >= 1
     assert summary["total_checked_out"] >= 1
     assert summary["copay_total"] >= 35.0

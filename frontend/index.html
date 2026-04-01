@@ -316,7 +316,7 @@ async function api(m,p,b){
 }
 const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH',p,b), DELETE=p=>api('DELETE',p);
 
-function toast(m,t='ok'){const e=document.getElementById('toast');e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');setTimeout(()=>e.classList.add('hidden'),3000);}
+let _toastTimer=null;function toast(m,t='ok'){const e=document.getElementById('toast');if(_toastTimer)clearTimeout(_toastTimer);e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');_toastTimer=setTimeout(()=>e.classList.add('hidden'),3000);}
 function openModal(t,h){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=h;document.getElementById('modal').classList.remove('hidden');}
 function closeModal(){document.getElementById('modal').classList.add('hidden');}
 

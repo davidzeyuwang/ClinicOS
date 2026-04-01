@@ -181,7 +181,57 @@ async def delete_staff(db, staff_id: str, actor_id: str) -> Optional[dict]:
 
 async def get_staff_hours(db) -> list:
     supa = get_supabase()
-    return await supa.select("staff", {"active": True})
+    today = datetime.now(timezone.utc).date().isoformat()
+    now = datetime.now(timezone.utc)
+
+    all_staff, all_visits = await asyncio.gather(
+        supa.select("staff", {"active": True}),
+        supa.select("visits", {}),
+    )
+
+    # Filter today's visits with a staff_id
+    today_visits = [
+        v for v in all_visits
+        if v.get("staff_id") and (v.get("service_start_time") or "")[:10] == today
+    ]
+
+    per_staff = {}
+    for member in all_staff:
+        per_staff[member["staff_id"]] = {
+            "staff_id": member["staff_id"],
+            "name": member["name"],
+            "role": member["role"],
+            "completed_minutes": 0,
+            "active_minutes": 0,
+            "sessions_completed": 0,
+        }
+
+    for visit in today_visits:
+        sid = visit.get("staff_id")
+        if sid not in per_staff:
+            continue
+        start_str = visit.get("service_start_time")
+        end_str = visit.get("service_end_time")
+        if not start_str:
+            continue
+        try:
+            start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if end_str:
+                end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                if end.tzinfo is None:
+                    end = end.replace(tzinfo=timezone.utc)
+                seconds = (end - start).total_seconds()
+                per_staff[sid]["completed_minutes"] += max(int(seconds // 60), 0)
+                per_staff[sid]["sessions_completed"] += 1
+            elif visit.get("status") == "in_service":
+                live_seconds = (now - start).total_seconds()
+                per_staff[sid]["active_minutes"] += max(int(live_seconds // 60), 0)
+        except (ValueError, TypeError):
+            pass
+
+    return list(per_staff.values())
 
 
 # ==================== VISITS ====================
@@ -202,7 +252,7 @@ async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Opt
         "payment_status": "pending",
     }
     result = await supa.insert("visits", visit)
-    await _append_event("PATIENT_CHECKED_IN", actor_id, result)
+    await _append_event("PATIENT_CHECKIN", actor_id, result)
     return result
 
 
@@ -243,8 +293,8 @@ async def service_end(db, visit_id: str, actor_id: str) -> Optional[dict]:
     updates = {"status": "service_completed", "service_end_time": _utc_now()}
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if visit.get("room_id"):
-        await supa.update("rooms", "room_id", visit["room_id"], {"status": "cleaning", "updated_at": _utc_now()})
-    await _append_event("SERVICE_ENDED", actor_id, {"visit_id": visit_id})
+        await supa.update("rooms", "room_id", visit["room_id"], {"status": "available", "updated_at": _utc_now()})
+    await _append_event("SERVICE_COMPLETED", actor_id, {"visit_id": visit_id})
     return result
 
 
@@ -273,9 +323,18 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
         updates["payment_method"] = payment_method
     if copay_collected is not None:
         updates["copay_collected"] = copay_collected
-    
-    result = await supa.update("visits", "visit_id", visit_id, updates)
-    await _append_event("PATIENT_CHECKED_OUT", actor_id, {"visit_id": visit_id, **updates})
+
+    try:
+        result = await supa.update("visits", "visit_id", visit_id, updates)
+    except Exception as e:
+        if "does not exist" in str(e):
+            # Fallback: missing columns not yet migrated — use core fields only
+            core = {k: v for k, v in updates.items()
+                    if k in ("status", "check_out_time", "payment_status", "payment_amount", "payment_method")}
+            result = await supa.update("visits", "visit_id", visit_id, core)
+        else:
+            raise
+    await _append_event("PATIENT_CHECKOUT", actor_id, {"visit_id": visit_id})
     return result
 
 

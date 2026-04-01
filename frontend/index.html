@@ -610,7 +610,7 @@ async function openTreatments(vid,patientName){
 }
 async function addTreatment(vid){
   const mod=document.getElementById('trt-mod').value,sid=document.getElementById('trt-staff').value||null,dur=parseInt(document.getElementById('trt-dur').value)||30;
-  try{await POST(`/visits/${vid}/treatments/add`,{visit_id:vid,modality:mod,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});toast('Treatment added');openTreatments(vid,'Patient');}catch(e){toast(e.message,'error');}
+  try{await POST(`/visits/${vid}/treatments/add`,{visit_id:vid,modality:mod,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});toast('Treatment added');await openTreatments(vid,'Patient');}catch(e){toast(e.message,'error');}
 }
 function editTreatment(vid,tid,currDur,currNotes){
   openModal('Edit Treatment',`<div class="space-y-3">

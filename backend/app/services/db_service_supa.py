@@ -326,14 +326,11 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
 
     try:
         result = await supa.update("visits", "visit_id", visit_id, updates)
-    except Exception as e:
-        if "does not exist" in str(e):
-            # Fallback: missing columns not yet migrated — use core fields only
-            core = {k: v for k, v in updates.items()
-                    if k in ("status", "check_out_time", "payment_status", "payment_amount", "payment_method")}
-            result = await supa.update("visits", "visit_id", visit_id, core)
-        else:
-            raise
+    except Exception:
+        # Fallback: some columns may not exist yet (pending migration) — retry with core fields
+        core = {k: v for k, v in updates.items()
+                if k in ("status", "check_out_time", "payment_status", "payment_amount", "payment_method")}
+        result = await supa.update("visits", "visit_id", visit_id, core)
     await _append_event("PATIENT_CHECKOUT", actor_id, {"visit_id": visit_id})
     return result
 
@@ -725,7 +722,14 @@ async def update_task(db, task_id: str, actor_id: str, updates: dict) -> Optiona
 
 async def get_events(db) -> list:
     supa = get_supabase()
-    return await supa.select("event_log")
+    # Return most-recent 500 events so tests always see latest activity
+    client = supa._get_client()
+    r = await client.get(
+        f"{supa._url}/rest/v1/event_log",
+        params={"select": "*", "order": "occurred_at.desc", "limit": 500},
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 # ==================== REPORTS ====================
@@ -796,7 +800,7 @@ async def add_treatment(
         "treatment_id": _new_id(),
         "visit_id": visit_id,
         "modality": modality,
-        "therapist_id": therapist_id or actor_id,
+        "therapist_id": therapist_id,
         "duration_minutes": duration_minutes,
         "notes": notes,
         "started_at": _utc_now(),

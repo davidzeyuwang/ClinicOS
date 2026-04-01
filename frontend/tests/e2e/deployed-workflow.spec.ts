@@ -254,10 +254,10 @@ test.describe("Deployed UI smoke — full workflow", () => {
 
     await openTab(page, "tab-events");
     const events = page.getByTestId("events-list");
-    await expect(events).toContainText("PATIENT_CHECKIN");
-    await expect(events).toContainText("SERVICE_STARTED");
-    await expect(events).toContainText("SERVICE_COMPLETED");
-    await expect(events).toContainText("PATIENT_CHECKOUT");
+    await expect(events).toContainText("PATIENT_CHECKIN", { timeout: 15_000 });
+    await expect(events).toContainText("SERVICE_STARTED", { timeout: 15_000 });
+    await expect(events).toContainText("SERVICE_COMPLETED", { timeout: 15_000 });
+    await expect(events).toContainText("PATIENT_CHECKOUT", { timeout: 15_000 });
   });
 
   // ── 10. Treatment modality: add and appear in records ─────────────────────

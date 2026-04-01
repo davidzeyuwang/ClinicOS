@@ -720,7 +720,7 @@ async def update_task(db, task_id: str, actor_id: str, updates: dict) -> Optiona
 
 # ==================== EVENTS ====================
 
-async def get_events(db) -> list:
+async def get_events(db) -> dict:
     supa = get_supabase()
     # Return most-recent 500 events so tests always see latest activity
     client = supa._get_client()
@@ -729,7 +729,8 @@ async def get_events(db) -> list:
         params={"select": "*", "order": "occurred_at.desc", "limit": 500},
     )
     r.raise_for_status()
-    return r.json()
+    events = r.json()
+    return {"count": len(events), "events": events}
 
 
 # ==================== REPORTS ====================

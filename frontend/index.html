@@ -490,8 +490,6 @@ async function openCheckout(vid){
   // Get visit data to extract patient_id for PDF download
   const visit = visits.find(v => v.visit_id === vid);
   const patientId = visit ? visit.patient_id : null;
-  const downloadPdfBtn = patientId ?
-    `<a href="${API}/patients/${patientId}/sign-sheet.pdf" target="_blank" class="btn btn-outline w-full text-sm mb-2">📄 Download Sign Sheet PDF</a>` : '';
 
   // Load treatments for this visit
   let treatmentsHtml = '';
@@ -526,7 +524,6 @@ async function openCheckout(vid){
   openModal('Check Out — Payment & Signature',`<div class="space-y-3">
     <div class="bg-blue-50 rounded-lg p-3 text-sm text-blue-800">Complete payment & WD verification before checking out.</div>
     ${treatmentsHtml}
-    ${downloadPdfBtn}
     <div class="grid grid-cols-2 gap-2">
       <div>
         <label class="text-xs text-gray-500 block mb-1">Copay Collected (CC) $</label>
@@ -571,7 +568,12 @@ async function doCheckout(vid,skipAll){
     body.wd_verified=document.getElementById('co-wd').checked;
     body.patient_signed=document.getElementById('co-signed').checked;
   }
-  try{await POST('/portal/checkout',body);toast('Checked out');closeModal();refreshOps();}catch(e){toast(e.message,'error');}
+  try{
+    await POST('/portal/checkout',body);
+    toast('Checked out');
+    closeModal();
+    refreshOps();
+  }catch(e){toast(e.message,'error');}
 }
 
 async function chgRoom(id,st){try{await POST('/portal/room-status',{room_id:id,status:st,actor_id:'staff'});toast('Room → '+st);refreshOps();}catch(e){toast(e.message,'error');}}

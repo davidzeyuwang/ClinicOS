@@ -329,7 +329,8 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
     except Exception:
         # Fallback: some columns may not exist yet (pending migration) — retry with core fields
         core = {k: v for k, v in updates.items()
-                if k in ("status", "check_out_time", "payment_status", "payment_amount", "payment_method")}
+                if k in ("status", "check_out_time", "payment_status", "payment_amount",
+                         "payment_method", "copay_collected", "wd_verified", "patient_signed")}
         result = await supa.update("visits", "visit_id", visit_id, core)
     await _append_event("PATIENT_CHECKOUT", actor_id, {"visit_id": visit_id})
     return result

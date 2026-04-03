@@ -43,6 +43,7 @@ def generate_sign_sheet(patient, visits, policies):
         raise RuntimeError("fpdf2 not installed. Run: pip install fpdf2")
 
     pdf = FPDF(orientation="P", unit="mm", format="Letter")
+    pdf.compress = False  # keep content streams uncompressed so text is searchable in tests
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 

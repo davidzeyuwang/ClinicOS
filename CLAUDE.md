@@ -150,11 +150,24 @@ frontend/index.v1.html       ← single-file UI prototype
 | `backend/app/schemas/prototype.py` | `cd backend && python -m pytest tests/ -x -q` |
 | `frontend/index.html` | `npx playwright test` (from repo root) |
 | `frontend/tests/e2e/*.ts` | `npx playwright test` (from repo root) |
+| `frontend/tests/e2e/prod-smoke.spec.ts` | `npx playwright test --config=playwright.smoke.config.ts` (requires `.env.prod` + seeded prod) |
 
 **Full suite (always run before commit):**
 ```bash
 cd backend && python -m pytest tests/ -x -q && cd .. && npx playwright test
 ```
+
+**Prod smoke (run after any deploy or prod-touching change):**
+```bash
+# 1. Seed stable rooms/staff (idempotent)
+python3 scripts/seed_prod.py
+
+# 2. Run smoke against Vercel prod (reads .env.prod for SUPABASE_URL/KEY)
+npx playwright test --config=playwright.smoke.config.ts
+```
+
+> Prereqs: `.env.prod` with `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`. The smoke test
+> self-cleans — it hard-deletes all created patients/visits via Supabase REST in `afterAll`.
 
 ---
 

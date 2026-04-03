@@ -24,10 +24,10 @@ try {
 
 export default defineConfig({
   testDir: "./frontend/tests/e2e",
-  testMatch: ["**/smoke.spec.ts"],
+  testMatch: ["**/prod-smoke.spec.ts"],
   fullyParallel: false,
   retries: 1,
-  timeout: 90_000,
+  timeout: 240_000,
   reporter: [["list"]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || "https://clinicos-psi.vercel.app",

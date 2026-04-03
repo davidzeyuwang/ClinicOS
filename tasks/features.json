@@ -370,12 +370,13 @@
     "owner": "backend-engineer",
     "priority": "P1",
     "depends_on": [],
-    "api_test": null,
-    "ui_test": null,
+    "api_test": "cd backend && python -m pytest tests/test_service_types.py -q",
+    "ui_test": "npx playwright test --grep \"admin can add service type|retiring a service type|check-in modal service dropdown\"",
     "verify": "Admin creates a new service type → it appears in service-type dropdowns",
     "verify_manual": "Add service type 'Lymphatic Massage' in admin UI → reopen check-in/start-service modal → new option is available",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "completed": "2026-04-03",
+    "git_commit": "pending"
   },
   {
     "id": "NEXT-P1-02",
@@ -385,12 +386,13 @@
     "owner": "frontend-engineer",
     "priority": "P1",
     "depends_on": ["NEXT-P1-01"],
-    "api_test": null,
-    "ui_test": null,
+    "api_test": "cd backend && python -m pytest tests/test_service_types.py -k 'qualification or staff_service' -q",
+    "ui_test": "npx playwright test --grep \"staff dropdown filters by service type qualification\"",
     "verify": "Assign service type first → staff dropdown only includes staff linked to that service type",
     "verify_manual": "Mark Staff A = PT only, Staff B = Acupuncture only → choose PT → only Staff A is selectable",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "completed": "2026-04-03",
+    "git_commit": "pending"
   },
   {
     "id": "GAP-INS-01",

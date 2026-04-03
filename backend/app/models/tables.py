@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, JSON
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -68,6 +68,26 @@ class Staff(Base):
     license_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
+
+
+# ==================== SERVICE TYPES (admin-managed) ====================
+
+class ServiceType(Base):
+    """Admin-managed service type registry (replaces hardcoded frontend lists)."""
+    __tablename__ = "service_types"
+
+    service_type_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class StaffServiceType(Base):
+    """Junction table: which staff are qualified to perform which service types."""
+    __tablename__ = "staff_service_types"
+
+    staff_id: Mapped[str] = mapped_column(String(36), ForeignKey("staff.staff_id"), primary_key=True)
+    service_type_id: Mapped[str] = mapped_column(String(36), ForeignKey("service_types.service_type_id"), primary_key=True)
 
 
 # ==================== PATIENT (§11.1) ====================

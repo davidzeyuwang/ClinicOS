@@ -824,6 +824,92 @@ test.describe("ClinicOS UI harness", () => {
     await expect(reportContent).toContainText("1"); // visit count
     await expect(reportContent).toContainText("45"); // copay amount
   });
+
+  // ── 29. NEXT-P1-01: Admin can add service type — appears in check-in dropdown
+  test("admin can add service type and it appears in check-in dropdown", async ({ page }) => {
+    await setupRoomAndStaff(page);
+
+    await openTab(page, "tab-admin");
+    await page.getByTestId("svc-type-name-input").fill("Lymphatic Massage");
+    await page.getByTestId("add-svc-type-button").click();
+    await expectToast(page, "Service type added");
+
+    // New type must show in admin list
+    await expect(page.locator("#service-type-list")).toContainText("Lymphatic Massage");
+
+    // Must appear in check-in service dropdown
+    await openTab(page, "tab-ops");
+    await page.getByTestId("room-checkin-R1").click();
+    const svcSel = page.locator("#rc-svc");
+    await expect(svcSel).toBeVisible();
+    await expect(svcSel.locator('option[value="Lymphatic Massage"]')).toBeAttached();
+  });
+
+  // ── 30. NEXT-P1-01: Retiring a service type removes it from check-in dropdown
+  test("retiring a service type removes it from check-in dropdown", async ({ page }) => {
+    await setupRoomAndStaff(page);
+
+    // "OT" is seeded by default — open admin tab and retire it
+    await openTab(page, "tab-admin");
+    // Item has data-testid="svc-type-item-OT"; active toggle has title="Deactivate"
+    await page.getByTestId("svc-type-item-OT").getByTitle("Deactivate").click();
+    await expectToast(page, "Deactivated");
+
+    // Must NOT appear in check-in service dropdown
+    await openTab(page, "tab-ops");
+    await page.getByTestId("room-checkin-R1").click();
+    const svcSel = page.locator("#rc-svc");
+    await expect(svcSel).toBeVisible();
+    await expect(svcSel.locator('option[value="OT"]')).not.toBeAttached();
+  });
+
+  // ── 31. NEXT-P1-02: Staff dropdown filters by service type qualification
+  test("staff dropdown filters by service type qualification", async ({ page }) => {
+    await openTab(page, "tab-admin");
+
+    // Create room
+    await page.getByTestId("room-name-input").fill("Room 1");
+    await page.getByTestId("room-code-input").fill("R1");
+    await page.getByTestId("add-room-button").click();
+    await expectToast(page, "Room added");
+
+    // Create two staff members
+    await page.getByTestId("staff-name-input").fill("PT Only Staff");
+    await page.getByTestId("staff-role-input").selectOption("therapist");
+    await page.getByTestId("add-staff-button").click();
+    await expectToast(page, "Staff added");
+
+    await page.getByTestId("staff-name-input").fill("Acupuncture Only Staff");
+    await page.getByTestId("staff-role-input").selectOption("therapist");
+    await page.getByTestId("add-staff-button").click();
+    await expectToast(page, "Staff added");
+
+    // Edit PT Only Staff: assign PT qualification only
+    // data-testid="staff-list-item-PT-Only-Staff" (spaces → dashes)
+    await page.getByTestId("staff-list-item-PT-Only-Staff").locator("button.btn-xs").click();
+    await expect(page.locator(".svc-cb").first()).toBeVisible();
+    await page.locator(".svc-cb").evaluateAll((cbs: HTMLInputElement[]) => cbs.forEach(cb => { cb.checked = false; }));
+    await page.locator("label.cursor-pointer").filter({ hasText: "PT" }).first().locator(".svc-cb").check();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expectToast(page, "Updated");
+
+    // Edit Acupuncture Only Staff: assign Acupuncture qualification only
+    await page.getByTestId("staff-list-item-Acupuncture-Only-Staff").locator("button.btn-xs").click();
+    await expect(page.locator(".svc-cb").first()).toBeVisible();
+    await page.locator(".svc-cb").evaluateAll((cbs: HTMLInputElement[]) => cbs.forEach(cb => { cb.checked = false; }));
+    await page.locator("label.cursor-pointer").filter({ hasText: "Acupuncture" }).first().locator(".svc-cb").check();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expectToast(page, "Updated");
+
+    // Open check-in — select PT service — only PT Only Staff should appear in staff dropdown
+    await openTab(page, "tab-ops");
+    await page.getByTestId("room-checkin-R1").click();
+    await page.locator("#rc-svc").selectOption("PT");
+    const staffSel = page.locator("#rc-staff");
+    const staffOptions = await staffSel.locator("option").allTextContents();
+    expect(staffOptions.some(t => t.includes("PT Only Staff"))).toBeTruthy();
+    expect(staffOptions.some(t => t.includes("Acupuncture Only Staff"))).toBeFalsy();
+  });
 });
 
 // ── Comprehensive multi-patient smoke suite ───────────────────────────────────

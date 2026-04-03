@@ -228,6 +228,17 @@
           <div id="staff-list" data-testid="staff-list" class="space-y-2"></div>
         </div>
       </div>
+      <div class="card mt-6">
+        <h2 class="text-lg font-semibold mb-4">⚙️ Service Types</h2>
+        <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+          <div class="text-sm font-medium text-gray-600">Add Service Type</div>
+          <div class="flex gap-2">
+            <input id="svc-name" data-testid="svc-type-name-input" class="input flex-1" placeholder="e.g. Lymphatic Massage">
+            <button onclick="addServiceType()" data-testid="add-svc-type-button" class="btn btn-primary">+ Add</button>
+          </div>
+        </div>
+        <div id="service-type-list" data-testid="service-type-list" class="space-y-2"></div>
+      </div>
     </div>
 
     <!-- ==================== REPORT (§11.10) ==================== -->
@@ -305,16 +316,17 @@
 <script>
 // Auto-detect API base: works whether served from same host or file://
 const API = (location.protocol === 'file:' ? 'http://127.0.0.1:8000' : window.location.origin) + '/prototype';
-let rooms=[], staff=[], visits=[], tab='ops';
+let rooms=[], staff=[], visits=[], serviceTypes=[], tab='ops';
 
 async function api(m,p,b){
   const o={method:m,headers:{'Content-Type':'application/json'}};
   if(b)o.body=JSON.stringify(b);
   const r=await fetch(API+p,o);
   if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||'Error');}
+  if(r.status===204||r.headers.get('content-length')==='0')return null;
   return r.json();
 }
-const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH',p,b), DELETE=p=>api('DELETE',p);
+const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH',p,b), DELETE=p=>api('DELETE',p), PUT=(p,b)=>api('PUT',p,b);
 
 let _toastTimer=null;function toast(m,t='ok'){const e=document.getElementById('toast');if(_toastTimer)clearTimeout(_toastTimer);e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');_toastTimer=setTimeout(()=>e.classList.add('hidden'),3000);}
 function openModal(t,h){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=h;document.getElementById('modal').classList.remove('hidden');}
@@ -337,6 +349,25 @@ document.getElementById('appt-date').value=new Date().toISOString().slice(0,10);
 
 function sortRooms(r){const o={available:0,cleaning:1,occupied:2,out_of_service:3};return[...r].sort((a,b)=>(o[a.status]||9)-(o[b.status]||9)||a.code.localeCompare(b.code));}
 
+// Build service type dropdown options from the global serviceTypes list
+function buildServiceOptions(sel=''){
+  return serviceTypes.filter(st=>st.is_active).map(st=>`<option value="${st.name}"${st.name===sel?' selected':''}>${st.name}</option>`).join('');
+}
+
+// Filter staff list to those qualified for the chosen service type (empty qualification = any service)
+function qualifiedStaff(svcName){
+  return staff.filter(s=>!s.service_type_names||s.service_type_names.length===0||s.service_type_names.includes(svcName));
+}
+
+// Re-render the staff <select> when service type changes
+function onSvcChange(svcSelId,staffSelId){
+  const svc=document.getElementById(svcSelId).value;
+  const sel=document.getElementById(staffSelId);
+  if(!sel)return;
+  const current=sel.value;
+  sel.innerHTML=qualifiedStaff(svc).map(s=>`<option value="${s.staff_id}"${s.staff_id===current?' selected':''}>${s.name} (${s.role})</option>`).join('');
+}
+
 function buildVisits(events){
   const m={};
   events.forEach(e=>{
@@ -353,11 +384,12 @@ function buildVisits(events){
 async function refreshOps(){
   try{
     const today=new Date().toISOString().slice(0,10);
-    const[br,hr,avR,apptR]=await Promise.all([
+    const[br,hr,avR,apptR,srR]=await Promise.all([
       GET('/projections/room-board'),GET('/projections/staff-hours'),GET('/projections/active-visits'),
-      GET('/appointments?date='+today).catch(()=>({appointments:[]}))
+      GET('/appointments?date='+today).catch(()=>({appointments:[]})),
+      GET('/admin/service-types').catch(()=>({service_types:[]}))
     ]);
-    rooms=br.rooms||[];staff=hr.staff||[];
+    rooms=br.rooms||[];staff=hr.staff||[];serviceTypes=srR.service_types||[];
     const sorted=sortRooms(rooms);
     const c={available:0,occupied:0,cleaning:0,out_of_service:0};
     rooms.forEach(r=>c[r.status]=(c[r.status]||0)+1);
@@ -423,7 +455,9 @@ async function refreshOps(){
 
 // Check-in from room card — with patient search
 function openRoomCheckin(roomId,roomCode){
-  const so=staff.map(s=>`<option value="${s.staff_id}">${s.name} (${s.role})</option>`).join('');
+  const firstSvc=serviceTypes.find(st=>st.is_active);
+  const defaultSvc=firstSvc?firstSvc.name:'PT';
+  const so=qualifiedStaff(defaultSvc).map(s=>`<option value="${s.staff_id}">${s.name} (${s.role})</option>`).join('');
   openModal('Check-In → '+roomCode,`<div class="space-y-3">
     <div style="position:relative">
       <input id="rc-search" class="input" placeholder="Search patient or type new name..." autocomplete="off"
@@ -434,7 +468,7 @@ function openRoomCheckin(roomId,roomCode){
     <div id="rc-selected" class="text-sm text-gray-500"></div>
     <select id="rc-staff" class="input">${so}</select>
     <div class="grid grid-cols-2 gap-2">
-      <select id="rc-svc" class="input"><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Acupuncture</option><option>Cupping</option><option>Massage</option><option>E-stim</option><option>Speech</option></select>
+      <select id="rc-svc" class="input" onchange="onSvcChange('rc-svc','rc-staff')">${buildServiceOptions(defaultSvc)}</select>
       <input id="rc-dur" type="number" class="input" placeholder="Duration (min)" value="30" min="1">
     </div>
     <button onclick="doRoomCheckin('${roomId}')" class="btn btn-primary w-full">✓ Check In & Start</button>
@@ -457,7 +491,9 @@ async function doRoomCheckin(roomId){
 
 // Assign service from visit
 function openAssignSvc(visitId,name){
-  const so=staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
+  const firstSvc=serviceTypes.find(st=>st.is_active);
+  const defaultSvc=firstSvc?firstSvc.name:'PT';
+  const so=qualifiedStaff(defaultSvc).map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
   const supOpts=`<option value="">— None —</option>`+staff.map(s=>`<option value="${s.staff_id}">${s.name}</option>`).join('');
   const ro=sortRooms(rooms).filter(r=>r.status==='available').map(r=>`<option value="${r.room_id}">${r.code} — ${r.name}</option>`).join('');
   openModal('Start Service — '+name,`<div class="space-y-3">
@@ -465,7 +501,7 @@ function openAssignSvc(visitId,name){
     <div><label class="text-xs text-gray-500">生诊医生 Supervising Doctor</label><select id="as-super" class="input">${supOpts}</select></div>
     <div><label class="text-xs text-gray-500">Room</label><select id="as-room" class="input">${ro}</select></div>
     <div class="grid grid-cols-2 gap-2">
-      <div><label class="text-xs text-gray-500">Service Type</label><select id="as-svc" class="input"><option>Acupuncture</option><option>PT</option><option>OT</option><option>Eval</option><option>Re-eval</option><option>Speech</option><option>Cupping</option><option>Massage</option></select></div>
+      <div><label class="text-xs text-gray-500">Service Type</label><select id="as-svc" class="input" onchange="onSvcChange('as-svc','as-staff')">${buildServiceOptions(defaultSvc)}</select></div>
       <div><label class="text-xs text-gray-500">Duration (min)</label><input id="as-dur" type="number" class="input" value="30" min="1"></div>
     </div>
     <button onclick="doAssignSvc('${visitId}')" class="btn btn-primary w-full">▶ Start Service</button>
@@ -601,8 +637,8 @@ async function openTreatments(vid,patientName){
     }
     h+='</tbody></table>';
     h+=`</div><div class="grid grid-cols-2 gap-2">
-        <select id="trt-mod" class="input"><option value="PT">PT</option><option value="OT">OT</option><option value="E-stim">E-stim</option><option value="Massage">Massage</option><option value="Cupping">Cupping</option><option value="Acupuncture">Acupuncture</option><option value="Heat">Heat Therapy</option><option value="Cold">Cold Therapy</option></select>
-        <select id="trt-staff" class="input"><option value="">— Same as visit —</option>${so}</select>
+        <select id="trt-mod" class="input" onchange="onSvcChange('trt-mod','trt-staff-sel')">${buildServiceOptions()}</select>
+        <select id="trt-staff-sel" class="input"><option value="">— Same as visit —</option>${so}</select>
       </div>
       <input id="trt-dur" type="number" class="input" placeholder="Duration (minutes)" value="30">
       <button onclick="addTreatment('${vid}')" class="btn btn-primary w-full">+ Add Treatment</button>
@@ -611,7 +647,7 @@ async function openTreatments(vid,patientName){
   }catch(e){toast(e.message,'error');}
 }
 async function addTreatment(vid){
-  const mod=document.getElementById('trt-mod').value,sid=document.getElementById('trt-staff').value||null,dur=parseInt(document.getElementById('trt-dur').value)||30;
+  const mod=document.getElementById('trt-mod').value,sid=document.getElementById('trt-staff-sel').value||null,dur=parseInt(document.getElementById('trt-dur').value)||30;
   try{await POST(`/visits/${vid}/treatments/add`,{visit_id:vid,modality:mod,therapist_id:sid,duration_minutes:dur,actor_id:'frontdesk'});toast('Treatment added');await openTreatments(vid,'Patient');}catch(e){toast(e.message,'error');}
 }
 function editTreatment(vid,tid,currDur,currNotes){
@@ -907,8 +943,8 @@ async function updTask(id,st){try{await PATCH('/tasks/'+id,{status:st});toast('T
 // ==================== ADMIN ====================
 async function refreshAdmin(){
   try{
-    const[br,hr]=await Promise.all([GET('/projections/room-board'),GET('/projections/staff-hours')]);
-    rooms=br.rooms||[];staff=hr.staff||[];
+    const[br,hr,sr]=await Promise.all([GET('/projections/room-board'),GET('/projections/staff-hours'),GET('/admin/service-types?include_inactive=true')]);
+    rooms=br.rooms||[];staff=hr.staff||[];serviceTypes=sr.service_types||[];
     document.getElementById('rooms-list').innerHTML=rooms.length?rooms.map(r=>`
       <div data-testid="room-list-item-${r.code}" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
         <div class="flex items-center gap-2 flex-wrap"><span class="font-bold">${r.code}</span><span>— ${r.name}</span><span class="text-xs text-gray-400">${r.branch||''} ${r.floor||''}</span><span class="badge badge-${r.status}">${r.status}</span></div>
@@ -916,9 +952,20 @@ async function refreshAdmin(){
       </div>`).join(''):'<p class="text-gray-400 text-center py-4">No rooms.</p>';
     document.getElementById('staff-list').innerHTML=staff.length?staff.map(s=>`
       <div data-testid="staff-list-item-${s.name.replace(/[^a-zA-Z0-9_-]/g,'-')}" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-        <div><span class="font-medium">${s.name}</span> <span class="text-gray-500 text-sm">(${s.role})</span></div>
+        <div>
+          <span class="font-medium">${s.name}</span> <span class="text-gray-500 text-sm">(${s.role})</span>
+          ${s.service_type_names&&s.service_type_names.length?`<div class="text-xs text-blue-600 mt-0.5">${s.service_type_names.join(', ')}</div>`:'<div class="text-xs text-gray-400 mt-0.5">All services</div>'}
+        </div>
         <button onclick="editStaff('${s.staff_id}',\`${s.name}\`,'${s.role}')" class="btn btn-xs btn-outline">✏️</button>
       </div>`).join(''):'<p class="text-gray-400 text-center py-4">No staff.</p>';
+    document.getElementById('service-type-list').innerHTML=serviceTypes.length?serviceTypes.map(st=>`
+      <div data-testid="svc-type-item-${st.name.replace(/\s+/g,'-')}" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg ${st.is_active?'':'opacity-50'}">
+        <span class="font-medium text-sm">${st.name}${st.is_active?'':' <span class="text-xs text-gray-400">(inactive)</span>'}</span>
+        <div class="flex gap-1">
+          <button onclick="openServiceTypeStaff('${st.service_type_id}','${st.name}')" class="btn btn-xs btn-outline" title="Manage staff">👥</button>
+          <button onclick="toggleServiceTypeActive('${st.service_type_id}',${st.is_active})" class="btn btn-xs ${st.is_active?'btn-danger':'btn-primary'}" title="${st.is_active?'Deactivate':'Activate'}">${st.is_active?'✕':'✓'}</button>
+        </div>
+      </div>`).join(''):'<p class="text-gray-400 text-center py-4">No service types.</p>';
   }catch(e){toast(e.message,'error');}
 }
 async function addRoom(){const n=document.getElementById('room-name').value.trim(),c=document.getElementById('room-code').value.trim(),t=document.getElementById('room-type').value;if(!n||!c)return toast('Name & code required','error');try{await POST('/admin/rooms',{name:n,code:c,room_type:t});toast('Room added');document.getElementById('room-name').value='';document.getElementById('room-code').value='';refreshAdmin();}catch(e){toast(e.message,'error');}}
@@ -930,8 +977,72 @@ async function deleteRoom(id,code){
   try{await DELETE('/admin/rooms/'+id);toast('Room deleted');refreshAdmin();refreshOps();}catch(e){toast(e.message,'error');}
 }
 async function addStaff(){const n=document.getElementById('staff-name').value.trim(),r=document.getElementById('staff-role').value,l=document.getElementById('staff-license').value.trim()||null;if(!n)return toast('Name required','error');try{await POST('/admin/staff',{name:n,role:r,license_id:l});toast('Staff added');document.getElementById('staff-name').value='';document.getElementById('staff-license').value='';refreshAdmin();}catch(e){toast(e.message,'error');}}
-function editStaff(id,name,role){openModal('Edit Staff',`<div class="space-y-3"><input id="es-name" class="input" value="${name}"><select id="es-role" class="input"><option ${role==='therapist'?'selected':''}>therapist</option><option ${role==='front_desk'?'selected':''}>front_desk</option><option ${role==='manager'?'selected':''}>manager</option></select><button onclick="saveStaff('${id}')" class="btn btn-primary w-full">Save</button></div>`);}
-async function saveStaff(id){const n=document.getElementById('es-name').value.trim(),r=document.getElementById('es-role').value;if(!n)return toast('Required','error');try{await PATCH('/admin/staff/'+id,{name:n,role:r});toast('Updated');closeModal();refreshAdmin();}catch(e){toast(e.message,'error');}}
+async function editStaff(id,name,role){
+  let qualIds=[];
+  try{const r=await GET('/admin/staff/'+id+'/service-types');qualIds=(r.service_types||[]).map(s=>s.service_type_id);}catch(e){}
+  const svcChecks=serviceTypes.map(st=>`<label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" value="${st.service_type_id}" ${qualIds.includes(st.service_type_id)?'checked':''} class="svc-cb"> <span${st.is_active?'':' class="text-gray-400"'}>${st.name}${st.is_active?'':' (inactive)'}</span></label>`).join('');
+  openModal('Edit Staff',`<div class="space-y-3">
+    <input id="es-name" class="input" value="${name}">
+    <select id="es-role" class="input"><option ${role==='therapist'?'selected':''}>therapist</option><option ${role==='front_desk'?'selected':''}>front_desk</option><option ${role==='manager'?'selected':''}>manager</option></select>
+    <div class="text-sm font-medium text-gray-600 mt-2">Service qualifications <span class="text-xs text-gray-400 font-normal">(leave all unchecked = any service)</span></div>
+    <div class="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">${svcChecks}</div>
+    <button onclick="saveStaff('${id}')" class="btn btn-primary w-full">Save</button>
+  </div>`);
+}
+async function saveStaff(id){
+  const n=document.getElementById('es-name').value.trim(),r=document.getElementById('es-role').value;
+  if(!n)return toast('Required','error');
+  const checked=[...document.querySelectorAll('.svc-cb:checked')].map(c=>c.value);
+  try{
+    await PATCH('/admin/staff/'+id,{name:n,role:r});
+    await PUT('/admin/staff/'+id+'/service-types',{service_type_ids:checked});
+    toast('Updated');closeModal();refreshAdmin();
+  }catch(e){toast(e.message,'error');}
+}
+
+// ==================== SERVICE TYPES ADMIN ====================
+async function addServiceType(){
+  const n=document.getElementById('svc-name').value.trim();
+  if(!n)return toast('Name required','error');
+  try{await POST('/admin/service-types',{name:n});toast('Service type added');document.getElementById('svc-name').value='';refreshAdmin();}catch(e){toast(e.message,'error');}
+}
+async function toggleServiceTypeActive(id,currentlyActive){
+  try{await PATCH('/admin/service-types/'+id,{is_active:!currentlyActive});toast(currentlyActive?'Deactivated':'Activated');refreshAdmin();}catch(e){toast(e.message,'error');}
+}
+async function openServiceTypeStaff(svcId,svcName){
+  let qualStaffIds=[];
+  try{const r=await GET('/admin/service-types/'+svcId+'/staff');qualStaffIds=(r.staff||[]).map(s=>s.staff_id);}catch(e){}
+  const allTherapists=staff.filter(s=>s.role==='therapist'||s.role==='therapist');
+  const checks=staff.map(s=>`<label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" value="${s.staff_id}" ${qualStaffIds.includes(s.staff_id)?'checked':''} class="svc-staff-cb"> ${s.name} <span class="text-xs text-gray-400">(${s.role})</span></label>`).join('');
+  openModal('Staff qualified for: '+svcName,`<div class="space-y-3">
+    <div class="text-sm text-gray-500">Staff with no qualifications set are available for all services.</div>
+    <div class="grid grid-cols-2 gap-1 max-h-64 overflow-y-auto">${checks}</div>
+    <button onclick="saveServiceTypeStaff('${svcId}')" class="btn btn-primary w-full">Save</button>
+  </div>`);
+}
+async function saveServiceTypeStaff(svcId){
+  const checked=[...document.querySelectorAll('.svc-staff-cb:checked')].map(c=>c.value);
+  // For each checked staff, ensure they have this svcId; for unchecked, remove it.
+  // We use the set-service-types endpoint which is per-staff, replace-all.
+  // Strategy: update each staff member independently.
+  try{
+    // Get current qualifications for all staff
+    const updates=staff.map(async s=>{
+      const hasBox=document.querySelector(`.svc-staff-cb[value="${s.staff_id}"]`);
+      if(!hasBox)return;
+      const isChecked=hasBox.checked;
+      const r=await GET('/admin/staff/'+s.staff_id+'/service-types');
+      const curr=(r.service_types||[]).map(t=>t.service_type_id);
+      let next;
+      if(isChecked&&!curr.includes(svcId))next=[...curr,svcId];
+      else if(!isChecked&&curr.includes(svcId))next=curr.filter(id=>id!==svcId);
+      else return;// no change
+      await PUT('/admin/staff/'+s.staff_id+'/service-types',{service_type_ids:next});
+    });
+    await Promise.all(updates);
+    toast('Qualifications saved');closeModal();refreshAdmin();
+  }catch(e){toast(e.message,'error');}
+}
 
 // ==================== REPORT ====================
 async function genReport(){try{const r=await POST('/reports/daily/generate',{actor_id:'manager'});showReport(r);toast('Generated');}catch(e){toast(e.message,'error');}}

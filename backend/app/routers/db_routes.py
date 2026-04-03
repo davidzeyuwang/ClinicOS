@@ -27,8 +27,11 @@ from app.schemas.prototype import (
     RoomUpdate,
     ServiceEnd,
     ServiceStart,
+    ServiceTypeCreate,
+    ServiceTypeUpdate,
     StaffCreate,
     StaffUpdate,
+    StaffServiceTypesSet,
     TaskCreate,
     TaskUpdate,
     TreatmentAdd,
@@ -572,3 +575,71 @@ async def get_visit_records(
             staff_id=staff_id,
         )
     }
+
+
+# ==================== SERVICE TYPES ====================
+
+@router.get("/admin/service-types")
+async def list_service_types(
+    include_inactive: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all service types (active only by default)."""
+    return {"service_types": await db_service.list_service_types(db, include_inactive=include_inactive)}
+
+
+@router.post("/admin/service-types", status_code=201)
+async def create_service_type(payload: ServiceTypeCreate, db: AsyncSession = Depends(get_db)):
+    """Create a new service type."""
+    return await db_service.create_service_type(db, actor_id="admin", name=payload.name)
+
+
+@router.patch("/admin/service-types/{service_type_id}")
+async def update_service_type(
+    service_type_id: str, payload: ServiceTypeUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Update name or active status of a service type."""
+    result = await db_service.update_service_type(
+        db, service_type_id=service_type_id, actor_id="admin",
+        updates=payload.model_dump(exclude_none=True)
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Service type not found")
+    return result
+
+
+@router.delete("/admin/service-types/{service_type_id}", status_code=204)
+async def retire_service_type(service_type_id: str, db: AsyncSession = Depends(get_db)):
+    """Retire (soft-delete) a service type by setting is_active=False."""
+    result = await db_service.update_service_type(
+        db, service_type_id=service_type_id, actor_id="admin", updates={"is_active": False}
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Service type not found")
+
+
+@router.get("/admin/staff/{staff_id}/service-types")
+async def get_staff_service_types(staff_id: str, db: AsyncSession = Depends(get_db)):
+    """Get service types a staff member is qualified to perform."""
+    return {"service_types": await db_service.get_staff_service_types(db, staff_id=staff_id)}
+
+
+@router.put("/admin/staff/{staff_id}/service-types")
+async def set_staff_service_types(
+    staff_id: str, payload: StaffServiceTypesSet, db: AsyncSession = Depends(get_db)
+):
+    """Replace-all: set the exact list of service types a staff member is qualified for."""
+    try:
+        return await db_service.set_staff_service_types(
+            db, staff_id=staff_id,
+            service_type_ids=payload.service_type_ids,
+            actor_id="admin",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/admin/service-types/{service_type_id}/staff")
+async def get_service_type_staff(service_type_id: str, db: AsyncSession = Depends(get_db)):
+    """Get staff qualified to perform a given service type."""
+    return {"staff": await db_service.get_service_type_staff(db, service_type_id=service_type_id)}

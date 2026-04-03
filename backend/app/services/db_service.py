@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import (
     Appointment, ClinicalNote, DailyReport, Document, EventLog,
-    InsurancePolicy, Patient, Room, Staff, Task, Visit, VisitTreatment,
+    InsurancePolicy, Patient, Room, ServiceType, Staff, StaffServiceType, Task, Visit, VisitTreatment,
 )
 
 
@@ -83,11 +83,14 @@ async def reset_demo_data(db: AsyncSession) -> None:
         Patient,
         Staff,
         Room,
+        StaffServiceType,
+        ServiceType,
         EventLog,
     ):
         await db.execute(delete(model))
     await db.commit()
     await _seed_demo_entities(db)
+    await ensure_default_service_types(db)
 
 
 async def _seed_demo_entities(db: AsyncSession) -> None:
@@ -143,6 +146,22 @@ async def ensure_default_demo_staff(db: AsyncSession) -> None:
     if existing.scalar_one_or_none():
         return
     await _seed_demo_entities(db)
+
+
+DEFAULT_SERVICE_TYPES = (
+    "PT", "OT", "Eval", "Re-eval", "Acupuncture",
+    "Cupping", "Massage", "E-stim", "Speech", "Heat Therapy", "Cold Therapy",
+)
+
+
+async def ensure_default_service_types(db: AsyncSession) -> None:
+    """Seed default service types if the table is empty (idempotent startup seed)."""
+    count = await db.scalar(select(func.count()).select_from(ServiceType))
+    if count and count > 0:
+        return
+    for name in DEFAULT_SERVICE_TYPES:
+        db.add(ServiceType(name=name))
+    await db.commit()
 
 
 # ==================== ROOMS ====================
@@ -566,6 +585,15 @@ async def get_staff_hours(db: AsyncSession) -> list:
     staff_result = await db.execute(select(Staff).where(Staff.active == True).order_by(Staff.name))
     all_staff = staff_result.scalars().all()
 
+    # Load service type qualifications for all staff
+    sst_result = await db.execute(select(StaffServiceType))
+    all_sst = sst_result.scalars().all()
+    st_result = await db.execute(select(ServiceType))
+    st_by_id = {st.service_type_id: st.name for st in st_result.scalars().all()}
+    staff_svc_names: dict[str, list[str]] = {}
+    for sst in all_sst:
+        staff_svc_names.setdefault(sst.staff_id, []).append(st_by_id.get(sst.service_type_id, ""))
+
     visits_result = await db.execute(select(Visit).where(Visit.staff_id.isnot(None)))
     all_visits = visits_result.scalars().all()
 
@@ -591,10 +619,12 @@ async def get_staff_hours(db: AsyncSession) -> list:
 
     per_staff = {}
     for member in all_staff:
+        svc_names = staff_svc_names.get(member.staff_id, [])
         per_staff[member.staff_id] = {
             "staff_id": member.staff_id,
             "name": member.name,
             "role": member.role,
+            "service_type_names": svc_names,
             "completed_minutes": 0,
             "active_minutes": 0,
             "sessions_completed": 0,
@@ -1637,3 +1667,93 @@ def _treatment_to_dict(treatment: VisitTreatment) -> dict:
         "created_at": treatment.created_at.isoformat() if treatment.created_at else None,
         "updated_at": treatment.updated_at.isoformat() if treatment.updated_at else None,
     }
+
+
+# ==================== SERVICE TYPES ====================
+
+def _svc_type_to_dict(st: ServiceType) -> dict:
+    return {
+        "service_type_id": st.service_type_id,
+        "name": st.name,
+        "is_active": st.is_active,
+        "created_at": st.created_at.isoformat() if st.created_at else None,
+    }
+
+
+async def list_service_types(db: AsyncSession, include_inactive: bool = False) -> list:
+    q = select(ServiceType).order_by(ServiceType.name)
+    if not include_inactive:
+        q = q.where(ServiceType.is_active == True)
+    result = await db.execute(q)
+    return [_svc_type_to_dict(st) for st in result.scalars().all()]
+
+
+async def create_service_type(db: AsyncSession, actor_id: str, name: str) -> dict:
+    st = ServiceType(name=name)
+    db.add(st)
+    await _append_event(db, "SERVICE_TYPE_CREATED", actor_id, {"name": name})
+    await db.commit()
+    await db.refresh(st)
+    return _svc_type_to_dict(st)
+
+
+async def update_service_type(
+    db: AsyncSession, service_type_id: str, actor_id: str, updates: dict
+) -> Optional[dict]:
+    st = await db.get(ServiceType, service_type_id)
+    if not st:
+        return None
+    if "name" in updates and updates["name"] is not None:
+        st.name = updates["name"]
+    if "is_active" in updates and updates["is_active"] is not None:
+        st.is_active = updates["is_active"]
+    await _append_event(db, "SERVICE_TYPE_UPDATED", actor_id, {"service_type_id": service_type_id, "updates": updates})
+    await db.commit()
+    return _svc_type_to_dict(st)
+
+
+async def get_staff_service_types(db: AsyncSession, staff_id: str) -> list[dict]:
+    """Return service type objects for a staff member."""
+    sst_result = await db.execute(
+        select(StaffServiceType).where(StaffServiceType.staff_id == staff_id)
+    )
+    sst_rows = sst_result.scalars().all()
+    if not sst_rows:
+        return []
+    st_ids = [r.service_type_id for r in sst_rows]
+    st_result = await db.execute(select(ServiceType).where(ServiceType.service_type_id.in_(st_ids)))
+    return [_svc_type_to_dict(st) for st in st_result.scalars().all()]
+
+
+async def set_staff_service_types(
+    db: AsyncSession, staff_id: str, service_type_ids: list[str], actor_id: str
+) -> dict:
+    """Replace-all: delete existing qualifications and insert new ones."""
+    # Verify staff exists
+    member = await db.get(Staff, staff_id)
+    if not member:
+        raise ValueError(f"Staff {staff_id} not found")
+
+    await db.execute(delete(StaffServiceType).where(StaffServiceType.staff_id == staff_id))
+    for st_id in service_type_ids:
+        db.add(StaffServiceType(staff_id=staff_id, service_type_id=st_id))
+    await _append_event(db, "STAFF_SERVICE_TYPES_UPDATED", actor_id, {
+        "staff_id": staff_id, "service_type_ids": service_type_ids,
+    })
+    await db.commit()
+    return {"staff_id": staff_id, "service_type_ids": service_type_ids}
+
+
+async def get_service_type_staff(db: AsyncSession, service_type_id: str) -> list[dict]:
+    """Return staff objects qualified for a service type."""
+    sst_result = await db.execute(
+        select(StaffServiceType).where(StaffServiceType.service_type_id == service_type_id)
+    )
+    sst_rows = sst_result.scalars().all()
+    if not sst_rows:
+        return []
+    staff_ids = [r.staff_id for r in sst_rows]
+    result = await db.execute(
+        select(Staff).where(Staff.staff_id.in_(staff_ids)).where(Staff.active == True)
+    )
+    return [_staff_to_dict(s) for s in result.scalars().all()]

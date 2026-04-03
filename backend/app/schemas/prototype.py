@@ -293,3 +293,17 @@ class EventEnvelope(BaseModel):
     actor_id: str
     idempotency_key: str
     payload: dict
+
+
+# ==================== SERVICE TYPES ====================
+
+class ServiceTypeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+class ServiceTypeUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    is_active: Optional[bool] = None
+
+class StaffServiceTypesSet(BaseModel):
+    """Replace-all: sets exact list of service type IDs for a staff member."""
+    service_type_ids: list[str]

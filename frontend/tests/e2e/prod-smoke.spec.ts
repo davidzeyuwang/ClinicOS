@@ -19,6 +19,10 @@ import {
   type PatientSpec,
   type SmokeEnv,
 } from "./shared/clinic-smoke-suite";
+import {
+  registerHarnessTests,
+  type HarnessEnv,
+} from "./shared/clinic-harness-suite";
 
 // ── Patient definitions ───────────────────────────────────────────────────────
 
@@ -96,6 +100,37 @@ async function supaGet<T = Record<string, unknown>[]>(
   return resp.json();
 }
 
+/**
+ * Force a prod room to available status by checking out any lingering visits
+ * via direct Supabase REST (bypasses app business logic for test isolation).
+ */
+async function forceProdRoomAvailable(request: APIRequestContext, roomCode: string) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) return;
+  const hdrs = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    Prefer: "return=minimal",
+  };
+  const rr = await request.get(`${url}/rest/v1/rooms?select=room_id&code=eq.${roomCode}`, {
+    headers: hdrs,
+  });
+  const rooms: Array<{ room_id: string }> = await rr.json();
+  if (!rooms.length) return;
+  const rid = rooms[0].room_id;
+  const now = new Date().toISOString();
+  await request.patch(
+    `${url}/rest/v1/visits?room_id=eq.${rid}&status=neq.checked_out`,
+    { headers: hdrs, data: { status: "checked_out", check_out_time: now } },
+  );
+  await request.patch(`${url}/rest/v1/rooms?room_id=eq.${rid}`, {
+    headers: hdrs,
+    data: { status: "available" },
+  });
+}
+
 // ── Prod adapter ──────────────────────────────────────────────────────────────
 
 const prodEnv: SmokeEnv = {
@@ -112,33 +147,8 @@ const prodEnv: SmokeEnv = {
     console.log("  Server warmed up");
 
     // Reset room so any lingering visit doesn't block check-in
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_KEY;
-    if (url && key) {
-      const hdrs = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      };
-      const rr = await request.get(`${url}/rest/v1/rooms?select=room_id&code=eq.C1`, {
-        headers: hdrs,
-      });
-      const rooms: Array<{ room_id: string }> = await rr.json();
-      if (rooms.length) {
-        const rid = rooms[0].room_id;
-        const now = new Date().toISOString();
-        await request.patch(
-          `${url}/rest/v1/visits?room_id=eq.${rid}&status=neq.checked_out`,
-          { headers: hdrs, data: { status: "checked_out", check_out_time: now } },
-        );
-        await request.patch(`${url}/rest/v1/rooms?room_id=eq.${rid}`, {
-          headers: hdrs,
-          data: { status: "available" },
-        });
-      }
-      console.log("  Reset room C1: cleared lingering visits, status → available");
-    }
+    await forceProdRoomAvailable(request, "C1");
+    console.log("  Reset room C1: cleared lingering visits, status → available");
 
     // Create the 3 patients
     const ids: string[] = [];
@@ -283,6 +293,47 @@ const prodEnv: SmokeEnv = {
   },
 };
 
-// ── Register ──────────────────────────────────────────────────────────────────
+// ── Register smoke suite ──────────────────────────────────────────────────────
 
 registerSmokeTests(prodEnv);
+
+// ── Prod harness env ──────────────────────────────────────────────────────────
+//
+// Runs the same 31 focused tests as local-smoke.spec.ts against Vercel + Supabase.
+// Key differences vs local:
+//   - createViaUI: false  → rooms + primary staff pre-seeded; no UI creation
+//   - exactCounts: false  → report counts use >= 1 (data accumulates across runs)
+//   - beforeEach forces C1 + C2 to available via Supabase REST
+//   - unique codes (RUN_SUFFIX) prevent collisions from test-created resources
+
+const prodHarnessEnv: HarnessEnv = {
+  suiteName: "ClinicOS UI harness — prod",
+  roomCode: "C1",
+  roomName: "Clinic Room 1",
+  altRoomCode: "C2",
+  altRoomName: "Clinic Room 2",
+  staffName: "Dr. Smith",
+  altStaffName: `Dr. TC${RUN_SUFFIX}`,
+  testRoomCode: `RT${RUN_SUFFIX}`,
+  testRoomName: `Test Room ${RUN_SUFFIX}`,
+  testStaffName: `TS${RUN_SUFFIX}`,
+  retireServiceTypeName: `RTst${RUN_SUFFIX}`,
+  createRetireTarget: true,
+  createViaUI: false,
+  exactCounts: false,
+
+  async beforeEach(request, page) {
+    // Force both primary and alt room to available before each test
+    await forceProdRoomAvailable(request, "C1");
+    await forceProdRoomAvailable(request, "C2");
+    await page.goto("/ui/index.html");
+  },
+
+  async afterEach(request) {
+    // Ensure rooms are clean after each test regardless of test outcome
+    await forceProdRoomAvailable(request, "C1");
+    await forceProdRoomAvailable(request, "C2");
+  },
+};
+
+registerHarnessTests(prodHarnessEnv);

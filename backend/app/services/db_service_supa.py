@@ -184,10 +184,21 @@ async def get_staff_hours(db) -> list:
     today = datetime.now(timezone.utc).date().isoformat()
     now = datetime.now(timezone.utc)
 
-    all_staff, all_visits = await asyncio.gather(
+    all_staff, all_visits, all_links, all_types = await asyncio.gather(
         supa.select("staff", {"active": True}),
         supa.select("visits", {}),
+        supa.select("staff_service_types", {}),
+        supa.select("service_types", {}),
     )
+
+    # Build lookup: service_type_id → name
+    type_name_map = {t["service_type_id"]: t["name"] for t in all_types}
+    # Build lookup: staff_id → [service_type_names]
+    staff_type_names: dict = {}
+    for lnk in all_links:
+        sid = lnk["staff_id"]
+        name = type_name_map.get(lnk["service_type_id"], "")
+        staff_type_names.setdefault(sid, []).append(name)
 
     # Filter today's visits with a staff_id
     today_visits = [
@@ -204,6 +215,7 @@ async def get_staff_hours(db) -> list:
             "completed_minutes": 0,
             "active_minutes": 0,
             "sessions_completed": 0,
+            "service_type_names": staff_type_names.get(member["staff_id"], []),
         }
 
     for visit in today_visits:
@@ -234,7 +246,102 @@ async def get_staff_hours(db) -> list:
     return list(per_staff.values())
 
 
-# ==================== VISITS ====================
+
+# ==================== SERVICE TYPES ====================
+
+_DEFAULT_SERVICE_TYPES = [
+    "PT", "OT", "Eval", "Re-eval", "Acupuncture", "Cupping",
+    "Massage", "E-stim", "Speech", "Heat Therapy", "Cold Therapy",
+]
+
+
+async def ensure_default_service_types(db) -> None:
+    """Idempotent seed: insert 11 defaults only if table is empty."""
+    supa = get_supabase()
+    existing = await supa.select("service_types", {})
+    if existing:
+        return
+    for name in _DEFAULT_SERVICE_TYPES:
+        await supa.insert("service_types", {
+            "service_type_id": _new_id(),
+            "name": name,
+            "is_active": True,
+            "created_at": _utc_now(),
+        })
+
+
+async def list_service_types(db, include_inactive: bool = False) -> list:
+    supa = get_supabase()
+    filters = {} if include_inactive else {"is_active": True}
+    rows = await supa.select("service_types", filters)
+    rows.sort(key=lambda r: r.get("name") or "")
+    return rows
+
+
+async def create_service_type(db, actor_id: str, name: str) -> dict:
+    supa = get_supabase()
+    row = {
+        "service_type_id": _new_id(),
+        "name": name,
+        "is_active": True,
+        "created_at": _utc_now(),
+    }
+    result = await supa.insert("service_types", row)
+    await _append_event("SERVICE_TYPE_CREATED", actor_id, {"service_type_id": result["service_type_id"], "name": name})
+    return result
+
+
+async def update_service_type(db, service_type_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    supa = get_supabase()
+    rows = await supa.select("service_types", {"service_type_id": service_type_id})
+    if not rows:
+        return None
+    result = await supa.update("service_types", "service_type_id", service_type_id, updates)
+    await _append_event("SERVICE_TYPE_UPDATED", actor_id, {"service_type_id": service_type_id, "updates": updates})
+    return result
+
+
+async def get_staff_service_types(db, staff_id: str) -> list:
+    """Return list of ServiceType dicts for the given staff member."""
+    supa = get_supabase()
+    links = await supa.select("staff_service_types", {"staff_id": staff_id})
+    if not links:
+        return []
+    ids = [lnk["service_type_id"] for lnk in links]
+    all_types = await supa.select("service_types", {})
+    return [t for t in all_types if t["service_type_id"] in ids]
+
+
+async def set_staff_service_types(db, staff_id: str, service_type_ids: list, actor_id: str) -> dict:
+    """Replace all service type qualifications for a staff member (delete + insert)."""
+    supa = get_supabase()
+    # Delete all existing links for this staff member in one call
+    # SupabaseClient.delete(table, pk_col, pk_val) → DELETE /table?pk_col=eq.pk_val
+    await supa.delete("staff_service_types", "staff_id", staff_id)
+    for sid in service_type_ids:
+        await supa.insert("staff_service_types", {
+            "staff_id": staff_id,
+            "service_type_id": sid,
+        })
+    await _append_event("STAFF_SERVICE_TYPES_UPDATED", actor_id, {
+        "staff_id": staff_id,
+        "service_type_ids": service_type_ids,
+    })
+    return {"staff_id": staff_id, "service_type_ids": service_type_ids}
+
+
+
+async def get_service_type_staff(db, service_type_id: str) -> list:
+    """Reverse lookup: staff qualified for a service type."""
+    supa = get_supabase()
+    links = await supa.select("staff_service_types", {"service_type_id": service_type_id})
+    if not links:
+        return []
+    staff_ids = [lnk["staff_id"] for lnk in links]
+    all_staff = await supa.select("staff", {"active": True})
+    return [s for s in all_staff if s["staff_id"] in staff_ids]
+
+
 
 async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Optional[str] = None,
                           patient_id: Optional[str] = None, appointment_id: Optional[str] = None) -> dict:

@@ -6,6 +6,7 @@ export default defineConfig({
   testDir: "./frontend/tests/e2e",
   testIgnore: ["**/deployed-workflow.spec.ts", "**/debug-room.spec.ts", "**/prod-smoke.spec.ts"],
   fullyParallel: false,
+  workers: 1,   // SQLite is shared — all spec files must run sequentially
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {

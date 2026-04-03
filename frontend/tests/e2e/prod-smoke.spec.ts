@@ -300,39 +300,90 @@ registerSmokeTests(prodEnv);
 // ── Prod harness env ──────────────────────────────────────────────────────────
 //
 // Runs the same 31 focused tests as local-smoke.spec.ts against Vercel + Supabase.
-// Key differences vs local:
-//   - createViaUI: false  → rooms + primary staff pre-seeded; no UI creation
-//   - exactCounts: false  → report counts use >= 1 (data accumulates across runs)
-//   - beforeEach forces C1 + C2 to available via Supabase REST
-//   - unique codes (RUN_SUFFIX) prevent collisions from test-created resources
+// The fixture values are IDENTICAL to local. The only difference is `beforeEach`:
+// instead of resetLocalData (which wipes the whole DB), it does targeted Supabase
+// REST cleanup — delete rooms R1/TRA (cascading visits + treatments), delete
+// test-created staff by name, reactivate OT — giving each test a clean slate
+// without touching the stable seed data (C1/C2/C3 rooms, Dr. Smith/Johnson/Chen).
+
+/** Staff names created by harness tests that must be deleted between tests. */
+const HARNESS_STAFF = [
+  "Alice PT", "Bob OT", "Dr. Gao", "Dr. Sarah Chen",
+  "PT Only Staff", "Acupuncture Only Staff",
+];
 
 const prodHarnessEnv: HarnessEnv = {
   suiteName: "ClinicOS UI harness — prod",
-  roomCode: "C1",
-  roomName: "Clinic Room 1",
-  altRoomCode: "C2",
-  altRoomName: "Clinic Room 2",
-  staffName: "Dr. Smith",
-  altStaffName: `Dr. TC${RUN_SUFFIX}`,
-  testRoomCode: `RT${RUN_SUFFIX}`,
-  testRoomName: `Test Room ${RUN_SUFFIX}`,
-  testStaffName: `TS${RUN_SUFFIX}`,
-  retireServiceTypeName: `RTst${RUN_SUFFIX}`,
-  createRetireTarget: true,
-  createViaUI: false,
-  exactCounts: false,
+  roomCode: "R1",
+  roomName: "Room 1",
+  altRoomCode: "TRA",
+  altRoomName: "Treatment Room A",
+  staffName: "Alice PT",
+  altStaffName: "Dr. Sarah Chen",
+  testRoomCode: "R1",
+  testRoomName: "Room 1",
+  testStaffName: "Bob OT",
+  retireServiceTypeName: "OT",
+  createRetireTarget: false,
+  createViaUI: true,
+  exactCounts: true,
 
   async beforeEach(request, page) {
-    // Force both primary and alt room to available before each test
-    await forceProdRoomAvailable(request, "C1");
-    await forceProdRoomAvailable(request, "C2");
-    await page.goto("/ui/index.html");
-  },
+    const url = process.env.SUPABASE_URL!;
+    const key = process.env.SUPABASE_SERVICE_KEY!;
+    const hdrs = {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    };
 
-  async afterEach(request) {
-    // Ensure rooms are clean after each test regardless of test outcome
-    await forceProdRoomAvailable(request, "C1");
-    await forceProdRoomAvailable(request, "C2");
+    // 1. Delete test rooms R1 and TRA, cascading to their visits + treatments
+    for (const code of ["R1", "TRA"]) {
+      const rr = await request.get(
+        `${url}/rest/v1/rooms?select=room_id&code=eq.${code}`,
+        { headers: hdrs },
+      );
+      const rooms: Array<{ room_id: string }> = await rr.json();
+      for (const room of rooms) {
+        const vr = await request.get(
+          `${url}/rest/v1/visits?select=visit_id&room_id=eq.${room.room_id}`,
+          { headers: hdrs },
+        );
+        const visits: Array<{ visit_id: string }> = await vr.json();
+        if (visits.length) {
+          const ids = visits.map((v) => v.visit_id).join(",");
+          await request.delete(
+            `${url}/rest/v1/visit_treatments?visit_id=in.(${ids})`,
+            { headers: hdrs },
+          );
+          await request.delete(
+            `${url}/rest/v1/visits?room_id=eq.${room.room_id}`,
+            { headers: hdrs },
+          );
+        }
+        await request.delete(
+          `${url}/rest/v1/rooms?room_id=eq.${room.room_id}`,
+          { headers: hdrs },
+        );
+      }
+    }
+
+    // 2. Delete test-created staff by name (visits in R1/TRA deleted first above)
+    for (const name of HARNESS_STAFF) {
+      await request.delete(
+        `${url}/rest/v1/staff?name=eq.${encodeURIComponent(name)}`,
+        { headers: hdrs },
+      );
+    }
+
+    // 3. Reactivate OT (may have been retired by test #30)
+    await request.patch(
+      `${url}/rest/v1/service_types?name=eq.OT`,
+      { headers: hdrs, data: { is_active: true } },
+    );
+
+    await page.goto("/ui/index.html");
   },
 };
 

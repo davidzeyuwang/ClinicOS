@@ -9,6 +9,12 @@ BACKEND="$REPO_ROOT/backend"
 
 echo "=== ClinicOS init ==="
 
+# 0. Ensure SECRET_KEY is set — required for JWT signing (no hardcoded fallback)
+if [ -z "$SECRET_KEY" ]; then
+  export SECRET_KEY="local-dev-secret-not-for-production-$(hostname)"
+  echo "--- SECRET_KEY not set, using local-dev value (not for production)"
+fi
+
 # 1. Check Python
 python3 --version || { echo "ERROR: python3 not found"; exit 1; }
 

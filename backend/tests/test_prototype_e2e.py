@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
-TEST_USERNAME = "admin@test.clinicos.local"
+TEST_EMAIL = "admin@test.clinicos.local"
 TEST_PASSWORD = "test1234"
 
 
@@ -25,7 +25,7 @@ def client():
 
 @pytest.fixture()
 def auth_headers(client):
-    response = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    response = client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
     assert response.status_code == 200, f"Login failed: {response.text}"
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

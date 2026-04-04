@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-TEST_USERNAME = "admin@test.clinicos.local"
+TEST_EMAIL = "admin@test.clinicos.local"
 TEST_PASSWORD = "test1234"
 TEST_TOKEN_HEADER = {"x-test-token": "test-admin-secret-fixed-token"}
 
@@ -26,7 +26,7 @@ def client():
 def auth_headers(client):
     r = client.post(
         "/prototype/auth/login",
-        json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
     )
     assert r.status_code == 200, f"Login failed: {r.text}"
     token = r.json()["access_token"]
@@ -40,13 +40,13 @@ def frontdesk_headers(client):
     username = f"frontdesk-{suffix}@test.local"
     r = client.post(
         "/prototype/test/create-user",
-        json={"username": username, "password": "front123!", "role": "frontdesk"},
+        json={"email": username, "password": "front123!", "role": "frontdesk"},
         headers=TEST_TOKEN_HEADER,
     )
     assert r.status_code == 200, f"create-user failed: {r.text}"
     lr = client.post(
         "/prototype/auth/login",
-        json={"username": username, "password": "front123!"},
+        json={"email": username, "password": "front123!"},
     )
     assert lr.status_code == 200
     return {"Authorization": f"Bearer {lr.json()['access_token']}"}
@@ -58,7 +58,7 @@ def test_login_success_returns_jwt_with_all_fields(client):
     """Valid credentials → 200 with access_token, role, clinic_id, user_id."""
     r = client.post(
         "/prototype/auth/login",
-        json={"username": TEST_USERNAME, "password": TEST_PASSWORD},
+        json={"email": TEST_EMAIL, "password": TEST_PASSWORD},
     )
     assert r.status_code == 200
     body = r.json()
@@ -73,7 +73,7 @@ def test_login_success_returns_jwt_with_all_fields(client):
 def test_login_wrong_password_returns_401(client):
     r = client.post(
         "/prototype/auth/login",
-        json={"username": TEST_USERNAME, "password": "totally-wrong"},
+        json={"email": TEST_EMAIL, "password": "totally-wrong"},
     )
     assert r.status_code == 401
 
@@ -81,7 +81,7 @@ def test_login_wrong_password_returns_401(client):
 def test_login_unknown_user_returns_401(client):
     r = client.post(
         "/prototype/auth/login",
-        json={"username": "nobody@nowhere.example", "password": "irrelevant"},
+        json={"email": "nobody@nowhere.example", "password": "irrelevant"},
     )
     assert r.status_code == 401
 
@@ -91,7 +91,7 @@ def test_me_with_valid_token(client, auth_headers):
     r = client.get("/prototype/auth/me", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
-    assert body["username"] == TEST_USERNAME
+    assert body["email"] == TEST_EMAIL
     assert body["role"] == "admin"
     assert body["clinic_id"]
 
@@ -159,7 +159,7 @@ def test_register_clinic_creates_clinic_and_admin_user(client, auth_headers):
         json={
             "clinic_name": f"Smoke Clinic {suffix}",
             "slug": f"smoke-{suffix}",
-            "admin_username": f"admin-{suffix}@smoke.test",
+            "admin_email": f"admin-{suffix}@smoke.test",
             "admin_password": "Smoke123!",
             "admin_display_name": f"Admin {suffix}",
         },
@@ -181,13 +181,13 @@ def test_register_clinic_duplicate_slug_returns_409(client, auth_headers):
     }
     r1 = client.post(
         "/prototype/auth/register-clinic",
-        json={**payload, "admin_username": f"dup1-{suffix}@test.local"},
+        json={**payload, "admin_email": f"dup1-{suffix}@test.local"},
         headers=auth_headers,
     )
     assert r1.status_code == 200
     r2 = client.post(
         "/prototype/auth/register-clinic",
-        json={**payload, "admin_username": f"dup2-{suffix}@test.local"},
+        json={**payload, "admin_email": f"dup2-{suffix}@test.local"},
         headers=auth_headers,
     )
     assert r2.status_code == 409
@@ -213,7 +213,7 @@ def test_cross_clinic_patient_isolation(client, auth_headers):
         json={
             "clinic_name": f"Clinic B {suffix}",
             "slug": f"clinicb-{suffix}",
-            "admin_username": f"adminb-{suffix}@b.test",
+            "admin_email": f"adminb-{suffix}@b.test",
             "admin_password": "BPass123!",
             "admin_display_name": "Admin B",
         },
@@ -223,7 +223,7 @@ def test_cross_clinic_patient_isolation(client, auth_headers):
 
     lr = client.post(
         "/prototype/auth/login",
-        json={"username": f"adminb-{suffix}@b.test", "password": "BPass123!"},
+        json={"email": f"adminb-{suffix}@b.test", "password": "BPass123!"},
     )
     assert lr.status_code == 200
     b_headers = {"Authorization": f"Bearer {lr.json()['access_token']}"}
@@ -248,7 +248,7 @@ def test_clinic_b_data_not_visible_to_clinic_a(client, auth_headers):
         json={
             "clinic_name": f"Clinic B2 {suffix}",
             "slug": f"clinicb2-{suffix}",
-            "admin_username": f"adminb2-{suffix}@b2.test",
+            "admin_email": f"adminb2-{suffix}@b2.test",
             "admin_password": "B2Pass123!",
             "admin_display_name": "Admin B2",
         },
@@ -258,7 +258,7 @@ def test_clinic_b_data_not_visible_to_clinic_a(client, auth_headers):
 
     lr = client.post(
         "/prototype/auth/login",
-        json={"username": f"adminb2-{suffix}@b2.test", "password": "B2Pass123!"},
+        json={"email": f"adminb2-{suffix}@b2.test", "password": "B2Pass123!"},
     )
     b2_headers = {"Authorization": f"Bearer {lr.json()['access_token']}"}
 

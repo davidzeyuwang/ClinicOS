@@ -12,7 +12,7 @@ router = APIRouter(prefix="/prototype/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await auth_service.authenticate_user(db, payload.username, payload.password)
+    result = await auth_service.authenticate_user(db, payload.email, payload.password)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return result
@@ -26,7 +26,7 @@ async def me(current_user: CurrentUser = Depends(get_current_user), db: AsyncSes
     return {
         "user_id": user.user_id,
         "clinic_id": user.clinic_id,
-        "username": user.username,
+        "email": user.email,
         "display_name": user.display_name,
         "role": user.role,
     }
@@ -45,8 +45,8 @@ async def register_clinic(
         raise HTTPException(status_code=409, detail="Clinic slug already exists")
     clinic = await auth_service.create_clinic(db, payload.clinic_name, payload.slug)
     user = await auth_service.create_user(
-        db, clinic.clinic_id, payload.admin_username, payload.admin_password,
-        display_name=payload.admin_display_name or payload.admin_username,
+        db, clinic.clinic_id, payload.admin_email, payload.admin_password,
+        display_name=payload.admin_display_name or payload.admin_email,
         role="admin",
     )
     await db.commit()

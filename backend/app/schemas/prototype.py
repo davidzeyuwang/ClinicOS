@@ -312,7 +312,7 @@ class StaffServiceTypesSet(BaseModel):
 # ==================== AUTH SCHEMAS ====================
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 
@@ -329,13 +329,13 @@ class TokenResponse(BaseModel):
 class RegisterClinicRequest(BaseModel):
     clinic_name: str
     slug: str
-    admin_username: str
+    admin_email: str
     admin_password: str
     admin_display_name: str = ""
 
 
 class CreateTestUserRequest(BaseModel):
-    username: str
+    email: str
     password: str
     display_name: str = ""
     role: str = "frontdesk"  # admin | frontdesk | doctor

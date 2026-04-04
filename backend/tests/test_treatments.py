@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
-TEST_USERNAME = "admin@test.clinicos.local"
+TEST_EMAIL = "admin@test.clinicos.local"
 TEST_PASSWORD = "test1234"
 TEST_TOKEN_HEADER = {"x-test-token": "test-admin-secret-fixed-token"}
 
@@ -36,7 +36,7 @@ async def test_prd005_multiple_treatments_workflow():
         assert reset_resp.status_code == 200
 
         # Get auth token
-        login_resp = await client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = await client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
         auth = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
@@ -230,7 +230,7 @@ async def test_cannot_add_treatment_to_checked_out_visit():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Reset and auth
         await client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
-        login_resp = await client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = await client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         auth = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         # Create minimal entities
@@ -311,7 +311,7 @@ async def test_treatment_without_therapist_defaults_to_actor():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Reset and auth
         await client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
-        login_resp = await client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = await client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         auth = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         room = await client.post("/prototype/admin/rooms", json={
@@ -376,7 +376,7 @@ async def test_treatment_records_date_filter():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Reset and auth
         await client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
-        login_resp = await client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = await client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         auth = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         # Create entities

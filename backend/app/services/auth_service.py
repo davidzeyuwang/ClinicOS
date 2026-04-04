@@ -36,7 +36,7 @@ async def create_clinic(db: AsyncSession, name: str, slug: str, timezone_str: st
 async def create_user(
     db: AsyncSession,
     clinic_id: str,
-    username: str,
+    email: str,
     plain_password: str,
     display_name: str = "",
     role: str = "frontdesk",
@@ -44,9 +44,9 @@ async def create_user(
     user = User(
         user_id=_new_id(),
         clinic_id=clinic_id,
-        username=username,
+        email=email,
         hashed_password=hash_password(plain_password),
-        display_name=display_name or username,
+        display_name=display_name or email,
         role=role,
         is_active=True,
         created_at=_utc_now(),
@@ -56,9 +56,9 @@ async def create_user(
     return user
 
 
-async def authenticate_user(db: AsyncSession, username: str, password: str) -> Optional[dict]:
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[dict]:
     """Return token dict on success, None on failure."""
-    result = await db.execute(select(User).where(User.username == username, User.is_active == True))
+    result = await db.execute(select(User).where(User.email == email, User.is_active == True))
     user = result.scalar_one_or_none()
     if not user or not verify_password(password, user.hashed_password):
         return None

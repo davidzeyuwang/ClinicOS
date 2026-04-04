@@ -43,7 +43,7 @@ class User(Base):
 
     user_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
     clinic_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(256), nullable=False)
     display_name: Mapped[str] = mapped_column(String(128), default="")
     role: Mapped[str] = mapped_column(String(32), nullable=False)  # admin | frontdesk | doctor

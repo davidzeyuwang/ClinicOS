@@ -86,8 +86,8 @@ async def create_test_user(
     if not clinic:
         raise HTTPException(status_code=500, detail="No clinic found — run /test/reset first")
     user = await auth_service.create_user(
-        db, clinic.clinic_id, payload.username, payload.password,
-        display_name=payload.display_name or payload.username,
+        db, clinic.clinic_id, payload.email, payload.password,
+        display_name=payload.display_name or payload.email,
         role=payload.role,
     )
     await db.commit()

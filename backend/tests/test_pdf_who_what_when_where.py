@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 from app.main import app
 
-TEST_USERNAME = "admin@test.clinicos.local"
+TEST_EMAIL = "admin@test.clinicos.local"
 TEST_PASSWORD = "test1234"
 TEST_TOKEN_HEADER = {"x-test-token": "test-admin-secret-fixed-token"}
 
@@ -58,7 +58,7 @@ def test_pdf_includes_who_what_when_where():
         assert reset_resp.status_code == 200
 
         # Get auth token
-        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
         auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
@@ -208,7 +208,7 @@ def test_pdf_with_multiple_staff_and_rooms():
     with TestClient(app) as client:
         # Reset and auth
         client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
-        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         # Create 2 rooms and 2 staff members
@@ -330,7 +330,7 @@ def test_pdf_signature_section():
     with TestClient(app) as client:
         # Reset and auth
         client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
-        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        login_resp = client.post("/prototype/auth/login", json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
 
         # Minimal setup

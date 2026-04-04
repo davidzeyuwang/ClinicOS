@@ -53,7 +53,7 @@ async def _seed_test_clinic() -> None:
         user = User(
             user_id=_new_id(),
             clinic_id=clinic.clinic_id,
-            username="admin@test.clinicos.local",
+            email="admin@test.clinicos.local",
             hashed_password=hash_password("test1234"),
             display_name="Test Admin",
             role="admin",
@@ -62,7 +62,7 @@ async def _seed_test_clinic() -> None:
         )
         db.add(user)
         await db.commit()
-        print(f"[seed] Test clinic created (id={clinic.clinic_id}), admin username: admin@test.clinicos.local")
+        print(f"[seed] Test clinic created (id={clinic.clinic_id}), admin email: admin@test.clinicos.local")
 
 
 app = FastAPI(

@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
+from app.routers.auth_routes import router as auth_router
 from app.routers.db_routes import router as db_router
 
 # Resolve frontend directory (../frontend relative to backend/)
@@ -22,9 +23,46 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create DB tables on startup."""
+    """Create DB tables on startup and seed test clinic."""
     await init_db()
+    await _seed_test_clinic()
     yield
+
+
+async def _seed_test_clinic() -> None:
+    """Idempotent: create default test clinic + admin user on first startup."""
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.tables import Clinic, User, _new_id, _utc_now
+    from app.auth.password import hash_password
+
+    async with AsyncSessionLocal() as db:
+        existing = await db.scalar(select(Clinic).where(Clinic.slug == "test"))
+        if existing:
+            return
+        clinic = Clinic(
+            clinic_id=_new_id(),
+            name="Test Clinic",
+            slug="test",
+            timezone="America/New_York",
+            is_active=True,
+            created_at=_utc_now(),
+        )
+        db.add(clinic)
+        await db.flush()
+        user = User(
+            user_id=_new_id(),
+            clinic_id=clinic.clinic_id,
+            username="admin@test.clinicos.local",
+            hashed_password=hash_password("test1234"),
+            display_name="Test Admin",
+            role="admin",
+            is_active=True,
+            created_at=_utc_now(),
+        )
+        db.add(user)
+        await db.commit()
+        print(f"[seed] Test clinic created (id={clinic.clinic_id}), admin: admin@test.clinicos.local / test1234")
 
 
 app = FastAPI(
@@ -47,6 +85,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(db_router)
 
 

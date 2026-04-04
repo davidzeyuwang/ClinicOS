@@ -1,18 +1,53 @@
+import * as fs from "fs";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-export async function resetLocalData(request: APIRequestContext) {
-  const response = await request.post("/prototype/test/reset");
-  expect(response.ok()).toBeTruthy();
+// ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+export function getAuthToken(): string {
+  // globalSetup writes the token here; prefer env var (available in same process)
+  if (process.env.PW_AUTH_TOKEN) return process.env.PW_AUTH_TOKEN;
+  try {
+    return fs.readFileSync("playwright/.auth/token.txt", "utf-8").trim();
+  } catch {
+    return "";
+  }
 }
 
-export async function apiPost(request: APIRequestContext, path: string, payload: Record<string, unknown>) {
-  const response = await request.post(`/prototype${path}`, { data: payload });
+export function authHeaders(): Record<string, string> {
+  const tok = getAuthToken();
+  return tok ? { authorization: `Bearer ${tok}` } : {};
+}
+
+// ---------------------------------------------------------------------------
+// API helpers (all pass auth token automatically)
+// ---------------------------------------------------------------------------
+
+export async function resetLocalData(request: APIRequestContext) {
+  const response = await request.post("/prototype/test/reset", {
+    headers: { "x-test-token": "test-admin-secret-fixed-token" },
+  });
+  expect(response.ok(), `resetLocalData failed: ${await response.text()}`).toBeTruthy();
+}
+
+export async function apiPost(
+  request: APIRequestContext,
+  path: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await request.post(`/prototype${path}`, {
+    data: payload,
+    headers: authHeaders(),
+  });
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json();
 }
 
 export async function apiGet(request: APIRequestContext, path: string) {
-  const response = await request.get(`/prototype${path}`);
+  const response = await request.get(`/prototype${path}`, {
+    headers: authHeaders(),
+  });
   expect(response.ok(), await response.text()).toBeTruthy();
   return response.json();
 }

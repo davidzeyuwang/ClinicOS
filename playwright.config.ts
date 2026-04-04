@@ -5,12 +5,15 @@ const backendCommand = "bash ./scripts/start-backend.sh";
 export default defineConfig({
   testDir: "./frontend/tests/e2e",
   testIgnore: ["**/deployed-workflow.spec.ts", "**/debug-room.spec.ts", "**/prod-smoke.spec.ts"],
+  globalSetup: "./frontend/tests/global-setup.ts",
+  globalTeardown: "./frontend/tests/global-teardown.ts",
   fullyParallel: false,
   workers: 1,   // SQLite is shared — all spec files must run sequentially
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: "http://127.0.0.1:8000",
+    storageState: "playwright/.auth/admin-state.json",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

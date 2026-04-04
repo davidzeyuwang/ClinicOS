@@ -307,3 +307,35 @@ class ServiceTypeUpdate(BaseModel):
 class StaffServiceTypesSet(BaseModel):
     """Replace-all: sets exact list of service type IDs for a staff member."""
     service_type_ids: list[str]
+
+
+# ==================== AUTH SCHEMAS ====================
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user_id: str
+    clinic_id: str
+    role: str
+    display_name: str
+
+
+class RegisterClinicRequest(BaseModel):
+    clinic_name: str
+    slug: str
+    admin_username: str
+    admin_password: str
+    admin_display_name: str = ""
+
+
+class CreateTestUserRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+    role: str = "frontdesk"  # admin | frontdesk | doctor

@@ -8,40 +8,55 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+TEST_USERNAME = "admin@test.clinicos.local"
+TEST_PASSWORD = "test1234"
+
+
 @pytest.fixture()
 def client():
     with TestClient(app) as test_client:
-        response = test_client.post("/prototype/test/reset")
+        response = test_client.post(
+            "/prototype/test/reset",
+            headers={"x-test-token": "test-admin-secret-fixed-token"}
+        )
         assert response.status_code == 200
         yield test_client
 
 
-def post_json(client: TestClient, path: str, payload: dict) -> dict:
-    response = client.post(f"/prototype{path}", json=payload)
+@pytest.fixture()
+def auth_headers(client):
+    response = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    assert response.status_code == 200, f"Login failed: {response.text}"
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def post_json(client: TestClient, path: str, payload: dict, headers=None) -> dict:
+    response = client.post(f"/prototype{path}", json=payload, headers=headers or {})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def get_json(client: TestClient, path: str) -> dict:
-    response = client.get(f"/prototype{path}")
+def get_json(client: TestClient, path: str, headers=None) -> dict:
+    response = client.get(f"/prototype{path}", headers=headers or {})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def patch_json(client: TestClient, path: str, payload: dict) -> dict:
-    response = client.patch(f"/prototype{path}", json=payload)
+def patch_json(client: TestClient, path: str, payload: dict, headers=None) -> dict:
+    response = client.patch(f"/prototype{path}", json=payload, headers=headers or {})
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def test_prd_v2_e2e_domain_flow(client: TestClient):
+def test_prd_v2_e2e_domain_flow(client: TestClient, auth_headers):
     # ==================== ROOMS & STAFF (§11.3) ====================
-    r1 = post_json(client, "/admin/rooms", {"name": "Room 1", "code": "R1", "room_type": "treatment"})
-    r2 = post_json(client, "/admin/rooms", {"name": "Room 2", "code": "R2", "room_type": "treatment"})
+    r1 = post_json(client, "/admin/rooms", {"name": "Room 1", "code": "R1", "room_type": "treatment"}, headers=auth_headers)
+    r2 = post_json(client, "/admin/rooms", {"name": "Room 2", "code": "R2", "room_type": "treatment"}, headers=auth_headers)
     assert r1["status"] == "available"
     assert r2["status"] == "available"
 
-    s1 = post_json(client, "/admin/staff", {"name": "Bob OT", "role": "therapist", "license_id": "OT-002"})
+    s1 = post_json(client, "/admin/staff", {"name": "Bob OT", "role": "therapist", "license_id": "OT-002"}, headers=auth_headers)
     assert s1["active"] is True
     assert s1["role"] == "therapist"
 
@@ -56,11 +71,12 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "phone": "555-0101",
             "mrn": "MRN-1001",
         },
+        headers=auth_headers,
     )
     assert p1["first_name"] == "John"
     assert p1["intake_status"] == "pending"
 
-    search = get_json(client, "/patients?q=Doe")
+    search = get_json(client, "/patients?q=Doe", headers=auth_headers)
     assert len(search["patients"]) >= 1
     assert search["patients"][0]["last_name"] == "Doe"
 
@@ -76,6 +92,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "copay_amount": 30.0,
             "visits_authorized": 24,
         },
+        headers=auth_headers,
     )
     assert ins1["carrier_name"] == "Blue Cross"
     assert ins1["eligibility_status"] == "unknown"
@@ -88,6 +105,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "eligibility_notes": "Verified via portal - 24 visits authorized",
             "visits_used": 3,
         },
+        headers=auth_headers,
     )
     assert ins1_updated["eligibility_status"] == "verified"
     assert ins1_updated["eligibility_verified_at"] is not None
@@ -104,10 +122,11 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "appointment_time": "10:00",
             "appointment_type": "regular",
         },
+        headers=auth_headers,
     )
     assert appt1["status"] == "scheduled"
 
-    appts = get_json(client, f"/appointments?date={today}")
+    appts = get_json(client, f"/appointments?date={today}", headers=auth_headers)
     assert len(appts["appointments"]) >= 1
 
     # ==================== CHECK-IN + VISIT (§11.3, §11.5) ====================
@@ -121,6 +140,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "appointment_id": appt1["appointment_id"],
             "actor_id": "frontdesk-1",
         },
+        headers=auth_headers,
     )
     assert v1["status"] == "checked_in"
     assert v1["patient_id"] == p1["patient_id"]
@@ -135,6 +155,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "visit_id": v1["visit_id"],
             "document_type": "intake",
         },
+        headers=auth_headers,
     )
     assert doc1["document_type"] == "intake"
     assert doc1["sequence_number"] == 1
@@ -144,13 +165,14 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
         client,
         f"/documents/{doc1['document_id']}/sign",
         {"document_id": doc1["document_id"], "actor_id": "patient-john"},
+        headers=auth_headers,
     )
     assert doc1_signed["status"] == "signed"
 
-    doc2 = post_json(client, "/documents", {"patient_id": p1["patient_id"], "document_type": "consent"})
+    doc2 = post_json(client, "/documents", {"patient_id": p1["patient_id"], "document_type": "consent"}, headers=auth_headers)
     assert doc2["sequence_number"] == 1
 
-    doc3 = post_json(client, "/documents", {"patient_id": p1["patient_id"], "document_type": "intake"})
+    doc3 = post_json(client, "/documents", {"patient_id": p1["patient_id"], "document_type": "intake"}, headers=auth_headers)
     assert doc3["sequence_number"] == 2
 
     # ==================== SERVICE (§11.3) ====================
@@ -164,15 +186,16 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "service_type": "PT",
             "actor_id": "therapist-1",
         },
+        headers=auth_headers,
     )
     assert svc["status"] == "in_service"
 
-    board = get_json(client, "/projections/room-board")
+    board = get_json(client, "/projections/room-board", headers=auth_headers)
     r1_board = [r for r in board["rooms"] if r["room_id"] == r1["room_id"]][0]
     assert r1_board["status"] == "occupied"
     assert r1_board["patient_name"] == "John Doe"
 
-    end = post_json(client, "/portal/service/end", {"visit_id": v1["visit_id"], "actor_id": "therapist-1"})
+    end = post_json(client, "/portal/service/end", {"visit_id": v1["visit_id"], "actor_id": "therapist-1"}, headers=auth_headers)
     assert end["status"] == "service_completed"
 
     # ==================== CLINICAL NOTE (§11.6) ====================
@@ -191,6 +214,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
                 "plan": "Continue PT 2x/week",
             },
         },
+        headers=auth_headers,
     )
     assert note1["status"] == "draft"
 
@@ -198,6 +222,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
         client,
         f"/notes/{note1['note_id']}/sign",
         {"note_id": note1["note_id"], "actor_id": s1["staff_id"]},
+        headers=auth_headers,
     )
     assert note1_signed["status"] == "signed"
 
@@ -215,6 +240,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "patient_signed": True,
             "actor_id": "frontdesk-1",
         },
+        headers=auth_headers,
     )
     assert co["status"] == "checked_out"
     assert co["payment_status"] == "copay_collected"
@@ -235,26 +261,27 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
             "priority": "high",
             "assignee_id": "backoffice-1",
         },
+        headers=auth_headers,
     )
     assert task1["status"] == "open"
     assert task1["priority"] == "high"
 
-    task1_done = patch_json(client, f"/tasks/{task1['task_id']}", {"status": "completed"})
+    task1_done = patch_json(client, f"/tasks/{task1['task_id']}", {"status": "completed"}, headers=auth_headers)
     assert task1_done["status"] == "completed"
     assert task1_done["completed_at"] is not None
 
     # ==================== STAFF HOURS + REPORT ====================
-    hours = get_json(client, "/projections/staff-hours")
+    hours = get_json(client, "/projections/staff-hours", headers=auth_headers)
     bob_hours = [st for st in hours["staff"] if st["staff_id"] == s1["staff_id"]][0]
     assert bob_hours["sessions_completed"] >= 1
 
-    report = post_json(client, "/reports/daily/generate", {"actor_id": "manager-1"})
+    report = post_json(client, "/reports/daily/generate", {"actor_id": "manager-1"}, headers=auth_headers)
     assert report["total_check_ins"] >= 1
     assert report["total_check_outs"] >= 1
     assert report["total_services_completed"] >= 1
 
     # ==================== EVENT LOG ====================
-    events = get_json(client, "/events")
+    events = get_json(client, "/events", headers=auth_headers)
     event_types = {event["event_type"] for event in events["events"]}
     expected_types = {
         "ROOM_CREATED",
@@ -279,7 +306,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
     assert expected_types.issubset(event_types)
 
     # ==================== PATIENT VISITS ENDPOINT ====================
-    visits_resp = get_json(client, f"/patients/{p1['patient_id']}/visits")
+    visits_resp = get_json(client, f"/patients/{p1['patient_id']}/visits", headers=auth_headers)
     assert "visits" in visits_resp
     assert len(visits_resp["visits"]) >= 1
     v_rec = visits_resp["visits"][0]
@@ -290,14 +317,14 @@ def test_prd_v2_e2e_domain_flow(client: TestClient):
     # ==================== DAILY SUMMARY ENDPOINT ====================
     # Use UTC date — check_in_time is stored in UTC, so summary must match UTC date
     today = datetime.now(timezone.utc).date().isoformat()
-    summary = get_json(client, f"/projections/daily-summary?date={today}")
+    summary = get_json(client, f"/projections/daily-summary?date={today}", headers=auth_headers)
     assert summary["date"] == today
     assert summary["total_check_ins"] >= 1
     assert summary["total_checked_out"] >= 1
     assert summary["copay_total"] >= 25.0
 
     # ==================== SIGN-SHEET PDF ENDPOINT ====================
-    pdf_resp = client.get(f"/prototype/patients/{p1['patient_id']}/sign-sheet.pdf")
+    pdf_resp = client.get(f"/prototype/patients/{p1['patient_id']}/sign-sheet.pdf", headers=auth_headers)
     assert pdf_resp.status_code == 200
     assert pdf_resp.headers["content-type"] == "application/pdf"
     assert pdf_resp.content[:4] == b"%PDF"

@@ -23,6 +23,11 @@ import {
   registerHarnessTests,
   type HarnessEnv,
 } from "./shared/clinic-harness-suite";
+import {
+  registerAuthTests,
+  type AuthEnv,
+  type AuthCreated,
+} from "./shared/auth-suite";
 
 // ── Patient definitions ───────────────────────────────────────────────────────
 
@@ -388,3 +393,49 @@ const prodHarnessEnv: HarnessEnv = {
 };
 
 registerHarnessTests(prodHarnessEnv);
+
+// ── Prod auth env ─────────────────────────────────────────────────────────────
+//
+// Tests login/JWT, RBAC, clinic registration, and multi-tenancy isolation
+// against the Vercel + Supabase production environment.
+// Uses Supabase REST to hard-delete clinics + users created during the suite.
+
+const prodAuthEnv: AuthEnv = {
+  suiteName: "Auth — prod (Vercel + Supabase)",
+  adminUsername: "admin@test.clinicos.local",
+  adminPassword: "test1234",
+  runSuffix: RUN_SUFFIX,
+
+  async setup(request: APIRequestContext) {
+    // Warm up Vercel cold start (light endpoints)
+    await request.get("/health");
+    await request.get("/prototype/auth/me").catch(() => {});
+  },
+
+  async teardown(request: APIRequestContext, created: AuthCreated) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_KEY;
+    if (!url || !key || created.clinicIds.length === 0) return;
+
+    const hdrs = {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    };
+    const ids = created.clinicIds.join(",");
+
+    // Delete users belonging to the test clinics
+    await request.delete(`${url}/rest/v1/users?clinic_id=in.(${ids})`, { headers: hdrs });
+    // Delete the test clinics themselves
+    await request.delete(`${url}/rest/v1/clinics?clinic_id=in.(${ids})`, { headers: hdrs });
+    console.log(`  Auth teardown: removed ${created.clinicIds.length} test clinic(s)`);
+  },
+
+  async createFrontdeskUser(_request: APIRequestContext, _suffix: string) {
+    // /test/create-user is disabled on prod (Supabase mode)
+    return null;
+  },
+};
+
+registerAuthTests(prodAuthEnv);

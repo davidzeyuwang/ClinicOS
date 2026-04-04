@@ -43,7 +43,7 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-async def _append_event(db: AsyncSession, event_type: str, actor_id: str, payload: dict) -> EventLog:
+async def _append_event(db: AsyncSession, event_type: str, actor_id: str, payload: dict, clinic_id: Optional[str] = None) -> EventLog:
     """Append an immutable event to the event log."""
     event = EventLog(
         event_id=_new_id(),
@@ -52,6 +52,7 @@ async def _append_event(db: AsyncSession, event_type: str, actor_id: str, payloa
         actor_id=actor_id,
         idempotency_key=_new_id(),
         payload=_serialize_payload(payload),
+        clinic_id=clinic_id,
     )
     db.add(event)
     return event
@@ -72,6 +73,13 @@ def _serialize_payload(payload: dict) -> dict:
 
 async def reset_demo_data(db: AsyncSession) -> None:
     """Clear all data and seed default entities for a clean local deploy."""
+    # Get the test clinic's clinic_id first
+    from app.models.tables import Clinic
+    result = await db.execute(select(Clinic).where(Clinic.slug == "test"))
+    test_clinic = result.scalar_one_or_none()
+    if not test_clinic:
+        raise ValueError("Test clinic not found — seed it first via main.py lifespan")
+
     for model in (
         DailyReport,
         Task,
@@ -79,6 +87,7 @@ async def reset_demo_data(db: AsyncSession) -> None:
         InsurancePolicy,
         ClinicalNote,
         Visit,
+        VisitTreatment,
         Appointment,
         Patient,
         Staff,
@@ -89,17 +98,18 @@ async def reset_demo_data(db: AsyncSession) -> None:
     ):
         await db.execute(delete(model))
     await db.commit()
-    await _seed_demo_entities(db)
+    await _seed_demo_entities(db, test_clinic.clinic_id)
     await ensure_default_service_types(db)
 
 
-async def _seed_demo_entities(db: AsyncSession) -> None:
+async def _seed_demo_entities(db: AsyncSession, clinic_id: str) -> None:
     """Seed default staff, rooms, and patients for local testing."""
     now = _utc_now()
 
     for item in DEFAULT_STAFF:
         member = Staff(
             staff_id=_new_id(),
+            clinic_id=clinic_id,
             name=item["name"],
             role=item["role"],
             license_id=item["license_id"],
@@ -112,6 +122,7 @@ async def _seed_demo_entities(db: AsyncSession) -> None:
     for item in DEFAULT_ROOMS:
         room = Room(
             room_id=_new_id(),
+            clinic_id=clinic_id,
             name=item["name"],
             code=item["code"],
             room_type=item.get("room_type", "treatment"),
@@ -127,6 +138,7 @@ async def _seed_demo_entities(db: AsyncSession) -> None:
     for item in DEFAULT_PATIENTS:
         patient = Patient(
             patient_id=_new_id(),
+            clinic_id=clinic_id,
             first_name=item["first_name"],
             last_name=item["last_name"],
             phone=item.get("phone"),
@@ -145,7 +157,12 @@ async def ensure_default_demo_staff(db: AsyncSession) -> None:
     existing = await db.execute(select(Staff.staff_id).limit(1))
     if existing.scalar_one_or_none():
         return
-    await _seed_demo_entities(db)
+    # Get test clinic
+    from app.models.tables import Clinic
+    clinic_result = await db.execute(select(Clinic).where(Clinic.slug == "test"))
+    test_clinic = clinic_result.scalar_one_or_none()
+    if test_clinic:
+        await _seed_demo_entities(db, test_clinic.clinic_id)
 
 
 DEFAULT_SERVICE_TYPES = (
@@ -166,9 +183,10 @@ async def ensure_default_service_types(db: AsyncSession) -> None:
 
 # ==================== ROOMS ====================
 
-async def create_room(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_room(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     room = Room(
         room_id=_new_id(),
+        clinic_id=clinic_id,
         name=data["name"],
         code=data["code"],
         room_type=data.get("room_type", "treatment"),
@@ -184,8 +202,9 @@ async def create_room(db: AsyncSession, actor_id: str, data: dict) -> dict:
     return _room_to_dict(room)
 
 
-async def update_room(db: AsyncSession, room_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    room = await db.get(Room, room_id)
+async def update_room(db: AsyncSession, clinic_id: str, room_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Room).where(Room.room_id == room_id, Room.clinic_id == clinic_id))
+    room = result.scalar_one_or_none()
     if not room:
         return None
     for key, value in updates.items():
@@ -213,9 +232,10 @@ def _room_to_dict(room: Room) -> dict:
 
 # ==================== STAFF ====================
 
-async def create_staff(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_staff(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     member = Staff(
         staff_id=_new_id(),
+        clinic_id=clinic_id,
         name=data["name"],
         role=data["role"],
         license_id=data.get("license_id"),
@@ -228,8 +248,9 @@ async def create_staff(db: AsyncSession, actor_id: str, data: dict) -> dict:
     return _staff_to_dict(member)
 
 
-async def update_staff(db: AsyncSession, staff_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    member = await db.get(Staff, staff_id)
+async def update_staff(db: AsyncSession, clinic_id: str, staff_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Staff).where(Staff.staff_id == staff_id, Staff.clinic_id == clinic_id))
+    member = result.scalar_one_or_none()
     if not member:
         return None
     for key, value in updates.items():
@@ -254,11 +275,12 @@ def _staff_to_dict(member: Staff) -> dict:
 
 # ==================== VISITS ====================
 
-async def patient_checkin(db: AsyncSession, actor_id: str, patient_name: str, patient_ref: Optional[str],
+async def patient_checkin(db: AsyncSession, clinic_id: str, actor_id: str, patient_name: str, patient_ref: Optional[str],
                           patient_id: Optional[str] = None, appointment_id: Optional[str] = None) -> dict:
     now = _utc_now()
     visit = Visit(
         visit_id=_new_id(),
+        clinic_id=clinic_id,
         patient_id=patient_id,
         appointment_id=appointment_id,
         patient_name=patient_name,
@@ -270,7 +292,8 @@ async def patient_checkin(db: AsyncSession, actor_id: str, patient_name: str, pa
 
     # Update appointment status if linked
     if appointment_id:
-        appt = await db.get(Appointment, appointment_id)
+        appt_result = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id, Appointment.clinic_id == clinic_id))
+        appt = appt_result.scalar_one_or_none()
         if appt:
             appt.status = "checked_in"
             appt.updated_at = now
@@ -281,20 +304,23 @@ async def patient_checkin(db: AsyncSession, actor_id: str, patient_name: str, pa
 
 
 async def service_start(
-    db: AsyncSession, visit_id: str, actor_id: str,
+    db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
     staff_id: str, room_id: str, service_type: str,
     supervising_staff_id: Optional[str] = None,
 ) -> Optional[dict]:
-    visit = await db.get(Visit, visit_id)
-    staff_member = await db.get(Staff, staff_id)
-    room = await db.get(Room, room_id)
+    visit_result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = visit_result.scalar_one_or_none()
+    staff_result = await db.execute(select(Staff).where(Staff.staff_id == staff_id, Staff.clinic_id == clinic_id))
+    staff_member = staff_result.scalar_one_or_none()
+    room_result = await db.execute(select(Room).where(Room.room_id == room_id, Room.clinic_id == clinic_id))
+    room = room_result.scalar_one_or_none()
     if not visit or not staff_member or not room:
         return None
 
     # Prevent double-booking: check if room is already occupied
     if room.status == "occupied":
         existing = await db.execute(
-            select(Visit).where(Visit.room_id == room_id, Visit.status == "in_service")
+            select(Visit).where(Visit.room_id == room_id, Visit.status == "in_service", Visit.clinic_id == clinic_id)
         )
         if existing.scalars().first():
             raise ValueError(f"Room {room.code} is already occupied by another patient")
@@ -322,8 +348,9 @@ async def service_start(
     return _visit_to_dict(visit)
 
 
-async def service_end(db: AsyncSession, visit_id: str, actor_id: str) -> Optional[dict]:
-    visit = await db.get(Visit, visit_id)
+async def service_end(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
     if not visit or not visit.service_start_time:
         return None
 
@@ -334,7 +361,8 @@ async def service_end(db: AsyncSession, visit_id: str, actor_id: str) -> Optiona
     duration_seconds = (now - start_time).total_seconds() if start_time else 0
 
     if visit.room_id:
-        room = await db.get(Room, visit.room_id)
+        room_result = await db.execute(select(Room).where(Room.room_id == visit.room_id, Room.clinic_id == clinic_id))
+        room = room_result.scalar_one_or_none()
         if room:
             room.status = "available"
             room.updated_at = now
@@ -351,14 +379,15 @@ async def service_end(db: AsyncSession, visit_id: str, actor_id: str) -> Optiona
     return _visit_to_dict(visit)
 
 
-async def patient_checkout(db: AsyncSession, visit_id: str, actor_id: str,
+async def patient_checkout(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
                            payment_status: Optional[str] = None,
                            payment_amount: Optional[float] = None,
                            payment_method: Optional[str] = None,
                            copay_collected: Optional[float] = None,
                            wd_verified: bool = False,
                            patient_signed: bool = False) -> Optional[dict]:
-    visit = await db.get(Visit, visit_id)
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
     if not visit:
         return None
 
@@ -379,7 +408,8 @@ async def patient_checkout(db: AsyncSession, visit_id: str, actor_id: str,
 
     # Update linked appointment
     if visit.appointment_id:
-        appt = await db.get(Appointment, visit.appointment_id)
+        appt_result = await db.execute(select(Appointment).where(Appointment.appointment_id == visit.appointment_id, Appointment.clinic_id == clinic_id))
+        appt = appt_result.scalar_one_or_none()
         if appt:
             appt.status = "completed"
             appt.updated_at = now
@@ -407,8 +437,9 @@ async def patient_checkout(db: AsyncSession, visit_id: str, actor_id: str,
     return _visit_to_dict(visit)
 
 
-async def change_room_status(db: AsyncSession, room_id: str, actor_id: str, status: str) -> Optional[dict]:
-    room = await db.get(Room, room_id)
+async def change_room_status(db: AsyncSession, clinic_id: str, room_id: str, actor_id: str, status: str) -> Optional[dict]:
+    result = await db.execute(select(Room).where(Room.room_id == room_id, Room.clinic_id == clinic_id))
+    room = result.scalar_one_or_none()
     if not room:
         return None
     room.status = status
@@ -446,8 +477,8 @@ def _visit_to_dict(visit: Visit) -> dict:
 
 # ==================== PROJECTIONS ====================
 
-async def get_room_board(db: AsyncSession) -> list:
-    rooms_result = await db.execute(select(Room).where(Room.active == True).order_by(Room.code))
+async def get_room_board(db: AsyncSession, clinic_id: str) -> list:
+    rooms_result = await db.execute(select(Room).where(Room.active == True, Room.clinic_id == clinic_id).order_by(Room.code))
     rooms = rooms_result.scalars().all()
 
     today = _utc_now().date().isoformat()
@@ -455,6 +486,7 @@ async def get_room_board(db: AsyncSession) -> list:
         select(Visit).where(
             Visit.room_id.isnot(None),
             Visit.status.in_(["in_service", "checked_in", "service_completed"]),
+            Visit.clinic_id == clinic_id,
         )
     )
     active_visits = {v.room_id: v for v in visits_result.scalars().all()}
@@ -479,19 +511,20 @@ async def get_room_board(db: AsyncSession) -> list:
     return board
 
 
-async def get_active_visits(db: AsyncSession) -> list:
+async def get_active_visits(db: AsyncSession, clinic_id: str) -> list:
     result = await db.execute(
         select(Visit).where(
-            Visit.status.in_(["checked_in", "in_service", "service_completed"])
+            Visit.status.in_(["checked_in", "in_service", "service_completed"]),
+            Visit.clinic_id == clinic_id,
         ).order_by(Visit.check_in_time)
     )
     return [_visit_to_dict(v) for v in result.scalars().all()]
 
 
-async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
+async def get_patient_visits(db: AsyncSession, clinic_id: str, patient_id: str) -> list:
     """All visits for a patient, newest first. Includes room, staff, and treatment names for PDF."""
     result = await db.execute(
-        select(Visit).where(Visit.patient_id == patient_id).order_by(Visit.check_in_time.desc())
+        select(Visit).where(Visit.patient_id == patient_id, Visit.clinic_id == clinic_id).order_by(Visit.check_in_time.desc())
     )
     visits = result.scalars().all()
 
@@ -500,26 +533,29 @@ async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
         visit_dict = _visit_to_dict(v)
 
         if v.staff_id:
-            staff = await db.get(Staff, v.staff_id)
+            staff_result = await db.execute(select(Staff).where(Staff.staff_id == v.staff_id, Staff.clinic_id == clinic_id))
+            staff = staff_result.scalar_one_or_none()
             if staff:
                 visit_dict["staff_name"] = staff.name
 
         if v.room_id:
-            room = await db.get(Room, v.room_id)
+            room_result = await db.execute(select(Room).where(Room.room_id == v.room_id, Room.clinic_id == clinic_id))
+            room = room_result.scalar_one_or_none()
             if room:
                 visit_dict["room_name"] = room.name
                 visit_dict["room_code"] = room.code
 
         # Fetch all treatments for this visit
         tx_result = await db.execute(
-            select(VisitTreatment).where(VisitTreatment.visit_id == v.visit_id)
+            select(VisitTreatment).where(VisitTreatment.visit_id == v.visit_id, VisitTreatment.clinic_id == clinic_id)
         )
         txs = tx_result.scalars().all()
         tx_list = []
         for t in txs:
             tx_dict = _treatment_to_dict(t)
             if t.therapist_id:
-                therapist = await db.get(Staff, t.therapist_id)
+                therapist_result = await db.execute(select(Staff).where(Staff.staff_id == t.therapist_id, Staff.clinic_id == clinic_id))
+                therapist = therapist_result.scalar_one_or_none()
                 if therapist:
                     tx_dict["therapist_name"] = therapist.name
             tx_list.append(tx_dict)
@@ -530,10 +566,10 @@ async def get_patient_visits(db: AsyncSession, patient_id: str) -> list:
     return enriched
 
 
-async def get_daily_summary(db: AsyncSession, date: Optional[str] = None) -> dict:
+async def get_daily_summary(db: AsyncSession, clinic_id: str, date: Optional[str] = None) -> dict:
     """Summary of all visits for a given date with copay totals."""
     target_date = date or _utc_now().date().isoformat()
-    all_visits = (await db.execute(select(Visit))).scalars().all()
+    all_visits = (await db.execute(select(Visit).where(Visit.clinic_id == clinic_id))).scalars().all()
     today_visits = [
         v for v in all_visits
         if v.check_in_time and _ensure_utc(v.check_in_time).date().isoformat() == target_date
@@ -548,7 +584,7 @@ async def get_daily_summary(db: AsyncSession, date: Optional[str] = None) -> dic
         svc = v.service_type or "unknown"
         by_service[svc] = by_service.get(svc, 0) + 1
 
-    all_staff_result = await db.execute(select(Staff).where(Staff.active == True))
+    all_staff_result = await db.execute(select(Staff).where(Staff.active == True, Staff.clinic_id == clinic_id))
     staff_map = {s.staff_id: s.name for s in all_staff_result.scalars().all()}
 
     return {
@@ -578,11 +614,11 @@ def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt
 
 
-async def get_staff_hours(db: AsyncSession) -> list:
+async def get_staff_hours(db: AsyncSession, clinic_id: str) -> list:
     now = _utc_now()
     today = now.date().isoformat()
 
-    staff_result = await db.execute(select(Staff).where(Staff.active == True).order_by(Staff.name))
+    staff_result = await db.execute(select(Staff).where(Staff.active == True, Staff.clinic_id == clinic_id).order_by(Staff.name))
     all_staff = staff_result.scalars().all()
 
     # Load service type qualifications for all staff
@@ -594,7 +630,7 @@ async def get_staff_hours(db: AsyncSession) -> list:
     for sst in all_sst:
         staff_svc_names.setdefault(sst.staff_id, []).append(st_by_id.get(sst.service_type_id, ""))
 
-    visits_result = await db.execute(select(Visit).where(Visit.staff_id.isnot(None)))
+    visits_result = await db.execute(select(Visit).where(Visit.staff_id.isnot(None), Visit.clinic_id == clinic_id))
     all_visits = visits_result.scalars().all()
 
     # Load all treatments for today's visits
@@ -669,10 +705,10 @@ async def get_staff_hours(db: AsyncSession) -> list:
 
 # ==================== REPORTS ====================
 
-async def generate_daily_report(db: AsyncSession, actor_id: str, report_date: Optional[str] = None) -> dict:
+async def generate_daily_report(db: AsyncSession, clinic_id: str, actor_id: str, report_date: Optional[str] = None) -> dict:
     target_date = report_date or _utc_now().date().isoformat()
 
-    visits_result = await db.execute(select(Visit))
+    visits_result = await db.execute(select(Visit).where(Visit.clinic_id == clinic_id))
     all_visits = visits_result.scalars().all()
     today_visits = [v for v in all_visits if v.check_in_time and _ensure_utc(v.check_in_time).date().isoformat() == target_date]
 
@@ -681,13 +717,13 @@ async def generate_daily_report(db: AsyncSession, actor_id: str, report_date: Op
 
     # Appointment stats
     appt_result = await db.execute(
-        select(Appointment).where(Appointment.appointment_date == target_date)
+        select(Appointment).where(Appointment.appointment_date == target_date, Appointment.clinic_id == clinic_id)
     )
     today_appts = appt_result.scalars().all()
     no_shows = [a for a in today_appts if a.status == "no_show"]
 
-    staff_hours = await get_staff_hours(db)
-    room_board = await get_room_board(db)
+    staff_hours = await get_staff_hours(db, clinic_id)
+    room_board = await get_room_board(db, clinic_id)
     now = _utc_now()
 
     report_data = {
@@ -720,11 +756,11 @@ async def generate_daily_report(db: AsyncSession, actor_id: str, report_date: Op
     return report_data
 
 
-async def get_daily_report(db: AsyncSession, report_date: Optional[str] = None) -> Optional[dict]:
+async def get_daily_report(db: AsyncSession, clinic_id: str, report_date: Optional[str] = None) -> Optional[dict]:
     target_date = report_date or _utc_now().date().isoformat()
     result = await db.execute(
         select(DailyReport)
-        .where(DailyReport.report_date == target_date)
+        .where(DailyReport.report_date == target_date, DailyReport.clinic_id == clinic_id)
         .order_by(DailyReport.generated_at.desc())
     )
     report = result.scalars().first()
@@ -735,15 +771,16 @@ async def get_daily_report(db: AsyncSession, report_date: Optional[str] = None) 
 
 # ==================== DELETE ====================
 
-async def delete_room(db: AsyncSession, room_id: str, actor_id: str) -> Optional[dict]:
-    room = await db.get(Room, room_id)
+async def delete_room(db: AsyncSession, clinic_id: str, room_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Room).where(Room.room_id == room_id, Room.clinic_id == clinic_id))
+    room = result.scalar_one_or_none()
     if not room:
         return None
     # Check no active visit in this room
-    result = await db.execute(
-        select(Visit).where(Visit.room_id == room_id, Visit.status.in_(["in_service", "checked_in"]))
+    visit_result = await db.execute(
+        select(Visit).where(Visit.room_id == room_id, Visit.status.in_(["in_service", "checked_in"]), Visit.clinic_id == clinic_id)
     )
-    if result.scalars().first():
+    if visit_result.scalars().first():
         raise ValueError("Cannot delete room with active patients")
     room_dict = _room_to_dict(room)
     await db.delete(room)
@@ -752,15 +789,16 @@ async def delete_room(db: AsyncSession, room_id: str, actor_id: str) -> Optional
     return room_dict
 
 
-async def delete_staff(db: AsyncSession, staff_id: str, actor_id: str) -> Optional[dict]:
-    member = await db.get(Staff, staff_id)
+async def delete_staff(db: AsyncSession, clinic_id: str, staff_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Staff).where(Staff.staff_id == staff_id, Staff.clinic_id == clinic_id))
+    member = result.scalar_one_or_none()
     if not member:
         return None
     # Check no active service by this staff
-    result = await db.execute(
-        select(Visit).where(Visit.staff_id == staff_id, Visit.status == "in_service")
+    visit_result = await db.execute(
+        select(Visit).where(Visit.staff_id == staff_id, Visit.status == "in_service", Visit.clinic_id == clinic_id)
     )
-    if result.scalars().first():
+    if visit_result.scalars().first():
         raise ValueError("Cannot delete staff with active sessions")
     staff_dict = _staff_to_dict(member)
     await db.delete(member)
@@ -769,13 +807,15 @@ async def delete_staff(db: AsyncSession, staff_id: str, actor_id: str) -> Option
     return staff_dict
 
 
-async def delete_visit(db: AsyncSession, visit_id: str, actor_id: str) -> Optional[dict]:
-    visit = await db.get(Visit, visit_id)
+async def delete_visit(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
     if not visit:
         return None
     # Free the room if occupied
     if visit.room_id and visit.status == "in_service":
-        room = await db.get(Room, visit.room_id)
+        room_result = await db.execute(select(Room).where(Room.room_id == visit.room_id, Room.clinic_id == clinic_id))
+        room = room_result.scalar_one_or_none()
         if room:
             room.status = "available"
             room.updated_at = _utc_now()
@@ -788,8 +828,12 @@ async def delete_visit(db: AsyncSession, visit_id: str, actor_id: str) -> Option
 
 # ==================== EVENTS ====================
 
-async def get_events(db: AsyncSession) -> dict:
-    result = await db.execute(select(EventLog).order_by(EventLog.id))
+async def get_events(db: AsyncSession, clinic_id: str) -> dict:
+    result = await db.execute(
+        select(EventLog)
+        .where(or_(EventLog.clinic_id == clinic_id, EventLog.clinic_id == None))
+        .order_by(EventLog.id)
+    )
     events = result.scalars().all()
     return {
         "count": len(events),
@@ -830,12 +874,13 @@ def _patient_to_dict(p: Patient) -> dict:
     }
 
 
-async def create_patient(db: AsyncSession, actor_id: str, data: dict, force: bool = False) -> dict:
+async def create_patient(db: AsyncSession, clinic_id: str, actor_id: str, data: dict, force: bool = False) -> dict:
     # Duplicate check: case-insensitive name match + DOB (if provided)
     if not force:
         conditions = [
             func.lower(Patient.first_name) == data["first_name"].lower(),
             func.lower(Patient.last_name) == data["last_name"].lower(),
+            Patient.clinic_id == clinic_id,
         ]
         if data.get("date_of_birth"):
             conditions.append(Patient.date_of_birth == data["date_of_birth"])
@@ -854,6 +899,7 @@ async def create_patient(db: AsyncSession, actor_id: str, data: dict, force: boo
 
     patient = Patient(
         patient_id=_new_id(),
+        clinic_id=clinic_id,
         first_name=data["first_name"],
         last_name=data["last_name"],
         date_of_birth=data.get("date_of_birth"),
@@ -872,8 +918,9 @@ async def create_patient(db: AsyncSession, actor_id: str, data: dict, force: boo
     return _patient_to_dict(patient)
 
 
-async def update_patient(db: AsyncSession, patient_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    patient = await db.get(Patient, patient_id)
+async def update_patient(db: AsyncSession, clinic_id: str, patient_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Patient).where(Patient.patient_id == patient_id, Patient.clinic_id == clinic_id))
+    patient = result.scalar_one_or_none()
     if not patient:
         return None
     for key, value in updates.items():
@@ -885,8 +932,9 @@ async def update_patient(db: AsyncSession, patient_id: str, actor_id: str, updat
     return _patient_to_dict(patient)
 
 
-async def delete_patient(db: AsyncSession, patient_id: str, actor_id: str) -> Optional[dict]:
-    patient = await db.get(Patient, patient_id)
+async def delete_patient(db: AsyncSession, clinic_id: str, patient_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Patient).where(Patient.patient_id == patient_id, Patient.clinic_id == clinic_id))
+    patient = result.scalar_one_or_none()
     if not patient:
         return None
     if not patient.active:
@@ -906,18 +954,23 @@ async def delete_patient(db: AsyncSession, patient_id: str, actor_id: str) -> Op
     return _patient_to_dict(patient)
 
 
-async def get_patient(db: AsyncSession, patient_id: str) -> Optional[dict]:
-    patient = await db.get(Patient, patient_id)
+async def get_patient(db: AsyncSession, patient_id: str, clinic_id: Optional[str] = None) -> Optional[dict]:
+    if clinic_id:
+        result = await db.execute(select(Patient).where(Patient.patient_id == patient_id, Patient.clinic_id == clinic_id))
+        patient = result.scalar_one_or_none()
+    else:
+        patient = await db.get(Patient, patient_id)
     if not patient:
         return None
     return _patient_to_dict(patient)
 
 
-async def search_patients(db: AsyncSession, query: str) -> list:
+async def search_patients(db: AsyncSession, clinic_id: str, query: str) -> list:
     pattern = f"%{query}%"
     result = await db.execute(
         select(Patient).where(
             Patient.active == True,
+            Patient.clinic_id == clinic_id,
             or_(
                 Patient.first_name.ilike(pattern),
                 Patient.last_name.ilike(pattern),
@@ -930,8 +983,8 @@ async def search_patients(db: AsyncSession, query: str) -> list:
     return [_patient_to_dict(p) for p in result.scalars().all()]
 
 
-async def list_patients(db: AsyncSession) -> list:
-    result = await db.execute(select(Patient).where(Patient.active == True).order_by(Patient.last_name, Patient.first_name))
+async def list_patients(db: AsyncSession, clinic_id: str) -> list:
+    result = await db.execute(select(Patient).where(Patient.active == True, Patient.clinic_id == clinic_id).order_by(Patient.last_name, Patient.first_name))
     return [_patient_to_dict(p) for p in result.scalars().all()]
 
 
@@ -953,9 +1006,10 @@ def _appointment_to_dict(a: Appointment) -> dict:
     }
 
 
-async def create_appointment(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_appointment(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     appt = Appointment(
         appointment_id=_new_id(),
+        clinic_id=clinic_id,
         patient_id=data["patient_id"],
         provider_id=data.get("provider_id"),
         appointment_date=data["appointment_date"],
@@ -971,8 +1025,9 @@ async def create_appointment(db: AsyncSession, actor_id: str, data: dict) -> dic
     return _appointment_to_dict(appt)
 
 
-async def update_appointment(db: AsyncSession, appointment_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    appt = await db.get(Appointment, appointment_id)
+async def update_appointment(db: AsyncSession, clinic_id: str, appointment_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id, Appointment.clinic_id == clinic_id))
+    appt = result.scalar_one_or_none()
     if not appt:
         return None
     for key, value in updates.items():
@@ -984,8 +1039,9 @@ async def update_appointment(db: AsyncSession, appointment_id: str, actor_id: st
     return _appointment_to_dict(appt)
 
 
-async def cancel_appointment(db: AsyncSession, appointment_id: str, actor_id: str, reason: Optional[str] = None) -> Optional[dict]:
-    appt = await db.get(Appointment, appointment_id)
+async def cancel_appointment(db: AsyncSession, clinic_id: str, appointment_id: str, actor_id: str, reason: Optional[str] = None) -> Optional[dict]:
+    result = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id, Appointment.clinic_id == clinic_id))
+    appt = result.scalar_one_or_none()
     if not appt:
         return None
     appt.status = "cancelled"
@@ -996,8 +1052,9 @@ async def cancel_appointment(db: AsyncSession, appointment_id: str, actor_id: st
     return _appointment_to_dict(appt)
 
 
-async def mark_no_show(db: AsyncSession, appointment_id: str, actor_id: str) -> Optional[dict]:
-    appt = await db.get(Appointment, appointment_id)
+async def mark_no_show(db: AsyncSession, clinic_id: str, appointment_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Appointment).where(Appointment.appointment_id == appointment_id, Appointment.clinic_id == clinic_id))
+    appt = result.scalar_one_or_none()
     if not appt:
         return None
     appt.status = "no_show"
@@ -1007,8 +1064,8 @@ async def mark_no_show(db: AsyncSession, appointment_id: str, actor_id: str) -> 
     return _appointment_to_dict(appt)
 
 
-async def list_appointments(db: AsyncSession, date: Optional[str] = None, patient_id: Optional[str] = None, provider_id: Optional[str] = None) -> list:
-    query = select(Appointment)
+async def list_appointments(db: AsyncSession, clinic_id: str, date: Optional[str] = None, patient_id: Optional[str] = None, provider_id: Optional[str] = None) -> list:
+    query = select(Appointment).where(Appointment.clinic_id == clinic_id)
     if date:
         query = query.where(Appointment.appointment_date == date)
     if patient_id:
@@ -1039,9 +1096,10 @@ def _note_to_dict(n: ClinicalNote) -> dict:
     }
 
 
-async def create_note(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_note(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     note = ClinicalNote(
         note_id=_new_id(),
+        clinic_id=clinic_id,
         visit_id=data["visit_id"],
         patient_id=data.get("patient_id"),
         provider_id=data.get("provider_id"),
@@ -1057,8 +1115,9 @@ async def create_note(db: AsyncSession, actor_id: str, data: dict) -> dict:
     return _note_to_dict(note)
 
 
-async def update_note(db: AsyncSession, note_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    note = await db.get(ClinicalNote, note_id)
+async def update_note(db: AsyncSession, clinic_id: str, note_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(ClinicalNote).where(ClinicalNote.note_id == note_id, ClinicalNote.clinic_id == clinic_id))
+    note = result.scalar_one_or_none()
     if not note:
         return None
     for key, value in updates.items():
@@ -1070,8 +1129,9 @@ async def update_note(db: AsyncSession, note_id: str, actor_id: str, updates: di
     return _note_to_dict(note)
 
 
-async def sign_note(db: AsyncSession, note_id: str, actor_id: str) -> Optional[dict]:
-    note = await db.get(ClinicalNote, note_id)
+async def sign_note(db: AsyncSession, clinic_id: str, note_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(ClinicalNote).where(ClinicalNote.note_id == note_id, ClinicalNote.clinic_id == clinic_id))
+    note = result.scalar_one_or_none()
     if not note:
         return None
     now = _utc_now()
@@ -1082,7 +1142,8 @@ async def sign_note(db: AsyncSession, note_id: str, actor_id: str) -> Optional[d
 
     # Update visit note_status
     if note.visit_id:
-        visit = await db.get(Visit, note.visit_id)
+        visit_result = await db.execute(select(Visit).where(Visit.visit_id == note.visit_id, Visit.clinic_id == clinic_id))
+        visit = visit_result.scalar_one_or_none()
         if visit:
             visit.note_status = "signed"
 
@@ -1091,8 +1152,8 @@ async def sign_note(db: AsyncSession, note_id: str, actor_id: str) -> Optional[d
     return _note_to_dict(note)
 
 
-async def list_notes(db: AsyncSession, visit_id: Optional[str] = None, patient_id: Optional[str] = None) -> list:
-    query = select(ClinicalNote)
+async def list_notes(db: AsyncSession, clinic_id: str, visit_id: Optional[str] = None, patient_id: Optional[str] = None) -> list:
+    query = select(ClinicalNote).where(ClinicalNote.clinic_id == clinic_id)
     if visit_id:
         query = query.where(ClinicalNote.visit_id == visit_id)
     if patient_id:
@@ -1126,9 +1187,10 @@ def _policy_to_dict(p: InsurancePolicy) -> dict:
     }
 
 
-async def create_insurance_policy(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_insurance_policy(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     policy = InsurancePolicy(
         policy_id=_new_id(),
+        clinic_id=clinic_id,
         patient_id=data["patient_id"],
         carrier_name=data["carrier_name"],
         member_id=data.get("member_id"),
@@ -1147,8 +1209,9 @@ async def create_insurance_policy(db: AsyncSession, actor_id: str, data: dict) -
     return _policy_to_dict(policy)
 
 
-async def update_insurance_policy(db: AsyncSession, policy_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    policy = await db.get(InsurancePolicy, policy_id)
+async def update_insurance_policy(db: AsyncSession, clinic_id: str, policy_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(InsurancePolicy).where(InsurancePolicy.policy_id == policy_id, InsurancePolicy.clinic_id == clinic_id))
+    policy = result.scalar_one_or_none()
     if not policy:
         return None
     for key, value in updates.items():
@@ -1163,9 +1226,9 @@ async def update_insurance_policy(db: AsyncSession, policy_id: str, actor_id: st
     return _policy_to_dict(policy)
 
 
-async def list_insurance_policies(db: AsyncSession, patient_id: str) -> list:
+async def list_insurance_policies(db: AsyncSession, clinic_id: str, patient_id: str) -> list:
     result = await db.execute(
-        select(InsurancePolicy).where(InsurancePolicy.patient_id == patient_id).order_by(InsurancePolicy.priority)
+        select(InsurancePolicy).where(InsurancePolicy.patient_id == patient_id, InsurancePolicy.clinic_id == clinic_id).order_by(InsurancePolicy.priority)
     )
     return [_policy_to_dict(p) for p in result.scalars().all()]
 
@@ -1191,18 +1254,20 @@ def _document_to_dict(d: Document) -> dict:
     }
 
 
-async def create_document(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_document(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     # Auto-increment sequence_number per patient + document_type
     result = await db.execute(
         select(func.max(Document.sequence_number)).where(
             Document.patient_id == data["patient_id"],
             Document.document_type == data["document_type"],
+            Document.clinic_id == clinic_id,
         )
     )
     max_seq = result.scalar() or 0
 
     doc = Document(
         document_id=_new_id(),
+        clinic_id=clinic_id,
         patient_id=data["patient_id"],
         visit_id=data.get("visit_id"),
         document_type=data["document_type"],
@@ -1219,8 +1284,9 @@ async def create_document(db: AsyncSession, actor_id: str, data: dict) -> dict:
     return _document_to_dict(doc)
 
 
-async def update_document(db: AsyncSession, document_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    doc = await db.get(Document, document_id)
+async def update_document(db: AsyncSession, clinic_id: str, document_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Document).where(Document.document_id == document_id, Document.clinic_id == clinic_id))
+    doc = result.scalar_one_or_none()
     if not doc:
         return None
     for key, value in updates.items():
@@ -1235,8 +1301,9 @@ async def update_document(db: AsyncSession, document_id: str, actor_id: str, upd
     return _document_to_dict(doc)
 
 
-async def sign_document(db: AsyncSession, document_id: str, actor_id: str) -> Optional[dict]:
-    doc = await db.get(Document, document_id)
+async def sign_document(db: AsyncSession, clinic_id: str, document_id: str, actor_id: str) -> Optional[dict]:
+    result = await db.execute(select(Document).where(Document.document_id == document_id, Document.clinic_id == clinic_id))
+    doc = result.scalar_one_or_none()
     if not doc:
         return None
     now = _utc_now()
@@ -1249,8 +1316,8 @@ async def sign_document(db: AsyncSession, document_id: str, actor_id: str) -> Op
     return _document_to_dict(doc)
 
 
-async def list_documents(db: AsyncSession, patient_id: str, document_type: Optional[str] = None) -> list:
-    query = select(Document).where(Document.patient_id == patient_id)
+async def list_documents(db: AsyncSession, clinic_id: str, patient_id: str, document_type: Optional[str] = None) -> list:
+    query = select(Document).where(Document.patient_id == patient_id, Document.clinic_id == clinic_id)
     if document_type:
         query = query.where(Document.document_type == document_type)
     query = query.order_by(Document.document_type, Document.sequence_number)
@@ -1279,9 +1346,10 @@ def _task_to_dict(t: Task) -> dict:
     }
 
 
-async def create_task(db: AsyncSession, actor_id: str, data: dict) -> dict:
+async def create_task(db: AsyncSession, clinic_id: str, actor_id: str, data: dict) -> dict:
     task = Task(
         task_id=_new_id(),
+        clinic_id=clinic_id,
         patient_id=data.get("patient_id"),
         visit_id=data.get("visit_id"),
         claim_id=data.get("claim_id"),
@@ -1300,8 +1368,9 @@ async def create_task(db: AsyncSession, actor_id: str, data: dict) -> dict:
     return _task_to_dict(task)
 
 
-async def update_task(db: AsyncSession, task_id: str, actor_id: str, updates: dict) -> Optional[dict]:
-    task = await db.get(Task, task_id)
+async def update_task(db: AsyncSession, clinic_id: str, task_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+    result = await db.execute(select(Task).where(Task.task_id == task_id, Task.clinic_id == clinic_id))
+    task = result.scalar_one_or_none()
     if not task:
         return None
     for key, value in updates.items():
@@ -1316,11 +1385,11 @@ async def update_task(db: AsyncSession, task_id: str, actor_id: str, updates: di
     return _task_to_dict(task)
 
 
-async def list_tasks(db: AsyncSession, patient_id: Optional[str] = None,
+async def list_tasks(db: AsyncSession, clinic_id: str, patient_id: Optional[str] = None,
                      assignee_id: Optional[str] = None,
                      status: Optional[str] = None,
                      task_type: Optional[str] = None) -> list:
-    query = select(Task)
+    query = select(Task).where(Task.clinic_id == clinic_id)
     if patient_id:
         query = query.where(Task.patient_id == patient_id)
     if assignee_id:
@@ -1338,6 +1407,7 @@ async def list_tasks(db: AsyncSession, patient_id: Optional[str] = None,
 
 async def add_treatment(
     db: AsyncSession,
+    clinic_id: str,
     visit_id: str,
     modality: str,
     actor_id: str,
@@ -1347,15 +1417,16 @@ async def add_treatment(
 ) -> dict:
     """Add a treatment modality to a visit."""
     # Verify visit exists and is active
-    visit_result = await db.execute(select(Visit).where(Visit.visit_id == visit_id))
+    visit_result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
     visit = visit_result.scalar_one_or_none()
     if not visit:
         raise ValueError(f"Visit {visit_id} not found")
     if visit.status not in ("checked_in", "in_service", "service_completed"):
         raise ValueError(f"Cannot add treatment to visit with status {visit.status}")
-    
+
     treatment = VisitTreatment(
         treatment_id=_new_id(),
+        clinic_id=clinic_id,
         visit_id=visit_id,
         modality=modality,
         therapist_id=therapist_id or actor_id,
@@ -1366,7 +1437,7 @@ async def add_treatment(
         updated_at=_utc_now(),
     )
     db.add(treatment)
-    
+
     await _append_event(db, "TREATMENT_ADDED", actor_id, {
         "treatment_id": treatment.treatment_id,
         "visit_id": visit_id,
@@ -1374,24 +1445,25 @@ async def add_treatment(
         "therapist_id": therapist_id,
         "duration_minutes": duration_minutes,
     })
-    
+
     await db.commit()
     return _treatment_to_dict(treatment)
 
 
 async def update_treatment(
     db: AsyncSession,
+    clinic_id: str,
     treatment_id: str,
     actor_id: str,
     duration_minutes: Optional[int] = None,
     notes: Optional[str] = None
 ) -> dict:
     """Update treatment duration and notes."""
-    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
+    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id, VisitTreatment.clinic_id == clinic_id))
     treatment = result.scalar_one_or_none()
     if not treatment:
         raise ValueError(f"Treatment {treatment_id} not found")
-    
+
     updates = {}
     if duration_minutes is not None:
         treatment.duration_minutes = duration_minutes
@@ -1399,64 +1471,67 @@ async def update_treatment(
     if notes is not None:
         treatment.notes = notes
         updates["notes"] = notes
-    
+
     treatment.updated_at = _utc_now()
-    
+
     await _append_event(db, "TREATMENT_UPDATED", actor_id, {
         "treatment_id": treatment_id,
         "updates": updates,
     })
-    
+
     await db.commit()
     return _treatment_to_dict(treatment)
 
 
 async def delete_treatment(
     db: AsyncSession,
+    clinic_id: str,
     treatment_id: str,
     actor_id: str
 ) -> dict:
     """Soft delete a treatment."""
-    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
+    result = await db.execute(select(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id, VisitTreatment.clinic_id == clinic_id))
     treatment = result.scalar_one_or_none()
     if not treatment:
         raise ValueError(f"Treatment {treatment_id} not found")
-    
+
     await _append_event(db, "TREATMENT_DELETED", actor_id, {
         "treatment_id": treatment_id,
         "visit_id": treatment.visit_id,
     })
-    
+
     await db.execute(delete(VisitTreatment).where(VisitTreatment.treatment_id == treatment_id))
     await db.commit()
-    
+
     return {"deleted": True, "treatment_id": treatment_id}
 
 
-async def list_visit_treatments(db: AsyncSession, visit_id: str) -> list:
+async def list_visit_treatments(db: AsyncSession, clinic_id: str, visit_id: str) -> list:
     """List all treatments for a visit."""
     result = await db.execute(
         select(VisitTreatment)
-        .where(VisitTreatment.visit_id == visit_id)
+        .where(VisitTreatment.visit_id == visit_id, VisitTreatment.clinic_id == clinic_id)
         .order_by(VisitTreatment.started_at)
     )
     treatments = result.scalars().all()
-    
+
     # Enrich with therapist names
     enriched = []
     for t in treatments:
         t_dict = _treatment_to_dict(t)
         if t.therapist_id:
-            staff = await db.get(Staff, t.therapist_id)
+            staff_result = await db.execute(select(Staff).where(Staff.staff_id == t.therapist_id, Staff.clinic_id == clinic_id))
+            staff = staff_result.scalar_one_or_none()
             if staff:
                 t_dict["therapist_name"] = staff.name
         enriched.append(t_dict)
-    
+
     return enriched
 
 
 async def list_treatment_records(
     db: AsyncSession,
+    clinic_id: str,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     patient_id: Optional[str] = None,
@@ -1464,8 +1539,8 @@ async def list_treatment_records(
     modality: Optional[str] = None
 ) -> list:
     """Query treatment records with filters."""
-    query = select(VisitTreatment).join(Visit, Visit.visit_id == VisitTreatment.visit_id)
-    
+    query = select(VisitTreatment).join(Visit, Visit.visit_id == VisitTreatment.visit_id).where(Visit.clinic_id == clinic_id)
+
     if date_from:
         # Parse string date to datetime for proper comparison
         from_dt = datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc)
@@ -1543,6 +1618,7 @@ def _modality_to_col(modality: str) -> str:
 
 async def list_visits_with_treatments(
     db: AsyncSession,
+    clinic_id: str,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     patient_id: Optional[str] = None,
@@ -1551,7 +1627,7 @@ async def list_visits_with_treatments(
     """Return one record per visit with treatments organized by modality column (A/PT/CP/TN).
     Used for the 诊疗记录表 Treatment Records tab.
     """
-    query = select(Visit).order_by(Visit.check_in_time.desc())
+    query = select(Visit).where(Visit.clinic_id == clinic_id).order_by(Visit.check_in_time.desc())
     if date_from:
         query = query.where(Visit.check_in_time >= date_from)
     if date_to:
@@ -1562,15 +1638,18 @@ async def list_visits_with_treatments(
     visits = (await db.execute(query)).scalars().all()
 
     # Bulk-load lookup maps (avoid N+1)
-    staff_map = {s.staff_id: s.name for s in (await db.execute(select(Staff))).scalars().all()}
-    patient_map = {p.patient_id: f"{p.first_name} {p.last_name}" for p in (await db.execute(select(Patient))).scalars().all()}
-    room_map = {r.room_id: r.name for r in (await db.execute(select(Room))).scalars().all()}
+    staff_query = select(Staff).where(Staff.clinic_id == clinic_id)
+    staff_map = {s.staff_id: s.name for s in (await db.execute(staff_query)).scalars().all()}
+    patient_query = select(Patient).where(Patient.clinic_id == clinic_id)
+    patient_map = {p.patient_id: f"{p.first_name} {p.last_name}" for p in (await db.execute(patient_query)).scalars().all()}
+    room_query = select(Room).where(Room.clinic_id == clinic_id)
+    room_map = {r.room_id: r.name for r in (await db.execute(room_query)).scalars().all()}
 
     # Bulk-load all treatments for these visits
     visit_ids = [v.visit_id for v in visits]
     if visit_ids:
         tx_result = await db.execute(
-            select(VisitTreatment).where(VisitTreatment.visit_id.in_(visit_ids))
+            select(VisitTreatment).where(VisitTreatment.visit_id.in_(visit_ids), VisitTreatment.clinic_id == clinic_id)
         )
         all_treatments = tx_result.scalars().all()
     else:
@@ -1726,11 +1805,12 @@ async def get_staff_service_types(db: AsyncSession, staff_id: str) -> list[dict]
 
 
 async def set_staff_service_types(
-    db: AsyncSession, staff_id: str, service_type_ids: list[str], actor_id: str
+    db: AsyncSession, clinic_id: str, staff_id: str, service_type_ids: list[str], actor_id: str
 ) -> dict:
     """Replace-all: delete existing qualifications and insert new ones."""
     # Verify staff exists
-    member = await db.get(Staff, staff_id)
+    staff_result = await db.execute(select(Staff).where(Staff.staff_id == staff_id, Staff.clinic_id == clinic_id))
+    member = staff_result.scalar_one_or_none()
     if not member:
         raise ValueError(f"Staff {staff_id} not found")
 

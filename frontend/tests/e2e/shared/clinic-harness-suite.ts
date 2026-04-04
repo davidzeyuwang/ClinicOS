@@ -14,6 +14,7 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
 import {
   apiGet,
   apiPost,
+  authHeaders,
   expectToast,
   openTab,
   seedAppointment,
@@ -248,9 +249,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await page.locator("#pt-search").press("Enter");
       await page.getByRole("button", { name: /view/i }).first().click();
 
-      await expect(page.locator(".modal-box")).toContainText("Visit History");
-      await expect(page.locator(".modal-box")).toContainText("$30.00");
-      await expect(page.locator(".modal-box")).toContainText("✓");
+      await expect(page.locator("#modal .modal-box")).toContainText("Visit History");
+      await expect(page.locator("#modal .modal-box")).toContainText("$30.00");
+      await expect(page.locator("#modal .modal-box")).toContainText("✓");
     });
 
     // ── 6. Patient detail has Sign Sheet PDF link ──────────────────────────────
@@ -458,7 +459,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await expect(visitRow).toContainText("in_service");
       await visitRow.getByRole("button", { name: /tx/i }).click();
 
-      await expect(page.locator("#modal, .modal-bg")).toBeVisible();
+      await expect(page.locator("#modal")).toBeVisible();
       await page.locator("#trt-mod").selectOption("E-stim");
       await page.locator("#trt-dur").fill("20");
       await page.getByRole("button", { name: /add treatment/i }).click();
@@ -597,7 +598,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
         phone: "555-0001",
       });
 
-      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`);
+      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`, {
+        headers: authHeaders(),
+      });
       expect(resp.ok()).toBeTruthy();
       expect(resp.headers()["content-type"]).toContain("application/pdf");
 
@@ -615,7 +618,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
         phone: "555-0002",
       });
 
-      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`);
+      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`, {
+        headers: authHeaders(),
+      });
       const body = await resp.body();
       const text = body.toString("latin1");
 
@@ -695,7 +700,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
         actor_id: "desk",
       });
 
-      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`);
+      const resp = await request.get(`/prototype/patients/${patient.patient_id}/sign-sheet.pdf`, {
+        headers: authHeaders(),
+      });
       expect(resp.ok()).toBeTruthy();
       const body = await resp.body();
       expect(body.slice(0, 4).toString()).toBe("%PDF");
@@ -789,7 +796,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await expectToast(page, "Checked out");
       await page.waitForTimeout(500);
 
-      const pdfResp = await request.get(`/prototype/patients/${patientId}/sign-sheet.pdf`);
+      const pdfResp = await request.get(`/prototype/patients/${patientId}/sign-sheet.pdf`, {
+        headers: authHeaders(),
+      });
       expect(pdfResp.ok()).toBeTruthy();
       const pdfBody = await pdfResp.body();
       expect(pdfBody.slice(0, 4).toString()).toBe("%PDF");

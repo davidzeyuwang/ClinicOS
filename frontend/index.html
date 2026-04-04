@@ -63,6 +63,9 @@
     .room-card-out_of_service { border-left-color: #ef4444; }
     .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: flex; align-items: center; justify-content: center; }
     .modal-box { background: white; border-radius: 12px; padding: 24px; max-width: 560px; width: 95%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
+    #login-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; display: none; align-items: center; justify-content: center; }
+    #login-modal:not(.hidden) { display: flex; }
+    #login-modal .login-box { background: white; border-radius: 12px; padding: 24px; max-width: 420px; width: 95%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -77,6 +80,8 @@
       <div class="flex items-center gap-4">
         <span class="text-sm text-gray-500" id="clock"></span>
         <span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700" id="room-summary"></span>
+        <span class="text-sm text-gray-600" id="user-display" style="display:none"></span>
+        <button onclick="doLogout()" data-testid="logout-btn" id="logout-btn" class="btn btn-outline btn-xs" style="display:none">Sign Out</button>
       </div>
     </div>
     <div class="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
@@ -313,15 +318,46 @@
 </div>
 <div id="toast" data-testid="toast" class="toast hidden"></div>
 
+<!-- ==================== LOGIN MODAL ==================== -->
+<div id="login-modal" class="hidden">
+  <div class="login-box">
+    <div class="flex items-center gap-3 mb-6">
+      <span class="text-3xl">🏥</span>
+      <div>
+        <h2 class="text-xl font-bold text-gray-800">ClinicOS</h2>
+        <p class="text-sm text-gray-500">Sign in to continue</p>
+      </div>
+    </div>
+    <div id="login-error" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm"></div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+        <input id="login-username" data-testid="login-username" type="text" class="input" placeholder="user@clinic.local" autocomplete="username" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="login-password" data-testid="login-password" type="password" class="input" placeholder="Password" autocomplete="current-password" />
+      </div>
+      <button onclick="doLogin()" data-testid="login-submit" class="btn btn-primary w-full" style="width:100%">Sign In</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Auto-detect API base: works whether served from same host or file://
 const API = (location.protocol === 'file:' ? 'http://127.0.0.1:8000' : window.location.origin) + '/prototype';
 let rooms=[], staff=[], visits=[], serviceTypes=[], tab='ops';
 
+function getToken(){return localStorage.getItem('clinicos_token');}
+function setToken(t){localStorage.setItem('clinicos_token',t);}
+function clearToken(){localStorage.removeItem('clinicos_token');}
+
 async function api(m,p,b){
   const o={method:m,headers:{'Content-Type':'application/json'}};
+  const tok=getToken();if(tok)o.headers['Authorization']='Bearer '+tok;
   if(b)o.body=JSON.stringify(b);
   const r=await fetch(API+p,o);
+  if(r.status===401){showLoginModal();throw new Error('Session expired — please sign in again');}
   if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));throw new Error(e.detail||'Error');}
   if(r.status===204||r.headers.get('content-length')==='0')return null;
   return r.json();
@@ -331,6 +367,67 @@ const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH'
 let _toastTimer=null;function toast(m,t='ok'){const e=document.getElementById('toast');if(_toastTimer)clearTimeout(_toastTimer);e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');_toastTimer=setTimeout(()=>e.classList.add('hidden'),3000);}
 function openModal(t,h){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=h;document.getElementById('modal').classList.remove('hidden');}
 function closeModal(){document.getElementById('modal').classList.add('hidden');}
+
+function showLoginModal(){
+  document.getElementById('login-modal').classList.remove('hidden');
+  document.getElementById('app').classList.add('opacity-25','pointer-events-none');
+  setTimeout(()=>document.getElementById('login-username').focus(),50);
+}
+function hideLoginModal(){
+  document.getElementById('login-modal').classList.add('hidden');
+  document.getElementById('app').classList.remove('opacity-25','pointer-events-none');
+}
+async function doLogin(){
+  const u=document.getElementById('login-username').value.trim();
+  const p=document.getElementById('login-password').value;
+  const errEl=document.getElementById('login-error');
+  errEl.classList.add('hidden');
+  if(!u||!p){errEl.textContent='Username and password required.';errEl.classList.remove('hidden');return;}
+  try{
+    const r=await fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(!r.ok){const e=await r.json().catch(()=>({detail:'Login failed'}));errEl.textContent=e.detail||'Invalid credentials';errEl.classList.remove('hidden');return;}
+    const data=await r.json();
+    setToken(data.access_token);
+    localStorage.setItem('clinicos_user',JSON.stringify({user_id:data.user_id,clinic_id:data.clinic_id,role:data.role,display_name:data.display_name}));
+    hideLoginModal();
+    applyRoleVisibility(data.role);
+    document.getElementById('user-display').textContent=data.display_name||data.user_id;
+    document.getElementById('user-display').style.display='';
+    document.getElementById('logout-btn').style.display='';
+    refreshOps();
+  }catch(e){errEl.textContent=e.message||'Login error';errEl.classList.remove('hidden');}
+}
+function doLogout(){
+  clearToken();localStorage.removeItem('clinicos_user');
+  document.getElementById('user-display').style.display='none';
+  document.getElementById('logout-btn').style.display='none';
+  showLoginModal();
+}
+function applyRoleVisibility(role){
+  // doctor: hide Admin tab; frontdesk: hide Admin tab; admin: show all
+  const adminTab=document.getElementById('tab-admin');
+  if(adminTab)adminTab.style.display=(role==='admin'?'':'none');
+}
+async function initAuth(){
+  const tok=getToken();
+  if(!tok){showLoginModal();return;}
+  // Verify token is still valid
+  try{
+    const r=await fetch(API+'/auth/me',{headers:{'Authorization':'Bearer '+tok}});
+    if(!r.ok){clearToken();showLoginModal();return;}
+    const user=await r.json();
+    localStorage.setItem('clinicos_user',JSON.stringify(user));
+    applyRoleVisibility(user.role);
+    document.getElementById('user-display').textContent=user.display_name||user.username;
+    document.getElementById('user-display').style.display='';
+    document.getElementById('logout-btn').style.display='';
+    refreshOps();
+  }catch{clearToken();showLoginModal();}
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!document.getElementById('login-modal').classList.contains('hidden'))doLogin();
+});
+
 
 const TABS=['ops','patients','appointments','treatments','tasks','admin','report','events'];
 function switchTab(t){
@@ -1095,7 +1192,7 @@ async function loadEvents(){
 }
 
 setInterval(()=>{if(tab==='ops')refreshOps();},5000);
-refreshOps();
+initAuth();
 </script>
 </body>
 </html>

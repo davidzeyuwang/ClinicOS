@@ -1,13 +1,12 @@
 /**
- * Local E2E test file — thin wrapper around the two shared suites.
+ * Local E2E test file — thin wrapper around the shared suites.
  *
  * Registers:
  *   1. clinic-harness-suite  — 31 focused UI tests (resetLocalData before each)
  *   2. clinic-smoke-suite    — 11-step multi-patient smoke scenario
+ *   3. auth-suite            — 14 auth/RBAC/multi-tenancy tests
  *
- * Both suites run against the local SQLite dev server.
- * The prod counterpart (prod-smoke.spec.ts) registers the same suites
- * via prod-specific adapters.
+ * All suites run against the local SQLite dev server.
  */
 
 import { expect, type APIRequestContext } from "@playwright/test";
@@ -15,6 +14,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import {
   apiGet,
   apiPost,
+  authHeaders,
   resetLocalData,
 } from "./helpers";
 import {
@@ -26,6 +26,10 @@ import {
   type PatientSpec,
   type SmokeEnv,
 } from "./shared/clinic-smoke-suite";
+import {
+  registerAuthTests,
+  type AuthEnv,
+} from "./shared/auth-suite";
 
 // ── Local harness env ─────────────────────────────────────────────────────────
 
@@ -165,3 +169,41 @@ const _localSmokeEnv: SmokeEnv = {
 };
 
 registerSmokeTests(_localSmokeEnv);
+
+// ── Local auth env ────────────────────────────────────────────────────────────
+//
+// Tests login/JWT, RBAC, clinic registration, and multi-tenancy isolation
+// against the local SQLite dev server.  Uses resetLocalData for clean state.
+// The /test/create-user endpoint is available locally for RBAC role testing.
+
+const _localAuthEnv: AuthEnv = {
+  suiteName: "Auth — local (SQLite)",
+  adminUsername: "admin@test.clinicos.local",
+  adminPassword: "test1234",
+  runSuffix: Date.now().toString().slice(-6),
+
+  async setup(request: APIRequestContext) {
+    await resetLocalData(request);
+  },
+
+  async teardown(_request: APIRequestContext, _created) {
+    // Local: next resetLocalData will clean everything up
+  },
+
+  async createFrontdeskUser(request: APIRequestContext, suffix: string) {
+    const username = `frontdesk-${suffix}@local.test`;
+    const r = await request.post("/prototype/test/create-user", {
+      data: { username, password: "front123!", role: "frontdesk" },
+      headers: { "x-test-token": "test-admin-secret-fixed-token" },
+    });
+    if (!r.ok()) return null;
+    const lr = await request.post("/prototype/auth/login", {
+      data: { username, password: "front123!" },
+    });
+    if (!lr.ok()) return null;
+    const { access_token } = await lr.json();
+    return { Authorization: `Bearer ${access_token}` };
+  },
+};
+
+registerAuthTests(_localAuthEnv);

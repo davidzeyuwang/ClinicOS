@@ -23,6 +23,34 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
+# ==================== CLINIC + USER (Auth §11.10) ====================
+
+class Clinic(Base):
+    """Clinic/tenant master record."""
+    __tablename__ = "clinics"
+
+    clinic_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), default="America/New_York")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class User(Base):
+    """Application user with role-based access."""
+    __tablename__ = "users"
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(256), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), default="")
+    role: Mapped[str] = mapped_column(String(32), nullable=False)  # admin | frontdesk | doctor
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
 # ==================== EVENT LOG (ADR-001) ====================
 
 class EventLog(Base):
@@ -37,6 +65,7 @@ class EventLog(Base):
     idempotency_key: Mapped[str] = mapped_column(String(36), unique=True, default=_new_id)
     schema_version: Mapped[int] = mapped_column(Integer, default=1)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
 
 # ==================== ROOM / RESOURCE (§11.3) ====================
@@ -46,6 +75,7 @@ class Room(Base):
     __tablename__ = "rooms"
 
     room_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     code: Mapped[str] = mapped_column(String(16), nullable=False)
     room_type: Mapped[str] = mapped_column(String(32), default="treatment")
@@ -63,6 +93,7 @@ class Staff(Base):
     __tablename__ = "staff"
 
     staff_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     license_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -97,6 +128,7 @@ class Patient(Base):
     __tablename__ = "patients"
 
     patient_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     first_name: Mapped[str] = mapped_column(String(128), nullable=False)
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
     date_of_birth: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # YYYY-MM-DD
@@ -104,7 +136,7 @@ class Patient(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    mrn: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)  # Medical Record Number
+    mrn: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # Medical Record Number
     intake_status: Mapped[str] = mapped_column(String(32), default="pending")  # pending | completed
     consent_status: Mapped[str] = mapped_column(String(32), default="pending")  # pending | signed
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -120,6 +152,7 @@ class Appointment(Base):
     __tablename__ = "appointments"
 
     appointment_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     patient_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     provider_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # staff_id
     appointment_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD
@@ -139,6 +172,7 @@ class Visit(Base):
     __tablename__ = "visits"
 
     visit_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     patient_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     appointment_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     patient_name: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -168,6 +202,7 @@ class VisitTreatment(Base):
     __tablename__ = "visit_treatments"
 
     treatment_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     visit_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     modality: Mapped[str] = mapped_column(String(64), nullable=False)  # PT, OT, Eval, E-stim, Massage, Cupping, etc.
     therapist_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # Can differ from visit.staff_id
@@ -186,6 +221,7 @@ class ClinicalNote(Base):
     __tablename__ = "clinical_notes"
 
     note_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     visit_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     patient_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     provider_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
@@ -206,6 +242,7 @@ class InsurancePolicy(Base):
     __tablename__ = "insurance_policies"
 
     policy_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     patient_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     carrier_name: Mapped[str] = mapped_column(String(128), nullable=False)
     member_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -231,6 +268,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     document_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     patient_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     visit_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     document_type: Mapped[str] = mapped_column(String(64), nullable=False)  # intake | consent | visitsign | insurance_card | attachment
@@ -253,6 +291,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     patient_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     visit_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     claim_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
@@ -275,6 +314,7 @@ class DailyReport(Base):
     __tablename__ = "daily_reports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
     report_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     total_check_ins: Mapped[int] = mapped_column(Integer, default=0)
     total_check_outs: Mapped[int] = mapped_column(Integer, default=0)

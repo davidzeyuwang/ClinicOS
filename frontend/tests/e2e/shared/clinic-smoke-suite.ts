@@ -12,6 +12,7 @@
  */
 
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { authHeaders } from "../helpers";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -111,18 +112,18 @@ export async function runPatientWorkflow(page: Page, pt: PatientSpec, roomCode: 
   const additionalTreatments = pt.treatments.slice(1);
   if (additionalTreatments.length > 0) {
     await visitRow.getByRole("button", { name: /tx/i }).click();
-    await expect(page.locator(".modal-bg")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#modal")).toBeVisible({ timeout: 10_000 });
 
     for (const tx of additionalTreatments) {
       await page.locator("#trt-mod").selectOption(tx.modality);
       await page.locator("#trt-dur").fill(tx.duration);
       await page.getByRole("button", { name: /add treatment/i }).click();
       await toastMsg(page, "Treatment added");
-      await expect(page.locator(".modal-bg")).toContainText(tx.modality, { timeout: 15_000 });
+      await expect(page.locator("#modal")).toContainText(tx.modality, { timeout: 15_000 });
     }
 
     await page.evaluate(() => (window as any).closeModal());
-    await expect(page.locator(".modal-bg")).toBeHidden({ timeout: 8_000 });
+    await expect(page.locator("#modal")).toBeHidden({ timeout: 8_000 });
   }
 
   // End service — force-close any stale modal first
@@ -209,6 +210,7 @@ export function registerSmokeTests(env: SmokeEnv): void {
         // content is fully verified by DB assertions above.
         const pdfV2Resp = await page.request.get(
           `/prototype/patients/${pid0}/sign-sheet.pdf?visit_ids=${v2Id}`,
+          { headers: authHeaders() },
         );
         expect(pdfV2Resp.ok(), "selective PDF request failed").toBeTruthy();
         expect(pdfV2Resp.headers()["content-type"]).toContain("application/pdf");
@@ -220,6 +222,7 @@ export function registerSmokeTests(env: SmokeEnv): void {
         // 2-visit PDF must be larger than 1-visit selective PDF.
         const pdfAllResp = await page.request.get(
           `/prototype/patients/${pid0}/sign-sheet.pdf`,
+          { headers: authHeaders() },
         );
         expect(pdfAllResp.ok(), "full-history PDF request failed").toBeTruthy();
         const pdfAllBytes = await pdfAllResp.body();
@@ -299,6 +302,7 @@ export function registerSmokeTests(env: SmokeEnv): void {
 
           const pdfResp = await page.request.get(
             `/prototype/patients/${pid}/sign-sheet.pdf`,
+            { headers: authHeaders() },
           );
           expect(pdfResp.ok(), `PDF request failed for ${pt.full}`).toBeTruthy();
           expect(pdfResp.headers()["content-type"]).toContain("application/pdf");

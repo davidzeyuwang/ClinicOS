@@ -22,7 +22,9 @@
     "phase": 1,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_prototype_e2e.py tests/test_prd004_features.py -q",
     "ui_test": "npx playwright test --grep \"checkout collects|checkout modal has|walk-in flow|room occupied\"",
     "verify": "Full workflow: checkin → assign room → service → checkout with copay/WD/sign",
@@ -38,7 +40,9 @@
     "phase": 1,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_prototype_e2e.py tests/test_clinic_workflow_e2e.py -q",
     "ui_test": "npx playwright test --grep \"walk-in flow|checkout collects|in-service|refresh keeps\"",
     "verify": "POST /prototype/portal/checkin → POST /visits/{id}/start-service → visit status updates",
@@ -54,7 +58,9 @@
     "phase": 1,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-02"],
+    "depends_on": [
+      "ROADMAP-P1-02"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py tests/test_prd004_features.py -k 'pdf' -q",
     "ui_test": "npx playwright test --grep \"sign sheet PDF\"",
     "verify": "GET /patients/{id}/sign-sheet.pdf → PDF generated with visit history",
@@ -70,7 +76,9 @@
     "phase": 1,
     "owner": "backend-engineer",
     "priority": "P1",
-    "depends_on": ["ROADMAP-P1-02"],
+    "depends_on": [
+      "ROADMAP-P1-02"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_prd004_features.py -k 'daily_summary or copay_total' -q",
     "ui_test": "npx playwright test --grep \"daily summary|report tab\"",
     "verify": "POST /prototype/reports/daily/generate → report created with accurate totals",
@@ -102,7 +110,9 @@
     "phase": 4,
     "owner": "tester",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-04"],
+    "depends_on": [
+      "ROADMAP-P1-04"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py tests/test_prd004_features.py -q",
     "ui_test": "npx playwright test --grep \"sign sheet PDF|checkout\"",
     "verify": "Open checkout modal → verify PDF download button → click and verify PDF format is simplified",
@@ -116,7 +126,10 @@
     "phase": 4,
     "owner": "tester",
     "priority": "P0",
-    "depends_on": ["PRD005-P1-01", "ROADMAP-P1-03"],
+    "depends_on": [
+      "PRD005-P1-01",
+      "ROADMAP-P1-03"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py -q",
     "ui_test": "npx playwright test --grep \"treatment modality|treatment records tab\"",
     "verify": "Start service → click '+Tx' → add 2 treatments → edit duration → delete one → checkout shows remaining treatment",
@@ -130,7 +143,9 @@
     "phase": 4,
     "owner": "tester",
     "priority": "P1",
-    "depends_on": ["PRD005-P2-01"],
+    "depends_on": [
+      "PRD005-P2-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py -k 'treatment_records' -q",
     "ui_test": "npx playwright test --grep \"treatment records\"",
     "verify": "Navigate to Treatments tab → set date filter → verify treatments appear → staff filter works",
@@ -144,7 +159,9 @@
     "phase": 4,
     "owner": "tester",
     "priority": "P2",
-    "depends_on": ["PRD005-P3-01"],
+    "depends_on": [
+      "PRD005-P3-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py -q",
     "ui_test": "npx playwright test --grep \"sign sheet PDF\"",
     "verify": "Patient modal → check 2 visits → click 'Selected (2) PDF' → verify PDF contains only those 2 visits",
@@ -173,7 +190,9 @@
     "phase": 999,
     "owner": "backend-engineer",
     "priority": "P3",
-    "depends_on": ["M1-BE-01"],
+    "depends_on": [
+      "M1-BE-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'projection or room_board or staff_hours or daily_report' -q --tb=short",
@@ -188,7 +207,9 @@
     "phase": 999,
     "owner": "backend-engineer",
     "priority": "P3",
-    "depends_on": ["M1-BE-01"],
+    "depends_on": [
+      "M1-BE-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'auth or rbac or login' -q --tb=short",
@@ -203,7 +224,10 @@
     "phase": 999,
     "owner": "frontend-engineer",
     "priority": "P3",
-    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "depends_on": [
+      "M1-BE-01",
+      "M1-BE-02"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'admin_portal or room_crud or staff_crud' -q --tb=short",
@@ -218,7 +242,10 @@
     "phase": 999,
     "owner": "frontend-engineer",
     "priority": "P3",
-    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "depends_on": [
+      "M1-BE-01",
+      "M1-BE-02"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'visit_lifecycle or checkin or checkout' -q --tb=short",
@@ -233,7 +260,10 @@
     "phase": 999,
     "owner": "frontend-engineer",
     "priority": "P3",
-    "depends_on": ["M1-FE-01", "M1-FE-02"],
+    "depends_on": [
+      "M1-FE-01",
+      "M1-FE-02"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'dashboard or live_board' -q --tb=short",
@@ -248,7 +278,10 @@
     "phase": 999,
     "owner": "tester",
     "priority": "P3",
-    "depends_on": ["M1-BE-01", "M1-BE-02"],
+    "depends_on": [
+      "M1-BE-01",
+      "M1-BE-02"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/test_prototype_e2e.py -v --tb=short",
@@ -263,7 +296,9 @@
     "phase": 999,
     "owner": "compliance",
     "priority": "P3",
-    "depends_on": ["M1-BE-03"],
+    "depends_on": [
+      "M1-BE-03"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "cd backend && python -m pytest tests/ -k 'compliance or phi or audit' -q --tb=short",
@@ -278,7 +313,10 @@
     "phase": 999,
     "owner": "reviewer",
     "priority": "P3",
-    "depends_on": ["M1-QA-01", "M1-COMP-01"],
+    "depends_on": [
+      "M1-QA-01",
+      "M1-COMP-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "manual — reviewer produces review doc with zero BLOCKERs",
@@ -293,7 +331,9 @@
     "phase": 4,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-03"],
+    "depends_on": [
+      "ROADMAP-P1-03"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py -q",
     "ui_test": "npx playwright test --grep \"treatment modality|treatment records\"",
     "verify": "cd backend && python -m pytest tests/test_treatments.py -q",
@@ -309,7 +349,9 @@
     "phase": 4,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["PRD005-BE-01"],
+    "depends_on": [
+      "PRD005-BE-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py -q",
     "ui_test": "npx playwright test --grep \"treatment modality\"",
     "verify": "Open active visit → click Add Treatment → select E-stim → save → treatment appears in list",
@@ -324,7 +366,9 @@
     "phase": 4,
     "owner": "frontend-engineer",
     "priority": "P2",
-    "depends_on": ["PRD005-BE-01"],
+    "depends_on": [
+      "PRD005-BE-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py -k 'treatment_records' -q",
     "ui_test": "npx playwright test --grep \"treatment records\"",
     "verify": "Open Treatment Records tab → filter by date range → table shows matching treatments",
@@ -339,7 +383,10 @@
     "phase": 4,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["PRD005-BE-01", "PRD005-FE-01"],
+    "depends_on": [
+      "PRD005-BE-01",
+      "PRD005-FE-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_treatments.py tests/test_prd004_features.py -q",
     "ui_test": "npx playwright test --grep \"checkout\"",
     "verify": "Checkout patient → see treatment summary → check 'Generate PDF' → PDF downloaded with all treatments",
@@ -354,7 +401,9 @@
     "phase": 4,
     "owner": "frontend-engineer",
     "priority": "P2",
-    "depends_on": ["PRD005-BE-01"],
+    "depends_on": [
+      "PRD005-BE-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py -q",
     "ui_test": "npx playwright test --grep \"sign sheet PDF\"",
     "verify": "Open patient detail → check 2 visits → Download Selected PDF → PDF contains only those 2 visits",
@@ -385,7 +434,9 @@
     "phase": 5,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["NEXT-P1-01"],
+    "depends_on": [
+      "NEXT-P1-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_service_types.py -k 'qualification or staff_service' -q",
     "ui_test": "npx playwright test --grep \"staff dropdown filters by service type qualification\"",
     "verify": "Assign service type first → staff dropdown only includes staff linked to that service type",
@@ -401,7 +452,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN deductible_met DECIMAL(10,2); verify field shows in insurance modal",
@@ -416,7 +469,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN oop_max, oop_met; verify both fields in insurance modal",
@@ -431,7 +486,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN coverage_pct INTEGER; verify field in insurance modal with % display",
@@ -446,7 +503,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN preauth_required BOOLEAN; verify checkbox in insurance modal",
@@ -461,7 +520,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN referral_required BOOLEAN; verify checkbox in insurance modal",
@@ -476,7 +537,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN effective_date_start, effective_date_end DATE; verify both in insurance modal",
@@ -491,7 +554,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN plan_code VARCHAR(50); verify field in insurance modal",
@@ -506,7 +571,10 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01", "GAP-INS-03"],
+    "depends_on": [
+      "ROADMAP-P1-01",
+      "GAP-INS-03"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN coinsurance INTEGER; verify field in insurance modal",
@@ -521,7 +589,9 @@
     "phase": 5,
     "owner": "frontend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "Patient with 2 insurance policies → patient modal displays both in separate sections labeled Primary/Secondary",
@@ -536,7 +606,9 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P1",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "Add sessions_used_this_year to insurance_policies; verify increments on checkout and resets Jan 1",
@@ -551,7 +623,10 @@
     "phase": 5,
     "owner": "backend-engineer",
     "priority": "P1",
-    "depends_on": ["ROADMAP-P1-02", "ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-02",
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": "npx playwright test --grep \"checkout modal pre-fills copay amount from patient insurance\"",
     "verify": "Check-in patient with $35 insurance copay → checkout modal auto-fills $35 in copay field (editable)",
@@ -566,7 +641,9 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P2",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "ALTER TABLE insurance_policies ADD COLUMN rx_bin, rx_pcn, rx_grp VARCHAR(50); verify in insurance modal",
@@ -581,7 +658,9 @@
     "phase": 5,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["ROADMAP-P1-02"],
+    "depends_on": [
+      "ROADMAP-P1-02"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "Operations board groups rooms: '=== 16F ===' then 16F rooms, '=== 18F ===' then 18F rooms",
@@ -596,7 +675,9 @@
     "phase": 5,
     "owner": "pm",
     "priority": "P1",
-    "depends_on": ["PRD005-P3-01"],
+    "depends_on": [
+      "PRD005-P3-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "User confirms meaning of H/A/D/P → document in PRD → add columns to treatment records table",
@@ -611,7 +692,9 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["ROADMAP-P1-01"],
+    "depends_on": [
+      "ROADMAP-P1-01"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "Create eligibility_requests table; add Eligibility tab with New/Pending/Verified/Denied states; staff can mark status",
@@ -626,7 +709,10 @@
     "phase": 7,
     "owner": "backend-engineer",
     "priority": "P2",
-    "depends_on": ["ROADMAP-P1-01", "ROADMAP-P1-04"],
+    "depends_on": [
+      "ROADMAP-P1-01",
+      "ROADMAP-P1-04"
+    ],
     "api_test": null,
     "ui_test": null,
     "verify": "Create documents table with patient_id, doc_type, file_url, signed_date; add Documents tab; upload signed PDF → stores in Supabase storage",
@@ -643,12 +729,13 @@
     "owner": "backend-engineer",
     "priority": "P0",
     "depends_on": [],
-    "api_test": "cd backend && python -m pytest tests/test_auth.py -q",
-    "ui_test": "npx playwright test --grep \"login|logout|auth\"",
+    "api_test": "cd backend && python3 -m pytest tests/test_auth_rbac.py -k 'login or me or patients_endpoint' -q",
+    "ui_test": "npx playwright test --grep \"POST /auth/login|GET /auth/me|modal\"",
     "verify": "POST /auth/login with valid credentials → 200 + JWT token. POST /auth/login with wrong password → 401. GET /auth/me with token → user object.",
     "verify_manual": "Open login page → enter email/password → redirected to ops board. Invalid password → error message shown.",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "status": "done",
+    "completed": "2026-04-03"
   },
   {
     "id": "AUTH-00",
@@ -658,13 +745,16 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["MT-01"],
-    "api_test": "cd backend && python -m pytest tests/test_auth.py -k 'register' -q",
-    "ui_test": "npx playwright test --grep \"register|sign up|signup\"",
+    "depends_on": [
+      "MT-01"
+    ],
+    "api_test": "cd backend && python3 -m pytest tests/test_auth_rbac.py -k 'register_clinic' -q",
+    "ui_test": "npx playwright test --grep \"register-clinic\"",
     "verify": "POST /auth/register → clinic created + admin user created + JWT returned. Second POST with same email → 409 Conflict. Same slug → 409 Conflict.",
     "verify_manual": "Open /register → fill clinic name 'Sunrise PT', slug 'sunrise', email, password → submit → logged in as admin of new empty clinic",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "status": "done",
+    "completed": "2026-04-03"
   },
   {
     "id": "AUTH-02",
@@ -674,13 +764,16 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["AUTH-01"],
-    "api_test": "cd backend && python -m pytest tests/test_auth.py -k 'role' -q",
-    "ui_test": "npx playwright test --grep \"role|permission\"",
+    "depends_on": [
+      "AUTH-01"
+    ],
+    "api_test": "cd backend && python3 -m pytest tests/test_auth_rbac.py -k 'service_type or frontdesk' -q",
+    "ui_test": "npx playwright test --grep \"frontdesk role|admin role\"",
     "verify": "Create users with each role → GET /auth/me → role field correct in all cases",
     "verify_manual": "Login as doctor → checkout button not visible. Login as frontdesk → checkout button visible. Login as admin → all tabs visible.",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "status": "done",
+    "completed": "2026-04-03"
   },
   {
     "id": "AUTH-03",
@@ -690,7 +783,9 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["AUTH-02"],
+    "depends_on": [
+      "AUTH-02"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_auth.py -k 'rbac or permission' -q",
     "ui_test": null,
     "verify": "Call DELETE /admin/rooms with doctor JWT → 403. Call same endpoint with admin JWT → 200.",
@@ -706,7 +801,9 @@
     "phase": 6,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["AUTH-03"],
+    "depends_on": [
+      "AUTH-03"
+    ],
     "api_test": null,
     "ui_test": "npx playwright test --grep \"role-based|doctor view|frontdesk view\"",
     "verify": "Login as doctor → Admin tab hidden, checkout buttons disabled. Login as admin → all tabs visible.",
@@ -722,7 +819,9 @@
     "phase": 6,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["AUTH-03"],
+    "depends_on": [
+      "AUTH-03"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_auth.py -k 'user_management' -q",
     "ui_test": "npx playwright test --grep \"user management|create user\"",
     "verify": "POST /admin/users → user created. PATCH /admin/users/{id} → role updated. PATCH /admin/users/{id}/deactivate → login attempt returns 401.",
@@ -738,7 +837,9 @@
     "phase": 6,
     "owner": "backend-engineer",
     "priority": "P1",
-    "depends_on": ["AUTH-02"],
+    "depends_on": [
+      "AUTH-02"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_auth.py -k 'staff_link' -q",
     "ui_test": null,
     "verify": "Create staff 'Dr. Kim' → create user with role=doctor → link user to staff_id → GET /auth/me → returns staff_id. Treatments assigned to Dr. Kim are visible when Dr. Kim user logs in.",
@@ -754,13 +855,16 @@
     "phase": 7,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["AUTH-01"],
-    "api_test": "cd backend && python -m pytest tests/test_multitenant.py -q",
-    "ui_test": null,
+    "depends_on": [
+      "AUTH-01"
+    ],
+    "api_test": "cd backend && python3 -m pytest tests/test_auth_rbac.py -k 'isolation' -q",
+    "ui_test": "npx playwright test --grep \"tenant isolation\"",
     "verify": "All core tables have clinic_id column. GET /patients returns only patients for current clinic. No cross-clinic data leakage.",
     "verify_manual": "Create 2 clinics with separate patients → login as Clinic A admin → GET /patients → only Clinic A patients returned",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "status": "done",
+    "completed": "2026-04-03"
   },
   {
     "id": "MT-02",
@@ -770,13 +874,16 @@
     "phase": 7,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["MT-01"],
-    "api_test": "cd backend && python -m pytest tests/test_multitenant.py -k 'isolation' -q",
-    "ui_test": null,
+    "depends_on": [
+      "MT-01"
+    ],
+    "api_test": "cd backend && python3 -m pytest tests/test_auth_rbac.py -k 'isolation' -q",
+    "ui_test": "npx playwright test --grep \"tenant isolation\"",
     "verify": "Authenticated as Clinic A user → attempt GET /patients/{patient_id_from_clinic_B} → 404 (not found, not 403). Clinic B data is never exposed.",
     "verify_manual": "Create patient in Clinic B. Login as Clinic A user. Attempt to fetch Clinic B patient ID → 404.",
-    "passes": false,
-    "status": "TODO"
+    "passes": true,
+    "status": "done",
+    "completed": "2026-04-03"
   },
   {
     "id": "MT-03",
@@ -786,7 +893,10 @@
     "phase": 7,
     "owner": "backend-engineer",
     "priority": "P0",
-    "depends_on": ["MT-01", "AUTH-01"],
+    "depends_on": [
+      "MT-01",
+      "AUTH-01"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_multitenant.py -k 'provision' -q",
     "ui_test": null,
     "verify": "POST /superadmin/clinics {name, slug, admin_email, admin_password} → clinic created → admin user can log in → scoped to new clinic",
@@ -802,7 +912,10 @@
     "phase": 7,
     "owner": "frontend-engineer",
     "priority": "P1",
-    "depends_on": ["MT-02", "AUTH-03"],
+    "depends_on": [
+      "MT-02",
+      "AUTH-03"
+    ],
     "api_test": null,
     "ui_test": "npx playwright test --grep \"clinic routing|tenant url\"",
     "verify": "Navigate to /c/sunrise → login → all data scoped to sunrise clinic. Navigate to /c/westside → different data set.",
@@ -818,11 +931,161 @@
     "phase": 7,
     "owner": "frontend-engineer",
     "priority": "P2",
-    "depends_on": ["MT-03", "AUTH-05"],
+    "depends_on": [
+      "MT-03",
+      "AUTH-05"
+    ],
     "api_test": "cd backend && python -m pytest tests/test_multitenant.py -k 'settings' -q",
     "ui_test": "npx playwright test --grep \"clinic settings\"",
     "verify": "PATCH /admin/clinic/settings {timezone, name} → GET /admin/clinic → updated values returned. PDF header shows clinic name.",
     "verify_manual": "Admin sets clinic name 'Sunrise PT' → generate sign-sheet PDF → header shows 'Sunrise PT'",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "APPT-01",
+    "title": "Appointment data model + CRUD backend",
+    "description": "appointments table: appointment_id, patient_id (FK), provider_id (FK to staff), appointment_date, appointment_time, appointment_type (regular|eval|reeval), status (scheduled|checked_in|no_show|cancelled), cancellation_reason, notes. Backend service functions: create_appointment, list_appointments (filter by date/patient/provider), update_appointment, cancel_appointment, mark_no_show. PATIENT_CHECKIN links appointment_id to visit when checking in. Events: APPOINTMENT_CREATED, APPOINTMENT_UPDATED.",
+    "phase": 8,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "ROADMAP-P1-01",
+      "ROADMAP-P1-03"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'appointment' -q",
+    "ui_test": null,
+    "verify": "POST /prototype/appointments {patient_id, provider_id, appointment_date, appointment_time} → 201. GET /prototype/appointments?date=today → includes new appt. PATCH /prototype/appointments/{id} {status: 'cancelled'} → status updated. GET /prototype/appointments/{id}/no-show → status=no_show.",
+    "passes": false,
+    "status": "IMPLEMENTED"
+  },
+  {
+    "id": "APPT-02",
+    "title": "Appointments frontend tab — check-in, no-show, cancel actions",
+    "description": "Appointments tab (#tab-appointments) shows today's appointments in a table (time, patient, provider, service, status). Action buttons per row: 'Check-In' (POST /portal/checkin with appointment_id, transitions visit to ops board), 'No-Show' (POST /appointments/{id}/no-show), 'Cancel' (POST /appointments/{id}/cancel). Status badge updates live. After check-in, patient appears in ops board visits list.",
+    "phase": 8,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "APPT-01"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"appointments tab can check in|appointments tab can mark no-show\"",
+    "verify": "Open Appointments tab → create appointment via API → row appears with 'scheduled' status. Click 'Check-In' → toast 'checked in' → row shows 'checked_in' → patient appears in Ops Board. Click 'No-Show' on another → status=no_show. Click 'Cancel' on another → status=cancelled.",
+    "passes": false,
+    "status": "IMPLEMENTED"
+  },
+  {
+    "id": "APPT-03",
+    "title": "Recurring appointment scheduling",
+    "description": "Allow creating a recurring series from a single appointment: recurrence_rule (weekly|biweekly|monthly), recurrence_end_date, series_id. POST /appointments generates all occurrences up to end_date. Cancel-series endpoint deletes all future occurrences in the series. Individual occurrence can be edited without breaking the series (exception record).",
+    "phase": 8,
+    "owner": "backend-engineer",
+    "priority": "P2",
+    "depends_on": [
+      "APPT-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_appointments.py -k 'recur' -q",
+    "ui_test": "npx playwright test --grep \"recurring appointment\"",
+    "verify": "POST /appointments {recurrence_rule: 'weekly', recurrence_end_date: '+8 weeks'} → 8 rows created. DELETE /appointments/{series_id}/series → all future occurrences removed.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "APPT-04",
+    "title": "Scheduling calendar view",
+    "description": "Calendar view in Appointments tab: week view showing all providers as columns, time slots as rows (8am–6pm, 30-min intervals). Occupied slots highlighted by provider color. Click empty slot → pre-filled new appointment form. Drag existing appointment to reschedule. Requires GET /appointments?week=YYYY-Www returning all appointments for the week.",
+    "phase": 8,
+    "owner": "frontend-engineer",
+    "priority": "P2",
+    "depends_on": [
+      "APPT-02"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"calendar view\"",
+    "verify": "Switch to calendar view → week grid shown with provider columns. Appointments appear at correct time slots. Click empty slot → new appointment modal opens pre-filled with that time.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "BILLING-01",
+    "title": "Claim data model + lifecycle state machine",
+    "description": "claims table: claim_id, visit_id (FK), patient_id (FK), insurance_id (FK), service_date, procedure_codes (JSONB array), diagnosis_codes (JSONB array), billed_amount, allowed_amount, paid_amount, patient_responsibility, status (draft|submitted|pending|paid|denied|partial|void), submitted_at, adjudicated_at, payer_claim_id, denial_reason, denial_code. Status machine enforced in service layer. Events: CLAIM_CREATED, CLAIM_SUBMITTED, CLAIM_ADJUDICATED.",
+    "phase": 9,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "ROADMAP-P1-02",
+      "GAP-INS-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_billing.py -k 'claim_model' -q",
+    "ui_test": null,
+    "verify": "POST /billing/claims {visit_id, insurance_id} → claim created in 'draft' status. PATCH /billing/claims/{id} {status: 'submitted'} → status updated, submitted_at set. PATCH status back to 'draft' from 'paid' returns 400 (invalid transition).",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "BILLING-02",
+    "title": "Claim generation from checkout",
+    "description": "Auto-generate a draft claim when a visit is checked out with payment_status='insurance_only' or 'copay_collected'. Claim is pre-populated from visit data: service_date from check_in_time, procedure_code from service_type, diagnosis_codes from visit notes if present, billed_amount from insurance fee schedule. Staff can review and submit from Claims tab. POST /billing/claims/generate-from-visit {visit_id}.",
+    "phase": 9,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "BILLING-01",
+      "ROADMAP-P1-04"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_billing.py -k 'generate_from_visit' -q",
+    "ui_test": "npx playwright test --grep \"checkout generates draft claim\"",
+    "verify": "Checkout visit with payment_status=insurance_only → GET /billing/claims?visit_id={id} → 1 draft claim returned with correct service_date and billed_amount.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "BILLING-03",
+    "title": "Denial tracking and resubmission workflow",
+    "description": "When a claim is denied: store denial_code (CARC code), denial_reason text, denial_date. Increment resubmission_count. Allow correcting and resubmitting: PATCH /billing/claims/{id}/resubmit {corrected_fields}. Auto-create a Task record (task_type='claim_followup', linked to claim_id) for staff to action. Track resubmission history in claim_events table (sub-events per claim). Frontend claims table shows denial badge with reason; 'Resubmit' button opens correction form.",
+    "phase": 9,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "BILLING-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_billing.py -k 'denial' -q",
+    "ui_test": "npx playwright test --grep \"denial tracking\"",
+    "verify": "PATCH /billing/claims/{id} {status:'denied', denial_code:'CO-4', denial_reason:'Not covered'} → denial_code stored. GET /billing/claims/{id} → shows denial_code + resubmission_count=0. POST /billing/claims/{id}/resubmit {diagnosis_codes: ['M79.3']} → status='submitted', resubmission_count=1.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "BILLING-04",
+    "title": "AR aging report (30/60/90/120-day buckets)",
+    "description": "Accounts-receivable aging projection: GET /billing/ar-aging returns claims grouped by age bucket (0-30, 31-60, 61-90, 91-120, 120+ days since submitted_at) with total billed_amount and count per bucket, broken out by payer. Frontend AR Aging tab shows a summary table and a drill-down by payer. Claims in 90+ bucket flagged red. Export to CSV.",
+    "phase": 9,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "BILLING-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_billing.py -k 'ar_aging' -q",
+    "ui_test": "npx playwright test --grep \"AR aging\"",
+    "verify": "Submit 3 claims with submitted_at values 15, 45, and 95 days ago. GET /billing/ar-aging → bucket 0-30: count=1, bucket 31-60: count=1, bucket 91-120: count=1. Totals sum correctly.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "BILLING-05",
+    "title": "ERA/EOB remittance import and auto-post",
+    "description": "Import ANSI X12 835 Electronic Remittance Advice files to auto-post payments: POST /billing/remittance/import (multipart file upload). Parser extracts claim payments, maps payer_claim_id → claim_id, posts paid_amount + patient_responsibility, transitions claim status to paid/partial/denied. Unmatched claims flagged for manual review. Frontend: upload button in Claims tab, import summary modal showing matched/unmatched counts.",
+    "phase": 9,
+    "owner": "backend-engineer",
+    "priority": "P2",
+    "depends_on": [
+      "BILLING-02"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_billing.py -k 'remittance' -q",
+    "ui_test": "npx playwright test --grep \"remittance import\"",
+    "verify": "Upload valid 835 file with 2 claims → both matched and posted → GET /billing/claims shows status=paid. Upload 835 with unknown payer_claim_id → flagged as unmatched in response.",
     "passes": false,
     "status": "TODO"
   }

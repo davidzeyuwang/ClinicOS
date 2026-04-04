@@ -17,6 +17,10 @@ from datetime import datetime, timezone
 
 from app.main import app
 
+TEST_USERNAME = "admin@test.clinicos.local"
+TEST_PASSWORD = "test1234"
+TEST_TOKEN_HEADER = {"x-test-token": "test-admin-secret-fixed-token"}
+
 
 def _pdf_text(pdf_bytes: bytes) -> str:
     """Decompress all FlateDecode streams and return searchable text."""
@@ -30,17 +34,10 @@ def _pdf_text(pdf_bytes: bytes) -> str:
     return result
 
 
-@pytest.fixture()
-def client():
-    with TestClient(app) as test_client:
-        test_client.post("/prototype/test/reset")
-        yield test_client
-
-
 def test_pdf_includes_who_what_when_where():
     """
     TC-PDF-1: PDF sign-sheet includes complete visit details for patient signature
-    
+
     Expected PDF Content:
     - Patient demographics (name, DOB, phone, MRN)
     - Insurance information
@@ -57,30 +54,36 @@ def test_pdf_includes_who_what_when_where():
     """
     with TestClient(app) as client:
         # Reset database
-        client.post("/prototype/test/reset")
-        
+        reset_resp = client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
+        assert reset_resp.status_code == 200
+
+        # Get auth token
+        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
+        auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
         # Setup: Create room, staff, patient
         room = client.post("/prototype/admin/rooms", json={
             "name": "Room 201",
             "code": "R201",
             "room_type": "treatment",
             "floor": "2F"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         staff = client.post("/prototype/admin/staff", json={
             "name": "Dr. Sarah Chen",
             "role": "therapist",
             "license_id": "PT-12345"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         patient = client.post("/prototype/patients", json={
             "first_name": "John",
             "last_name": "Doe",
             "date_of_birth": "1980-05-15",
             "phone": "555-1234",
             "mrn": "MRN-001"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         # Add insurance
         insurance = client.post("/prototype/insurance", json={
             "patient_id": patient["patient_id"],
@@ -90,8 +93,8 @@ def test_pdf_includes_who_what_when_where():
             "copay_amount": 30.0,
             "visits_authorized": 24,
             "plan_type": "PPO"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         # Create 3 visits with complete details (WHO/WHAT/WHEN/WHERE)
         visits_data = [
             {
@@ -110,7 +113,7 @@ def test_pdf_includes_who_what_when_where():
                 "date": "2026-03-25"
             }
         ]
-        
+
         for visit_data in visits_data:
             # Check in (establishes WHEN)
             visit = client.post("/prototype/portal/checkin", json={
@@ -118,8 +121,8 @@ def test_pdf_includes_who_what_when_where():
                 "patient_name": f"{patient['first_name']} {patient['last_name']}",
                 "patient_id": patient["patient_id"],
                 "actor_id": "front-desk",
-            }).json()
-            
+            }, headers=auth_headers).json()
+
             # Start service (establishes WHO/WHAT/WHERE)
             client.post("/prototype/portal/service/start", json={
                 "visit_id": visit["visit_id"],
@@ -127,14 +130,14 @@ def test_pdf_includes_who_what_when_where():
                 "staff_id": staff["staff_id"],
                 "room_id": room["room_id"],
                 "actor_id": staff["staff_id"],
-            })
-            
+            }, headers=auth_headers)
+
             # End service
             client.post("/prototype/portal/service/end", json={
                 "visit_id": visit["visit_id"],
                 "actor_id": staff["staff_id"],
-            })
-            
+            }, headers=auth_headers)
+
             # Checkout with payment details
             client.post("/prototype/portal/checkout", json={
                 "visit_id": visit["visit_id"],
@@ -145,10 +148,10 @@ def test_pdf_includes_who_what_when_where():
                 "copay_collected": visit_data["copay"],
                 "wd_verified": True,
                 "patient_signed": True,
-            })
-        
+            }, headers=auth_headers)
+
         # ===== GENERATE PDF =====
-        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf")
+        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf", headers=auth_headers)
         
         # Validate PDF response
         assert pdf_response.status_code == 200
@@ -199,100 +202,103 @@ def test_pdf_includes_who_what_when_where():
 def test_pdf_with_multiple_staff_and_rooms():
     """
     TC-PDF-2: PDF correctly shows different staff and rooms across visits
-    
+
     Tests that WHO and WHERE vary correctly across multiple visits
     """
     with TestClient(app) as client:
-        client.post("/prototype/test/reset")
-        
+        # Reset and auth
+        client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
+        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
         # Create 2 rooms and 2 staff members
         room1 = client.post("/prototype/admin/rooms", json={
             "name": "Treatment Room A",
             "code": "TRA",
             "room_type": "treatment"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         room2 = client.post("/prototype/admin/rooms", json={
             "name": "Evaluation Room B",
             "code": "ERB",
             "room_type": "evaluation"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         staff1 = client.post("/prototype/admin/staff", json={
             "name": "Alice Johnson PT",
             "role": "therapist",
             "license_id": "PT-001"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         staff2 = client.post("/prototype/admin/staff", json={
             "name": "Bob Williams OT",
             "role": "therapist",
             "license_id": "OT-002"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         patient = client.post("/prototype/patients", json={
             "first_name": "Jane",
             "last_name": "Smith",
             "date_of_birth": "1988-04-10",
             "phone": "555-9999"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         # Visit 1: Staff1 in Room1
         v1 = client.post("/prototype/portal/checkin", json={
             "patient_ref": "walk-in",
             "patient_name": "Jane Smith",
             "patient_id": patient["patient_id"],
             "actor_id": "desk",
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         client.post("/prototype/portal/service/start", json={
             "visit_id": v1["visit_id"],
             "service_type": "PT",
             "staff_id": staff1["staff_id"],
             "room_id": room1["room_id"],
             "actor_id": staff1["staff_id"],
-        })
-        
+        }, headers=auth_headers)
+
         client.post("/prototype/portal/service/end", json={
             "visit_id": v1["visit_id"],
             "actor_id": staff1["staff_id"],
-        })
-        
+        }, headers=auth_headers)
+
         client.post("/prototype/portal/checkout", json={
             "visit_id": v1["visit_id"],
             "actor_id": "desk",
             "copay_collected": 25.0,
-        })
-        
+        }, headers=auth_headers)
+
         # Visit 2: Staff2 in Room2
         v2 = client.post("/prototype/portal/checkin", json={
             "patient_ref": "walk-in",
             "patient_name": "Jane Smith",
             "patient_id": patient["patient_id"],
             "actor_id": "desk",
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         client.post("/prototype/portal/service/start", json={
             "visit_id": v2["visit_id"],
             "service_type": "OT",
             "staff_id": staff2["staff_id"],
             "room_id": room2["room_id"],
             "actor_id": staff2["staff_id"],
-        })
-        
+        }, headers=auth_headers)
+
         client.post("/prototype/portal/service/end", json={
             "visit_id": v2["visit_id"],
             "actor_id": staff2["staff_id"],
-        })
-        
+        }, headers=auth_headers)
+
         client.post("/prototype/portal/checkout", json={
             "visit_id": v2["visit_id"],
             "actor_id": "desk",
             "copay_collected": 30.0,
-        })
-        
+        }, headers=auth_headers)
+
         # Generate PDF
-        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf")
+        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf", headers=auth_headers)
         assert pdf_response.status_code == 200
         
         pdf_text = _pdf_text(pdf_response.content)
@@ -315,25 +321,28 @@ def test_pdf_with_multiple_staff_and_rooms():
 def test_pdf_signature_section():
     """
     TC-PDF-3: PDF signature section is properly formatted for legal record
-    
+
     Tests that the signature area has:
     - Patient signature line
     - Date line
     - Validation text
     """
     with TestClient(app) as client:
-        client.post("/prototype/test/reset")
-        
+        # Reset and auth
+        client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
+        login_resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        auth_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
         # Minimal setup
         patient = client.post("/prototype/patients", json={
             "first_name": "Test",
             "last_name": "SignaturePDF",
             "date_of_birth": "1975-12-01",
             "phone": "555-0000"
-        }).json()
-        
+        }, headers=auth_headers).json()
+
         # Generate PDF (even with no visits)
-        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf")
+        pdf_response = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf", headers=auth_headers)
         assert pdf_response.status_code == 200
         
         pdf_text = _pdf_text(pdf_response.content)

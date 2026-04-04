@@ -18,6 +18,7 @@ if not _IS_SUPABASE:
     DATABASE_URL = "sqlite+aiosqlite:///./clinicos.db"
     engine = create_async_engine(DATABASE_URL, echo=False)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    AsyncSessionLocal = async_session  # Alias for consistency
 
     class Base(DeclarativeBase):
         pass

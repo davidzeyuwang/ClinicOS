@@ -22,34 +22,46 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+TEST_USERNAME = "admin@test.clinicos.local"
+TEST_PASSWORD = "test1234"
+TEST_TOKEN_HEADER = {"x-test-token": "test-admin-secret-fixed-token"}
+
+
+@pytest.fixture()
+def auth_headers(client):
+    resp = client.post("/prototype/auth/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+    assert resp.status_code == 200, f"Login failed: {resp.text}"
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
 
 @pytest.fixture()
 def client():
     with TestClient(app) as test_client:
-        response = test_client.post("/prototype/test/reset")
+        response = test_client.post("/prototype/test/reset", headers=TEST_TOKEN_HEADER)
         assert response.status_code == 200
         yield test_client
 
 
-def post_json(client: TestClient, path: str, payload: dict) -> dict:
-    response = client.post(f"/prototype{path}", json=payload)
+def post_json(client: TestClient, path: str, payload: dict, headers: dict = None) -> dict:
+    response = client.post(f"/prototype{path}", json=payload, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def get_json(client: TestClient, path: str) -> dict:
-    response = client.get(f"/prototype{path}")
+def get_json(client: TestClient, path: str, headers: dict = None) -> dict:
+    response = client.get(f"/prototype{path}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def patch_json(client: TestClient, path: str, payload: dict) -> dict:
-    response = client.patch(f"/prototype{path}", json=payload)
+def patch_json(client: TestClient, path: str, payload: dict, headers: dict = None) -> dict:
+    response = client.patch(f"/prototype{path}", json=payload, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def test_current_clinic_workflow_supported_path(client: TestClient):
+def test_current_clinic_workflow_supported_path(client: TestClient, auth_headers: dict):
     # Step 1: patient intake -> patient master + intake document
     patient = post_json(
         client,
@@ -61,6 +73,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "phone": "555-2222",
             "mrn": "MRN-WF-1001",
         },
+        headers=auth_headers,
     )
     assert patient["full_name"] == "Workflow Patient"
 
@@ -71,6 +84,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "patient_id": patient["patient_id"],
             "document_type": "intake",
         },
+        headers=auth_headers,
     )
     assert intake_doc["status"] == "draft"
 
@@ -78,6 +92,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         f"/documents/{intake_doc['document_id']}/sign",
         {"document_id": intake_doc["document_id"], "actor_id": "patient-workflow"},
+        headers=auth_headers,
     )
     assert signed_intake["status"] == "signed"
 
@@ -92,6 +107,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "priority": "high",
             "assignee_id": "eligibility-specialist-1",
         },
+        headers=auth_headers,
     )
     assert eligibility_task["task_type"] == "eligibility_verification"
     assert eligibility_task["assignee_id"] == "eligibility-specialist-1"
@@ -100,6 +116,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         f"/tasks/{eligibility_task['task_id']}",
         {"status": "in_progress"},
+        headers=auth_headers,
     )
     assert task_in_progress["status"] == "in_progress"
 
@@ -116,6 +133,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "deductible": 500.0,
             "visits_authorized": 24,
         },
+        headers=auth_headers,
     )
     assert policy["eligibility_status"] == "unknown"
 
@@ -127,11 +145,12 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "eligibility_notes": "Portal verified: 24 visits authorized, $35 copay",
             "visits_used": 4,
         },
+        headers=auth_headers,
     )
     assert verified_policy["eligibility_status"] == "verified"
     assert verified_policy["visits_used"] == 4
 
-    policy_list = get_json(client, f"/insurance/{patient['patient_id']}")
+    policy_list = get_json(client, f"/insurance/{patient['patient_id']}", headers=auth_headers)
     assert len(policy_list["policies"]) == 1
     assert policy_list["policies"][0]["copay_amount"] == 35.0
 
@@ -139,6 +158,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         f"/tasks/{eligibility_task['task_id']}",
         {"status": "completed"},
+        headers=auth_headers,
     )
     assert task_done["status"] == "completed"
 
@@ -147,11 +167,13 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         "/admin/staff",
         {"name": "Alice PT", "role": "therapist", "license_id": "PT-WF-1"},
+        headers=auth_headers,
     )
     room = post_json(
         client,
         "/admin/rooms",
         {"name": "Room 1", "code": "R1", "room_type": "treatment"},
+        headers=auth_headers,
     )
 
     appointment = post_json(
@@ -164,6 +186,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "appointment_time": "10:30",
             "appointment_type": "regular",
         },
+        headers=auth_headers,
     )
     assert appointment["status"] == "scheduled"
 
@@ -178,6 +201,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "appointment_id": appointment["appointment_id"],
             "actor_id": "frontdesk-1",
         },
+        headers=auth_headers,
     )
     assert visit["status"] == "checked_in"
 
@@ -191,10 +215,11 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "service_type": "PT",
             "actor_id": "therapist-1",
         },
+        headers=auth_headers,
     )
     assert started["status"] == "in_service"
 
-    board = get_json(client, "/projections/room-board")
+    board = get_json(client, "/projections/room-board", headers=auth_headers)
     room_row = [item for item in board["rooms"] if item["room_id"] == room["room_id"]][0]
     assert room_row["status"] == "occupied"
     assert room_row["patient_name"] == patient["full_name"]
@@ -204,6 +229,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         "/portal/service/end",
         {"visit_id": visit["visit_id"], "actor_id": "therapist-1"},
+        headers=auth_headers,
     )
     assert ended["status"] == "service_completed"
 
@@ -222,6 +248,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
                 "plan": "Continue PT next week",
             },
         },
+        headers=auth_headers,
     )
     assert note["status"] == "draft"
 
@@ -229,6 +256,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         f"/notes/{note['note_id']}/sign",
         {"note_id": note["note_id"], "actor_id": therapist["staff_id"]},
+        headers=auth_headers,
     )
     assert signed_note["status"] == "signed"
 
@@ -244,6 +272,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "priority": "high",
             "assignee_id": "backoffice-1",
         },
+        headers=auth_headers,
     )
     assert claim_task["task_type"] == "claim_followup"
 
@@ -260,6 +289,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
             "patient_signed": True,
             "actor_id": "frontdesk-1",
         },
+        headers=auth_headers,
     )
     assert checked_out["status"] == "checked_out"
 
@@ -267,22 +297,23 @@ def test_current_clinic_workflow_supported_path(client: TestClient):
         client,
         f"/tasks/{claim_task['task_id']}",
         {"status": "completed"},
+        headers=auth_headers,
     )
     assert claim_task_done["status"] == "completed"
 
     # Step 18: day-end report + audit trail
     today_utc = datetime.now(timezone.utc).date().isoformat()
-    summary = get_json(client, f"/projections/daily-summary?date={today_utc}")
+    summary = get_json(client, f"/projections/daily-summary?date={today_utc}", headers=auth_headers)
     assert summary["total_check_ins"] >= 1
     assert summary["total_checked_out"] >= 1
     assert summary["copay_total"] >= 35.0
 
-    report = post_json(client, "/reports/daily/generate", {"actor_id": "manager-1"})
+    report = post_json(client, "/reports/daily/generate", {"actor_id": "manager-1"}, headers=auth_headers)
     assert report["total_check_ins"] >= 1
     assert report["total_check_outs"] >= 1
     assert report["total_services_completed"] >= 1
 
-    events = get_json(client, "/events")
+    events = get_json(client, "/events", headers=auth_headers)
     event_types = {event["event_type"] for event in events["events"]}
     expected = {
         "PATIENT_CREATED",

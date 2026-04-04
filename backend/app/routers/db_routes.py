@@ -89,6 +89,7 @@ async def create_test_user(
         db, clinic.clinic_id, payload.email, payload.password,
         display_name=payload.display_name or payload.email,
         role=payload.role,
+        username=payload.username or None,
     )
     await db.commit()
     return {"user_id": user.user_id, "clinic_id": user.clinic_id, "role": user.role}

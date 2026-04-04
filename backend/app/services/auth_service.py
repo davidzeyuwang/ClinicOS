@@ -40,11 +40,13 @@ async def create_user(
     plain_password: str,
     display_name: str = "",
     role: str = "frontdesk",
+    username: Optional[str] = None,
 ) -> User:
     user = User(
         user_id=_new_id(),
         clinic_id=clinic_id,
         email=email,
+        username=username or None,
         hashed_password=hash_password(plain_password),
         display_name=display_name or email,
         role=role,
@@ -56,9 +58,15 @@ async def create_user(
     return user
 
 
-async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[dict]:
-    """Return token dict on success, None on failure."""
-    result = await db.execute(select(User).where(User.email == email, User.is_active == True))
+async def authenticate_user(db: AsyncSession, identifier: str, password: str) -> Optional[dict]:
+    """Accept email or username as identifier. Return token dict on success, None on failure."""
+    from sqlalchemy import or_
+    result = await db.execute(
+        select(User).where(
+            or_(User.email == identifier, User.username == identifier),
+            User.is_active == True,
+        )
+    )
     user = result.scalar_one_or_none()
     if not user or not verify_password(password, user.hashed_password):
         return None

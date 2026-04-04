@@ -12,7 +12,9 @@ router = APIRouter(prefix="/prototype/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await auth_service.authenticate_user(db, payload.email, payload.password)
+    if not payload.email and not payload.username:
+        raise HTTPException(status_code=422, detail="Provide email or username")
+    result = await auth_service.authenticate_user(db, payload.identifier, payload.password)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return result
@@ -27,6 +29,7 @@ async def me(current_user: CurrentUser = Depends(get_current_user), db: AsyncSes
         "user_id": user.user_id,
         "clinic_id": user.clinic_id,
         "email": user.email,
+        "username": user.username,
         "display_name": user.display_name,
         "role": user.role,
     }
@@ -48,6 +51,7 @@ async def register_clinic(
         db, clinic.clinic_id, payload.admin_email, payload.admin_password,
         display_name=payload.admin_display_name or payload.admin_email,
         role="admin",
+        username=payload.admin_username or None,
     )
     await db.commit()
     return {"clinic_id": clinic.clinic_id, "user_id": user.user_id}

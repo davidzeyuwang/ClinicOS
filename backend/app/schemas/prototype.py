@@ -312,8 +312,14 @@ class StaffServiceTypesSet(BaseModel):
 # ==================== AUTH SCHEMAS ====================
 
 class LoginRequest(BaseModel):
-    email: str
+    email: Optional[str] = None      # login with email
+    username: Optional[str] = None   # or login with username alias
     password: str
+
+    @property
+    def identifier(self) -> str:
+        """Return whichever identifier was supplied."""
+        return self.email or self.username or ""
 
 
 class TokenResponse(BaseModel):
@@ -332,10 +338,12 @@ class RegisterClinicRequest(BaseModel):
     admin_email: str
     admin_password: str
     admin_display_name: str = ""
+    admin_username: Optional[str] = None   # optional short alias for the admin
 
 
 class CreateTestUserRequest(BaseModel):
     email: str
+    username: Optional[str] = None   # optional short alias
     password: str
     display_name: str = ""
     role: str = "frontdesk"  # admin | frontdesk | doctor

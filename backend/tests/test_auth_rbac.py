@@ -96,6 +96,33 @@ def test_me_with_valid_token(client, auth_headers):
     assert body["clinic_id"]
 
 
+def test_login_with_username_alias(client):
+    """User with a username alias can log in using username instead of email."""
+    suffix = str(uuid.uuid4())[:8]
+    # Create a user with both email and username
+    client.post(
+        "/prototype/test/create-user",
+        json={"email": f"alias-{suffix}@test.local", "username": f"nurse{suffix}", "password": "pass123!", "role": "frontdesk"},
+        headers=TEST_TOKEN_HEADER,
+    )
+    # Login using username (not email)
+    r = client.post(
+        "/prototype/auth/login",
+        json={"username": f"nurse{suffix}", "password": "pass123!"},
+    )
+    assert r.status_code == 200
+    assert "access_token" in r.json()
+
+
+def test_login_without_email_or_username_returns_422(client):
+    """Login with neither email nor username → 422 Unprocessable."""
+    r = client.post(
+        "/prototype/auth/login",
+        json={"password": "irrelevant"},
+    )
+    assert r.status_code == 422
+
+
 def test_me_without_token_returns_401(client):
     r = client.get("/prototype/auth/me")
     assert r.status_code == 401

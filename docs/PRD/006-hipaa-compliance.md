@@ -115,19 +115,25 @@ This PRD defines the next compliance-focused delivery slice.
 - Reading insurance policy detail creates audit entry
 - Audit log excludes raw PHI payload values
 
-### HIPAA-02: Session Timeout
+### HIPAA-02: Session Timeout + Token Lifecycle
 
-**Problem:** Current JWT lasts 8 hours, with no idle timeout enforcement.
+**Problem:** Current JWT lasts 8 hours, with no idle timeout enforcement and no key rotation mechanism.
 
 **Requirement:**
 - Auto-logout after 15 minutes inactivity
 - Frontend clears local token/session state
-- Backend uses short-lived access tokens plus refresh token flow
+- Access tokens are short-lived (15-minute TTL)
+- Refresh tokens are long-lived (7 days), stored server-side as a hash
+- `SECRET_KEY` must be rotatable without requiring all users to re-authenticate mid-session
+- Rotation procedure is documented and executable by any admin
 
 **Acceptance Criteria:**
 - 15 minutes idle in UI logs user out
 - Expired access token returns `401`
 - Refresh flow issues new access token without forcing immediate login when refresh token is valid
+- `SECRET_KEY` can be rotated by updating environment config + redeploying; active refresh tokens remain valid during the overlap window
+- Rotation is logged as a `KEY_ROTATED` event in the audit trail
+- After rotation, old access tokens (signed with previous key) are rejected immediately
 
 ### HIPAA-03: Encryption at Rest (Field Level)
 
@@ -299,6 +305,10 @@ This PRD defines the next compliance-focused delivery slice.
 - Secrets for JWT, Fernet, and email providers must be environment-managed
 - Encryption keys must not be stored in source control
 - Local dev mode may use relaxed transport constraints, production may not
+- `SECRET_KEY` must be unique per environment (local ≠ production)
+- `SECRET_KEY` must be rotated at least quarterly, or immediately on suspected compromise
+- Rotation must be logged as a `KEY_ROTATED` event visible in the audit trail
+- Login identifier is `username` in current implementation; decision to migrate to `email` is tracked in Open Question #1
 
 ---
 
@@ -356,8 +366,10 @@ This PRD defines the next compliance-focused delivery slice.
 
 ## 15. Open Questions
 
-1. Should username remain the unique login identifier, or move to email?
+1. Should username remain the unique login identifier, or move to email? (RFC-001 uses email; current implementation uses username — must be resolved before HIPAA-07)
 2. Should first-login password change apply only to admin-created users, or all new users?
 3. What export actions count toward breach/export thresholds?
 4. Does break-glass apply only within clinic boundaries, or also for future multi-clinic support staff?
 5. What email provider should deliver breach notifications in production?
+6. What is the target access token TTL once HIPAA-02 is implemented? (15 minutes recommended to match idle timeout)
+7. Should zero-downtime key rotation support an overlap window where both old and new keys are accepted simultaneously? (Required if refresh token TTL > 0 at rotation time — see RFC-002 §6)

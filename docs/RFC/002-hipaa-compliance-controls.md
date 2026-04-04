@@ -48,6 +48,7 @@ These features should extend the current architecture rather than replace it.
 - `EVENT_CHAIN_VERIFIED`
 - `EVENT_CHAIN_FAILED`
 - `BREACH_ALERT`
+- `KEY_ROTATED`
 
 ### 3.2 Event payloads
 
@@ -106,6 +107,19 @@ These features should extend the current architecture rather than replace it.
   "threshold": 50,
   "observed_value": 72,
   "triggered_at": "2026-04-04T12:00:00Z"
+}
+```
+
+#### `KEY_ROTATED`
+
+```json
+{
+  "key_type": "SECRET_KEY|FERNET_KEY",
+  "rotated_by": "admin_user_id_or_system",
+  "reason": "scheduled|suspected_compromise|developer_offboarding",
+  "environment": "production|local",
+  "rotated_at": "2026-04-04T12:00:00Z",
+  "overlap_window_expires_at": "2026-04-04T13:00:00Z"
 }
 ```
 
@@ -196,14 +210,21 @@ ALTER TABLE event_log ADD COLUMN row_hash TEXT;
 
 ### 5.1 Auth / Session
 
+Token lifetime targets:
+
+| Token | TTL | Notes |
+|---|---|---|
+| Access token | 15 minutes | Matches idle timeout; rejected immediately on key rotation |
+| Refresh token | 7 days | Stored as bcrypt hash server-side; survives key rotation overlap window |
+
 - `POST /prototype/auth/login`
   - enforce lockout
   - return access token + refresh token
 - `POST /prototype/auth/refresh`
-  - validate refresh token
-  - return rotated access token
+  - validate refresh token hash against DB
+  - return new access token + rotated refresh token (rotation-on-use)
 - `POST /prototype/auth/logout`
-  - revoke refresh token
+  - revoke refresh token (delete from DB)
 - `POST /prototype/auth/change-password`
   - satisfy first-login reset requirement
 
@@ -342,6 +363,94 @@ Future channels:
 
 ---
 
+## 9a. SECRET_KEY Rotation Design
+
+### Current state (pre-HIPAA-02)
+
+- Single `SECRET_KEY` env var, symmetric HS256
+- Rotation is manual and disruptive — all active sessions invalidated immediately
+- No audit trail for when rotation happened or why
+- Rotation procedure: update env var → redeploy → all users re-authenticate
+
+### Target state (post-HIPAA-02)
+
+#### Zero-downtime rotation
+
+Support two accepted keys simultaneously during a configurable overlap window:
+
+```
+ACTIVE_SECRET_KEY=<new-key>       # signs all new tokens
+PREVIOUS_SECRET_KEY=<old-key>     # still accepted for verification during overlap
+KEY_ROTATION_OVERLAP_MINUTES=60   # how long old tokens remain valid (default: 60)
+```
+
+Verification logic:
+
+```python
+def decode_token(token: str) -> dict:
+    # Try active key first
+    try:
+        return jwt.decode(token, ACTIVE_SECRET_KEY, algorithms=["HS256"])
+    except JWTError:
+        pass
+    # Fall back to previous key if within overlap window
+    if PREVIOUS_SECRET_KEY and overlap_still_active():
+        return jwt.decode(token, PREVIOUS_SECRET_KEY, algorithms=["HS256"])
+    raise JWTError("Token invalid or expired")
+```
+
+Since access tokens are 15 minutes, the 60-minute overlap window means all legitimate tokens
+naturally expire before the old key is dropped. Refresh tokens survive rotation because they
+are validated against the DB hash, not JWT signature.
+
+#### Rotation schedule
+
+| Trigger | Action |
+|---|---|
+| Scheduled (quarterly) | Promote current → previous; generate new active |
+| Developer offboarding | Rotate immediately, no overlap window |
+| Suspected compromise | Rotate immediately, no overlap window, log reason |
+| Fernet key (field encryption) | Same schedule, independent from JWT key |
+
+#### Rotation procedure (production)
+
+```bash
+# 1. Generate new key
+NEW_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+# 2. Promote current active to previous in Vercel
+CURRENT=$(npx vercel env ls | grep ACTIVE_SECRET_KEY)
+echo "$CURRENT" | npx vercel env add PREVIOUS_SECRET_KEY production
+
+# 3. Set new active key
+echo "$NEW_KEY" | npx vercel env add ACTIVE_SECRET_KEY production
+
+# 4. Redeploy
+npx vercel --prod
+
+# 5. After overlap window expires, remove PREVIOUS_SECRET_KEY
+# (60 minutes after deploy — all old access tokens have naturally expired)
+npx vercel env rm PREVIOUS_SECRET_KEY production
+```
+
+#### Rotation audit
+
+Every rotation must emit a `KEY_ROTATED` event to the event log:
+- `key_type`: `SECRET_KEY` or `FERNET_KEY`
+- `reason`: `scheduled` | `suspected_compromise` | `developer_offboarding`
+- `overlap_window_expires_at`: timestamp when old key stops being accepted
+- `rotated_by`: admin user_id or `system` for automated rotation
+
+#### Key storage rules
+
+| Environment | Storage | Rotation |
+|---|---|---|
+| Local dev | `.env.local` (gitignored) | On developer offboarding or annually |
+| Production | Vercel encrypted env vars | Quarterly or on trigger |
+| CI / test | `conftest.py` sets a fixed test-only value | Never rotated — test key only |
+
+---
+
 ## 10. Migration Plan
 
 ### Phase A
@@ -401,6 +510,14 @@ Implement event-log hash chaining + daily verification
 ### HIPAA-BE-10
 Implement breach detection + admin notification
 
+### HIPAA-BE-11
+Implement zero-downtime SECRET_KEY rotation
+
+- Support `ACTIVE_SECRET_KEY` + `PREVIOUS_SECRET_KEY` + `KEY_ROTATION_OVERLAP_MINUTES` env vars
+- Update `decode_token()` to try both keys during overlap window
+- Emit `KEY_ROTATED` event on rotation
+- Document rotation procedure for production and local
+
 ---
 
 ## 12. Testing Plan
@@ -419,6 +536,9 @@ Implement breach detection + admin notification
 - read-audit coverage can be missed if enforced inconsistently
 - break-glass can be abused if approval/reporting is too weak
 - short access tokens can degrade UX if refresh handling is fragile
+- key rotation without overlap window forces all users to re-authenticate simultaneously — disruptive mid-shift
+- if `PREVIOUS_SECRET_KEY` is not cleared after the overlap window, it becomes a persistent second attack surface
+- login identifier ambiguity (username vs email) between RFC-001 and current implementation must be resolved before HIPAA-07 user-hardening work begins; see PRD-006 Open Question #1
 
 ---
 

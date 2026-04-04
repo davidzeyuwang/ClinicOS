@@ -50,48 +50,6 @@ else:
 router = APIRouter(prefix="/prototype", tags=["prototype"])
 
 
-@router.get("/debug/httpx-test")
-async def httpx_test():
-    """Test endpoint to verify httpx works in Lambda."""
-    try:
-        import httpx
-        client = httpx.AsyncClient()
-        resp = await client.get("https://httpbin.org/get")
-        await client.aclose()
-        return {"status": "ok", "httpx_version": httpx.__version__, "test_status": resp.status_code}
-    except Exception as e:
-        import traceback
-        return {"error": str(e), "traceback": traceback.format_exc()}
-
-
-@router.get("/debug/room-board-steps")
-async def room_board_debug():
-    """Debug endpoint: test each step of get_room_board separately."""
-    if not _IS_SUPABASE:
-        return {"skip": "only relevant in Supabase mode"}
-    from app.database import get_supabase
-    results = {}
-    try:
-        supa = get_supabase()
-        results["client_created"] = True
-    except BaseException as e:
-        results["client_error"] = str(e)
-        return results
-    try:
-        rooms = await supa.select("rooms", {"active": True})
-        results["rooms_count"] = len(rooms)
-    except BaseException as e:
-        results["rooms_error"] = f"{type(e).__name__}: {e}"
-        return results
-    try:
-        visits = await supa.select("visits", {})
-        results["visits_count"] = len(visits)
-    except BaseException as e:
-        results["visits_error"] = f"{type(e).__name__}: {e}"
-        return results
-    results["status"] = "both queries succeeded"
-    return results
-
 
 @router.post("/test/reset")
 async def reset_test_data(

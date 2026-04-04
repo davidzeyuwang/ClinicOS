@@ -216,5 +216,59 @@
     ],
     "api_test": null,
     "ui_test": null
+  },
+  {
+    "id": "BUG-17",
+    "title": "Unauthenticated debug endpoints exposed in production",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-06",
+    "date_fixed": "2026-04-03",
+    "root_cause": "/debug-db, /prototype/debug/httpx-test, and /prototype/debug/room-board-steps had no auth guard. /debug-db leaked DATABASE_URL prefix and full tracebacks. /debug/httpx-test was an SSRF vector. /debug/room-board-steps ran live DB queries.",
+    "fix": "Removed all three endpoints from main.py and db_routes.py.",
+    "files": [
+      "backend/app/main.py",
+      "backend/app/routers/db_routes.py"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_security_blockers.py -k 'debug' -q",
+    "ui_test": null
+  },
+  {
+    "id": "BUG-18",
+    "title": "SECRET_KEY has hardcoded insecure fallback allowing JWT forgery",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-06",
+    "date_fixed": "2026-04-03",
+    "root_cause": "jwt_utils.py used os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production'). If env var was not set in deployment, any attacker who read the source could forge admin JWT tokens for any clinic_id.",
+    "fix": "Removed the default. App now raises RuntimeError at startup if SECRET_KEY is absent. Added conftest.py to set the env var for tests before any app module imports.",
+    "files": [
+      "backend/app/auth/jwt_utils.py",
+      "backend/tests/conftest.py"
+    ],
+    "api_test": "cd backend && python -m pytest tests/test_security_blockers.py -k 'secret_key' -q",
+    "ui_test": null
+  },
+  {
+    "id": "BUG-19",
+    "title": "Admin password printed in plaintext to server logs at first boot",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-06",
+    "date_fixed": "2026-04-03",
+    "root_cause": "_seed_test_clinic() in main.py printed 'admin: admin@test.clinicos.local / test1234' to stdout. If logs are aggregated (Supabase, CloudWatch, Vercel), the password is visible to anyone with log access.",
+    "fix": "Removed the password from the print statement. Now logs only the username and clinic_id.",
+    "files": ["backend/app/main.py"],
+    "api_test": "cd backend && python -m pytest tests/test_security_blockers.py -k 'password' -q",
+    "ui_test": null
+  },
+  {
+    "id": "BUG-20",
+    "title": "CORS wildcard origin with allow_credentials=True",
+    "status": "fixed",
+    "feature_ref": "ROADMAP-P1-06",
+    "date_fixed": "2026-04-03",
+    "root_cause": "CORSMiddleware was configured with allow_origins=['*'] and allow_credentials=True. This combination violates the CORS spec — browsers block credentials with wildcard origins — and would allow any origin to receive credentials if the wildcard check were ever relaxed.",
+    "fix": "Replaced ['*'] with an explicit allowlist: localhost:8000, 127.0.0.1:8000, clinicos-psi.vercel.app. Additional origins can be added via CORS_ALLOWED_ORIGINS env var.",
+    "files": ["backend/app/main.py"],
+    "api_test": "cd backend && python -m pytest tests/test_security_blockers.py -k 'cors' -q",
+    "ui_test": null
   }
 ]

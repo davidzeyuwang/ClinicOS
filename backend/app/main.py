@@ -62,7 +62,7 @@ async def _seed_test_clinic() -> None:
         )
         db.add(user)
         await db.commit()
-        print(f"[seed] Test clinic created (id={clinic.clinic_id}), admin: admin@test.clinicos.local / test1234")
+        print(f"[seed] Test clinic created (id={clinic.clinic_id}), admin username: admin@test.clinicos.local")
 
 
 app = FastAPI(
@@ -77,9 +77,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Explicit origin allowlist — never use ["*"] with allow_credentials=True.
+# Add production origin via CORS_ALLOWED_ORIGINS env var (comma-separated).
+_extra_origins = [o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://clinicos-psi.vercel.app",
+] + _extra_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,20 +107,6 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "0.3.0"}
-
-@app.get("/debug-db")
-async def debug_db():
-    """Diagnose DB connectivity — remove after debugging."""
-    import traceback
-    from app.database import DATABASE_URL, _is_postgres, engine
-    try:
-        async with engine.connect() as conn:
-            from sqlalchemy import text
-            result = await conn.execute(text("SELECT 1"))
-            return {"status": "ok", "db_type": "postgres" if _is_postgres else "sqlite", "url_prefix": DATABASE_URL[:40]}
-    except Exception as e:
-        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()[-500:]}
-
 
 
 # Serve frontend static files at /ui/*

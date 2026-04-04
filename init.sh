@@ -9,10 +9,17 @@ BACKEND="$REPO_ROOT/backend"
 
 echo "=== ClinicOS init ==="
 
-# 0. Ensure SECRET_KEY is set — required for JWT signing (no hardcoded fallback)
+# 0. Load .env.local if present (contains SECRET_KEY and other local secrets)
+if [ -f "$REPO_ROOT/.env.local" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/.env.local"
+  set +a
+fi
+# Fallback if .env.local is missing or SECRET_KEY still not set
 if [ -z "$SECRET_KEY" ]; then
-  export SECRET_KEY="local-dev-secret-not-for-production-$(hostname)"
-  echo "--- SECRET_KEY not set, using local-dev value (not for production)"
+  echo "WARNING: SECRET_KEY not found in .env.local — using ephemeral key (sessions won't survive restarts)"
+  export SECRET_KEY="local-dev-ephemeral-$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 fi
 
 # 1. Check Python

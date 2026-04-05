@@ -172,7 +172,11 @@
           <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             <input id="trtf-from" type="date" class="input" placeholder="Date from">
             <input id="trtf-to" type="date" class="input" placeholder="Date to">
-            <input id="trtf-patient" class="input" placeholder="Patient ID">
+            <div class="relative">
+              <input id="trtf-patient" class="input" placeholder="Patient Name" autocomplete="off" oninput="searchTreatmentPatient(this.value)">
+              <input type="hidden" id="trtf-patient-id">
+              <div id="trtf-patient-dropdown" class="absolute z-50 w-full bg-white border rounded shadow-lg mt-1 hidden max-h-40 overflow-y-auto"></div>
+            </div>
             <select id="trtf-staff" class="input"><option value="">All Staff</option></select>
           </div>
           <button onclick="loadTreatmentRecords()" class="btn btn-primary btn-sm w-full">Search</button>
@@ -1070,7 +1074,7 @@ async function openPatientDetail(pid){
     h+=`<button onclick="openAddInsurance('${pid}')" class="btn btn-xs btn-outline mt-1">+ Add Insurance</button></div>`;
     // Visit history with selective PDF
     const totCopay=visList.filter(v=>v.status==='checked_out').reduce((s,v)=>s+(v.copay_collected||0),0);
-    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><div class="flex gap-2"><a href="${API}/patients/${pid}/sign-sheet.pdf" target="_blank" class="btn btn-xs btn-outline">Sign Sheet PDF</a><button id="sel-pdf-btn" onclick="downloadSelectedPDF('${pid}')" class="btn btn-xs btn-blue" disabled>📄 Selected PDF</button></div></div>`;
+    h+=`<div><div class="flex items-center justify-between mb-2"><h4 class="font-semibold">📋 Visit History (${visList.length})</h4><div class="flex gap-2"><button onclick="downloadSignSheet('${pid}')" class="btn btn-xs btn-outline">Sign Sheet PDF</button><button id="sel-pdf-btn" onclick="downloadSelectedPDF('${pid}')" class="btn btn-xs btn-blue" disabled>📄 Selected PDF</button></div></div>`;
     if(visList.length){
       h+=`<div class="text-xs text-gray-500 mb-1">Total copay collected: <strong>$${totCopay.toFixed(2)}</strong></div>`;
       h+=`<table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="pb-1 w-8"><input type="checkbox" id="select-all-visits" onchange="toggleAllVisits(this)"></th><th class="pb-1">Date</th><th class="pb-1">Service</th><th class="pb-1">Status</th><th class="pb-1">Co-Pay</th><th class="pb-1">WD</th><th class="pb-1">Signed</th></tr></thead><tbody>`;
@@ -1114,8 +1118,7 @@ function updateSelectedPDFButton(){
 function downloadSelectedPDF(pid){
   const selected=Array.from(document.querySelectorAll('.visit-checkbox:checked')).map(cb=>cb.dataset.visitId);
   if(!selected.length)return toast('Select at least one visit','error');
-  const url=`${API}/patients/${pid}/sign-sheet.pdf?visit_ids=${selected.join(',')}`;
-  window.open(url,'_blank');
+  downloadSignSheet(pid,selected.join(','));
 }
 
 // ==================== APPOINTMENTS (§11.2) ====================
@@ -1144,6 +1147,28 @@ async function apptNoShow(id){try{await POST('/appointments/'+id+'/no-show');toa
 async function apptCancel(id){try{await POST('/appointments/'+id+'/cancel');toast('Cancelled');loadAppointments();}catch(e){toast(e.message,'error');}}
 
 // ==================== TREATMENT RECORDS (PRD-005) ====================
+let _trtfSearchTimer=null;
+async function searchTreatmentPatient(q){
+  clearTimeout(_trtfSearchTimer);
+  const dd=document.getElementById('trtf-patient-dropdown');
+  if(!q||q.length<1){dd.classList.add('hidden');document.getElementById('trtf-patient-id').value='';return;}
+  _trtfSearchTimer=setTimeout(async()=>{
+    try{
+      const r=await GET('/patients?q='+encodeURIComponent(q));
+      const pts=r.patients||[];
+      if(!pts.length){dd.innerHTML='<div class="px-3 py-2 text-gray-400 text-sm">No patients found</div>';dd.classList.remove('hidden');return;}
+      dd.innerHTML=pts.slice(0,8).map(p=>`<div class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm" onclick="selectTreatmentPatient('${p.patient_id}','${(p.first_name||'')} ${(p.last_name||'')}')">${p.first_name||''} ${p.last_name||''} <span class="text-gray-400 text-xs">${p.phone||''}</span></div>`).join('');
+      dd.classList.remove('hidden');
+    }catch(e){dd.classList.add('hidden');}
+  },250);
+}
+function selectTreatmentPatient(id,name){
+  document.getElementById('trtf-patient').value=name.trim();
+  document.getElementById('trtf-patient-id').value=id;
+  document.getElementById('trtf-patient-dropdown').classList.add('hidden');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('#trtf-patient')&&!e.target.closest('#trtf-patient-dropdown'))document.getElementById('trtf-patient-dropdown')?.classList.add('hidden');});
+
 async function loadTreatmentRecords(){
   // Populate staff filter if empty
   const sf=document.getElementById('trtf-staff');
@@ -1154,7 +1179,7 @@ async function loadTreatmentRecords(){
   // Build query params
   const from=document.getElementById('trtf-from').value||null;
   const to=document.getElementById('trtf-to').value||null;
-  const pid=document.getElementById('trtf-patient').value.trim()||null;
+  const pid=document.getElementById('trtf-patient-id').value||null;
   const sid=document.getElementById('trtf-staff').value||null;
   let params=[];
   if(from)params.push('date_from='+from);

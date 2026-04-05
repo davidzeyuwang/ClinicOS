@@ -89,7 +89,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 ### 4. What is the official glossary for treatment-record abbreviations?
 
 **Why this matters:**
-- The treatment UI uses `A`, `PT`, `CP`, `TN`, and `生诊医生`.
+- The treatment UI uses `A`, `PT`, `CP`, `TN`, and `主诊医生`.
 - The backend maps modalities into columns using string heuristics.
 
 **Questions for BO:**
@@ -98,7 +98,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 - Which service types should map into each column?
 - Are `Eval`, `Re-eval`, `OT`, `Speech`, `E-stim`, `Heat`, and `Cold` separate columns, or should they roll up into existing columns?
 - Should “other modalities” appear in their own dedicated column instead of free text notes?
-- Is `生诊医生` the supervising doctor, attending physician, ordering provider, or something else?
+- Is `主诊医生` the supervising doctor, attending physician, ordering provider, or something else?
 
 **Current references:**
 - `Files/个人诊疗记录表.png`
@@ -192,7 +192,7 @@ There are also several other form-derived abbreviations, status vocabularies, an
 **Questions for BO:**
 - What are the allowed staff roles?
 - Which roles can provide treatment?
-- Which roles can appear as `生诊医生` / supervising doctor?
+- Which roles can appear as `主诊医生` / supervising doctor?
 - Can the same person be both treating therapist and supervising doctor on the same visit?
 
 **Current references:**

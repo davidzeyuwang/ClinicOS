@@ -65,7 +65,7 @@ async function endService(page: Page, roomCode: string) {
 /** Open checkout modal for a patient in the active visits list. */
 async function openCheckoutModal(page: Page, patientName: string) {
   const visitRow = page.locator("#visits-list tr").filter({ hasText: patientName });
-  await expect(visitRow).toContainText("service_completed");
+  await expect(visitRow).toContainText("checked_in");
   await visitRow.getByRole("button", { name: /out/i }).click();
 }
 

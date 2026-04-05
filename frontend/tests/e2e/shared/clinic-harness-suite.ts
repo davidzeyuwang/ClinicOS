@@ -104,6 +104,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
     await page.getByTestId("staff-role-input").selectOption("therapist");
     await page.getByTestId("add-staff-button").click();
     await expectToast(page, "Staff added");
+    await openTab(page, "tab-ops");
+    await expect(page.getByTestId(`room-card-${env.roomCode}`)).toBeVisible();
+    await expect(page.getByTestId(`room-checkin-${env.roomCode}`)).toBeVisible();
   }
 
   async function checkinAndStartService(page: Page, patientName: string) {
@@ -122,7 +125,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
 
   async function openCheckoutModal(page: Page, patientName: string) {
     const visitRow = page.locator("#visits-list tr").filter({ hasText: patientName });
-    await expect(visitRow).toContainText("service_completed");
+    await expect(visitRow).toContainText("checked_in");
     await visitRow.getByRole("button", { name: /out/i }).click();
   }
 
@@ -156,7 +159,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
     });
 
     // ── 2. Walk-in quick checkout ─────────────────────────────────────────────
-    test("ops board walk-in flow: skip payment checkout", async ({ page }) => {
+    test("ops board walk-in flow: signed checkout without payment info", async ({ page }) => {
       await setupRoomAndStaff(page);
       await checkinAndStartService(page, "Walk In John");
 
@@ -166,14 +169,15 @@ export function registerHarnessTests(env: HarnessEnv): void {
 
       await endService(page);
       await openCheckoutModal(page, "Walk In John");
-      await page.getByRole("button", { name: /skip/i }).click();
+      await page.locator("#co-signed").check();
+      await page.getByTestId("checkout-submit-button").click();
       await expectToast(page, "Checked out");
 
       await expect(roomCard).toContainText("available");
       await expect(roomCard).toContainText("Empty");
     });
 
-    // ── 3. Checkout with copay CC + WD + signed ────────────────────────────────
+    // ── 3. Checkout with copay amount + CC + WD + signed ─────────────────────
     test("checkout collects copay CC, WD verified, and patient signed", async ({ page }) => {
       await setupRoomAndStaff(page);
       await checkinAndStartService(page, "Copay Patient");
@@ -181,11 +185,12 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Copay Patient");
 
       await page.locator("#co-cc").fill("25");
-      await page.locator("#co-ps").selectOption("copay_collected");
+      await page.locator("#co-cc-collected").check();
       await page.locator("#co-pm").selectOption("cash");
       await page.locator("#co-wd").check();
       await page.locator("#co-signed").check();
 
+      await expect(page.locator("#co-cc-collected")).toBeChecked();
       await expect(page.locator("#co-wd")).toBeChecked();
       await expect(page.locator("#co-signed")).toBeChecked();
 
@@ -203,16 +208,120 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Field Test Patient");
 
       await expect(page.locator("#co-cc")).toBeVisible();
+      await expect(page.locator("#co-cc-collected")).toBeVisible();
       await expect(page.locator("#co-wd")).toBeVisible();
       await expect(page.locator("#co-signed")).toBeVisible();
       await expect(page.locator("#co-ps")).toBeVisible();
       await expect(page.locator("#co-pm")).toBeVisible();
 
+      await expect(page.locator("#co-cc-collected")).not.toBeChecked();
       await expect(page.locator("#co-wd")).not.toBeChecked();
       await expect(page.locator("#co-signed")).not.toBeChecked();
 
-      await expect(page.getByRole("button", { name: /check out/i }).first()).toBeVisible();
-      await expect(page.getByRole("button", { name: /skip/i })).toBeVisible();
+      await expect(page.getByTestId("checkout-submit-button")).toBeVisible();
+      await expect(page.getByTestId("checkout-save-pdf-button")).toBeVisible();
+      await expect(page.getByTestId("checkout-submit-button")).toBeDisabled();
+    });
+
+    test("check-in modal includes supervising doctor field like start service modal", async ({ page }) => {
+      await setupRoomAndStaff(page);
+      await openTab(page, "tab-ops");
+      await page.getByTestId(`room-checkin-${env.roomCode}`).click();
+
+      await expect(page.locator("#rc-staff")).toBeVisible();
+      await expect(page.locator("#rc-super")).toBeVisible();
+      await expect(page.locator("#rc-svc")).toBeVisible();
+      await expect(page.locator("#rc-dur")).toBeVisible();
+      await expect(page.locator("#modal .modal-box")).toContainText("主诊医生 Supervising Doctor");
+      await expect(page.locator("#modal .modal-box")).toContainText("Room");
+    });
+
+    test("ended visit uses resume wording instead of start", async ({ page }) => {
+      await setupRoomAndStaff(page);
+      await checkinAndStartService(page, "Resume Patient");
+      await endService(page);
+
+      const visitRow = page.locator("#visits-list tr").filter({ hasText: "Resume Patient" });
+      await expect(visitRow).toContainText("checked_in");
+      await expect(visitRow.getByRole("button", { name: /resume/i })).toBeVisible();
+
+      await visitRow.getByRole("button", { name: /resume/i }).click();
+      await expectToast(page, "Service resumed");
+      await expect(page.locator("#modal .modal-box")).toBeHidden();
+      await expect(visitRow).toContainText("in_service");
+    });
+
+    test("checkout modal PDF action saves payment info before downloading", async ({ page, request }) => {
+      await setupRoomAndStaff(page);
+      await openTab(page, "tab-patients");
+      await page.getByRole("button", { name: /new/i }).click();
+      await page.locator("#np-fn").fill("Pdf");
+      await page.locator("#np-ln").fill("Save");
+      await page.locator("#np-dob").fill("1988-02-14");
+      await page.locator("#np-phone").fill("555-2121");
+      await page.getByRole("button", { name: /create patient/i }).click();
+      await expectToast(page, "Patient created");
+
+      await openTab(page, "tab-ops");
+      await page.getByTestId(`room-checkin-${env.roomCode}`).click();
+      await page.locator("#rc-search").fill("Pdf Save");
+      await expect(page.locator("#rc-results")).toBeVisible();
+      await page.locator("#rc-results div").first().click();
+      await page.locator("#rc-staff").selectOption({ index: 0 });
+      await page.getByRole("button", { name: "Check In & Start" }).click();
+      await expectToast(page, "room assigned");
+      await endService(page);
+      await openCheckoutModal(page, "Pdf Save");
+
+      await page.locator("#co-cc").fill("55");
+      await page.locator("#co-cc-collected").check();
+      await page.locator("#co-pm").selectOption("card");
+      await page.locator("#co-wd").check();
+      await page.getByTestId("checkout-save-pdf-button").click();
+
+      await expectToast(page, "Payment saved");
+      await expect(page.locator("#modal .modal-box")).toBeVisible();
+      await expect(page.locator("#visits-list")).toContainText("Pdf Save");
+      await expect(page.locator("#visits-list")).toContainText("checked_in");
+
+      const summary = await apiGet(request, "/projections/daily-summary");
+      expect(summary.copay_total).toBe(0);
+      expect(summary.total_checked_out).toBe(0);
+      const savedVisit = summary.visits.find((v: { patient_name: string }) => v.patient_name === "Pdf Save");
+      expect(savedVisit?.status).toBe("checked_in");
+      expect(savedVisit?.copay_collected).toBe(55);
+    });
+
+    test("checkout requires patient signature checkbox", async ({ page }) => {
+      await setupRoomAndStaff(page);
+      await checkinAndStartService(page, "Signature Required");
+      await endService(page);
+      await openCheckoutModal(page, "Signature Required");
+
+      await page.locator("#co-cc").fill("25");
+      await page.locator("#co-cc-collected").check();
+      await page.locator("#co-wd").check();
+      await expect(page.getByTestId("checkout-submit-button")).toBeDisabled();
+
+      await page.locator("#co-signed").check();
+      await expect(page.getByTestId("checkout-submit-button")).toBeEnabled();
+      await expect(page.locator("#modal .modal-box")).toBeVisible();
+    });
+
+    test("checkout does not trigger PDF download", async ({ page }) => {
+      await setupRoomAndStaff(page);
+      await checkinAndStartService(page, "No Download");
+      await endService(page);
+      await openCheckoutModal(page, "No Download");
+
+      await page.locator("#co-cc").fill("18");
+      await page.locator("#co-cc-collected").check();
+      await page.locator("#co-signed").check();
+
+      const downloadTriggered = page.waitForEvent("download", { timeout: 1500 }).then(() => true).catch(() => false);
+      await page.getByTestId("checkout-submit-button").click();
+      await expectToast(page, "Checked out");
+      expect(await downloadTriggered).toBe(false);
     });
 
     // ── 5. Patient detail shows visit history ──────────────────────────────────
@@ -280,6 +389,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Summary Test");
       await page.locator("#co-cc").fill("45");
       await page.locator("#co-wd").check();
+      await page.locator("#co-signed").check();
       await page.getByRole("button", { name: /check out/i }).first().click();
       await expectToast(page, "Checked out");
 
@@ -304,8 +414,9 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Regression Jane");
 
       await page.locator("#co-cc").fill("30");
-      await page.locator("#co-ps").selectOption("copay_collected");
+      await page.locator("#co-cc-collected").check();
       await page.locator("#co-pm").selectOption("card");
+      await page.locator("#co-signed").check();
       await page.getByRole("button", { name: /check out/i }).first().click();
       await expectToast(page, "Checked out");
 
@@ -433,8 +544,11 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await expect(roomCard).toContainText("occupied");
 
       await page.reload();
-      await expect(roomCard).toContainText("Refresh Rita");
-      await expect(roomCard).toContainText("occupied");
+      await openTab(page, "tab-ops");
+      const reloadedRoomCard = page.getByTestId(`room-card-${env.roomCode}`);
+      await expect(reloadedRoomCard).toBeVisible();
+      await expect(reloadedRoomCard).toContainText("Refresh Rita");
+      await expect(reloadedRoomCard).toContainText("occupied");
     });
 
     // ── 14. Insurance-only payment path ───────────────────────────────────────
@@ -445,6 +559,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Insured Ivy");
 
       await page.locator("#co-ps").selectOption("insurance_only");
+      await page.locator("#co-signed").check();
       await page.getByRole("button", { name: /check out/i }).first().click();
       await expectToast(page, "Checked out");
       await expect(page.getByTestId(`room-card-${env.roomCode}`)).toContainText("available");
@@ -525,7 +640,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await page.getByRole("button", { name: /search/i }).click();
 
       const headers = page.locator("#treatment-records-list thead th");
-      await expect(headers).toContainText(["#", "Date", "Patient", "生诊医生", "A", "PT", "CP", "TN", "Room", "Duration", "Note"]);
+      await expect(headers).toContainText(["#", "Date", "Patient", "主诊医生", "A", "PT", "CP", "TN", "Room", "Duration", "Note"]);
     });
 
     // ── 19. Walk-in name appears in treatment records ─────────────────────────
@@ -658,7 +773,8 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await openCheckoutModal(page, "Copay Prefill");
 
       await expect(page.locator("#co-cc")).toHaveValue("45");
-      await expect(page.locator("#co-ps")).toHaveValue("copay_collected");
+      await expect(page.locator("#co-cc-collected")).not.toBeChecked();
+      await expect(page.locator("#co-ps")).toHaveValue("");
     });
 
     // ── 24. Patient creation requires DOB and phone ───────────────────────────
@@ -680,8 +796,8 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await expectToast(page, "Patient created");
     });
 
-    // ── 25. Sign sheet PDF shows expected copay for unchecked-out visits ──────
-    test("sign sheet PDF shows expected copay from insurance for unchecked-out visits", async ({ request }) => {
+    // ── 25. Sign sheet PDF shows Co-Pay amount for unchecked-out visits ───────
+    test("sign sheet PDF shows Co-Pay amount from insurance for unchecked-out visits", async ({ request }) => {
       const patient = await apiPost(request, "/patients", {
         first_name: "Copay",
         last_name: "SignSheet",
@@ -707,6 +823,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       const body = await resp.body();
       expect(body.slice(0, 4).toString()).toBe("%PDF");
       expect(body.length).toBeGreaterThan(2000);
+      expect(body.toString("latin1")).toContain("Co-Pay: $35.00");
     });
 
     // ── 26. Staff hours reflect treatment duration, not wall-clock ────────────
@@ -716,6 +833,7 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await endService(page);
       await openCheckoutModal(page, "Hours Test");
       await page.locator("#co-cc").fill("0");
+      await page.locator("#co-signed").check();
       await page.getByRole("button", { name: /check out/i }).first().click();
       await expectToast(page, "Checked out");
 
@@ -787,11 +905,12 @@ export function registerHarnessTests(env: HarnessEnv): void {
       await page.getByTestId(`room-end-service-${env.altRoomCode}`).click();
       await expectToast(page, "Service ended");
       await page.waitForTimeout(500);
-      await expect(visitRow).toContainText("service_completed");
+      await expect(visitRow).toContainText("checked_in");
 
       await visitRow.getByRole("button", { name: /out/i }).click();
       await page.locator("#co-cc").fill("45");
       await page.locator("#co-wd").check();
+      await page.locator("#co-signed").check();
       await page.getByRole("button", { name: /check out/i }).first().click();
       await expectToast(page, "Checked out");
       await page.waitForTimeout(500);

@@ -196,7 +196,7 @@ def test_prd_v2_e2e_domain_flow(client: TestClient, auth_headers):
     assert r1_board["patient_name"] == "John Doe"
 
     end = post_json(client, "/portal/service/end", {"visit_id": v1["visit_id"], "actor_id": "therapist-1"}, headers=auth_headers)
-    assert end["status"] == "service_completed"
+    assert end["status"] == "checked_in"
 
     # ==================== CLINICAL NOTE (§11.6) ====================
     note1 = post_json(

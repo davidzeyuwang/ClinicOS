@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt_utils import create_access_token
@@ -42,6 +42,13 @@ async def create_user(
     role: str = "frontdesk",
     username: Optional[str] = None,
 ) -> User:
+    existing_email = await db.execute(select(User).where(User.email == email))
+    if existing_email.scalar_one_or_none():
+        raise ValueError("Email already exists")
+    if username:
+        existing_username = await db.execute(select(User).where(User.username == username))
+        if existing_username.scalar_one_or_none():
+            raise ValueError("Username already exists")
     user = User(
         user_id=_new_id(),
         clinic_id=clinic_id,
@@ -60,7 +67,6 @@ async def create_user(
 
 async def authenticate_user(db: AsyncSession, identifier: str, password: str) -> Optional[dict]:
     """Accept email or username as identifier. Return token dict on success, None on failure."""
-    from sqlalchemy import or_
     result = await db.execute(
         select(User).where(
             or_(User.email == identifier, User.username == identifier),
@@ -92,3 +98,10 @@ async def authenticate_user(db: AsyncSession, identifier: str, password: str) ->
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.user_id == user_id))
     return result.scalar_one_or_none()
+
+
+async def list_users_by_clinic(db: AsyncSession, clinic_id: str) -> list[User]:
+    result = await db.execute(
+        select(User).where(User.clinic_id == clinic_id).order_by(User.created_at.asc(), User.email.asc())
+    )
+    return list(result.scalars().all())

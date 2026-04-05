@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, update, or_, func, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import (
@@ -172,13 +173,17 @@ DEFAULT_SERVICE_TYPES = (
 
 
 async def ensure_default_service_types(db: AsyncSession) -> None:
-    """Seed default service types if the table is empty (idempotent startup seed)."""
-    count = await db.scalar(select(func.count()).select_from(ServiceType))
-    if count and count > 0:
-        return
+    """Seed any missing default service types (idempotent startup seed)."""
+    existing = await db.execute(select(ServiceType.name))
+    existing_names = {name for (name,) in existing.all()}
     for name in DEFAULT_SERVICE_TYPES:
+        if name in existing_names:
+            continue
         db.add(ServiceType(name=name))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
 
 
 # ==================== ROOMS ====================
@@ -331,8 +336,7 @@ async def service_start(
     visit.service_type = service_type
     visit.service_start_time = now
     visit.status = "in_service"
-    if supervising_staff_id:
-        visit.supervising_staff_id = supervising_staff_id
+    visit.supervising_staff_id = supervising_staff_id
 
     room.status = "occupied"
     room.updated_at = now
@@ -356,7 +360,7 @@ async def service_end(db: AsyncSession, clinic_id: str, visit_id: str, actor_id:
 
     now = _utc_now()
     visit.service_end_time = now
-    visit.status = "service_completed"
+    visit.status = "checked_in"
     start_time = _ensure_utc(visit.service_start_time)
     duration_seconds = (now - start_time).total_seconds() if start_time else 0
 
@@ -379,17 +383,56 @@ async def service_end(db: AsyncSession, clinic_id: str, visit_id: str, actor_id:
     return _visit_to_dict(visit)
 
 
-async def save_payment_info(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
-                           payment_status: Optional[str] = None,
-                           payment_amount: Optional[float] = None,
-                           payment_method: Optional[str] = None,
-                           copay_collected: Optional[float] = None) -> Optional[dict]:
-    """Save payment info on a visit without checking out."""
+async def service_resume(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str) -> Optional[dict]:
     result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
     visit = result.scalar_one_or_none()
     if not visit:
         return None
+    if visit.status != "checked_in" or not visit.service_start_time:
+        raise ValueError("Visit is not resumable")
+    if not visit.staff_id or not visit.room_id or not visit.service_type:
+        return None
 
+    room_result = await db.execute(select(Room).where(Room.room_id == visit.room_id, Room.clinic_id == clinic_id))
+    room = room_result.scalar_one_or_none()
+    if not room:
+        return None
+
+    if room.status == "occupied":
+        existing = await db.execute(
+            select(Visit).where(Visit.room_id == visit.room_id, Visit.status == "in_service", Visit.clinic_id == clinic_id)
+        )
+        occupying_visit = existing.scalar_one_or_none()
+        if occupying_visit and occupying_visit.visit_id != visit_id:
+            raise ValueError(f"Room {room.code} is already occupied by another patient")
+
+    now = _utc_now()
+    visit.status = "in_service"
+    visit.service_end_time = None
+    room.status = "occupied"
+    room.updated_at = now
+
+    await _append_event(db, "SERVICE_RESUMED", actor_id, {
+        "visit_id": visit_id,
+        "staff_id": visit.staff_id,
+        "room_id": visit.room_id,
+        "service_type": visit.service_type,
+        "service_start_time": visit.service_start_time,
+        "resumed_at": now,
+    })
+    await db.commit()
+    return _visit_to_dict(visit)
+
+
+def _apply_payment_fields(
+    visit: Visit,
+    payment_status: Optional[str] = None,
+    payment_amount: Optional[float] = None,
+    payment_method: Optional[str] = None,
+    copay_collected: Optional[float] = None,
+    wd_verified: bool = False,
+    patient_signed: bool = False,
+) -> None:
     if payment_status:
         visit.payment_status = payment_status
     if payment_amount is not None:
@@ -398,14 +441,42 @@ async def save_payment_info(db: AsyncSession, clinic_id: str, visit_id: str, act
         visit.payment_method = payment_method
     if copay_collected is not None:
         visit.copay_collected = copay_collected
+    visit.wd_verified = wd_verified
+    visit.patient_signed = patient_signed
 
-    await _append_event(db, "PAYMENT_RECORDED", actor_id, {
+
+async def save_visit_payment(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
+                             payment_status: Optional[str] = None,
+                             payment_amount: Optional[float] = None,
+                             payment_method: Optional[str] = None,
+                             copay_collected: Optional[float] = None,
+                             wd_verified: bool = False,
+                             patient_signed: bool = False) -> Optional[dict]:
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
+    if not visit:
+        return None
+
+    _apply_payment_fields(
+        visit,
+        payment_status=payment_status,
+        payment_amount=payment_amount,
+        payment_method=payment_method,
+        copay_collected=copay_collected,
+        wd_verified=wd_verified,
+        patient_signed=patient_signed,
+    )
+
+    payload = {
         "visit_id": visit_id,
         "payment_status": payment_status,
         "payment_amount": payment_amount,
         "payment_method": payment_method,
         "copay_collected": copay_collected,
-    })
+        "wd_verified": wd_verified,
+        "patient_signed": patient_signed,
+    }
+    await _append_event(db, "PAYMENT_INFO_SAVED", actor_id, payload)
     await db.commit()
     return _visit_to_dict(visit)
 
@@ -426,16 +497,15 @@ async def patient_checkout(db: AsyncSession, clinic_id: str, visit_id: str, acto
     visit.check_out_time = now
     visit.status = "checked_out"
 
-    if payment_status:
-        visit.payment_status = payment_status
-    if payment_amount is not None:
-        visit.payment_amount = payment_amount
-    if payment_method:
-        visit.payment_method = payment_method
-    if copay_collected is not None:
-        visit.copay_collected = copay_collected
-    visit.wd_verified = wd_verified
-    visit.patient_signed = patient_signed
+    _apply_payment_fields(
+        visit,
+        payment_status=payment_status,
+        payment_amount=payment_amount,
+        payment_method=payment_method,
+        copay_collected=copay_collected,
+        wd_verified=wd_verified,
+        patient_signed=patient_signed,
+    )
 
     # Update linked appointment
     if visit.appointment_id:
@@ -516,7 +586,7 @@ async def get_room_board(db: AsyncSession, clinic_id: str) -> list:
     visits_result = await db.execute(
         select(Visit).where(
             Visit.room_id.isnot(None),
-            Visit.status.in_(["in_service", "checked_in", "service_completed"]),
+            Visit.status.in_(["in_service"]),
             Visit.clinic_id == clinic_id,
         )
     )
@@ -538,6 +608,7 @@ async def get_room_board(db: AsyncSession, clinic_id: str) -> list:
             "visit_status": visit.status if visit else None,
             "service_type": visit.service_type if visit else None,
             "staff_id": visit.staff_id if visit else None,
+            "service_start_time": visit.service_start_time.isoformat() if visit and visit.service_start_time else None,
         })
     return board
 
@@ -550,6 +621,14 @@ async def get_active_visits(db: AsyncSession, clinic_id: str) -> list:
         ).order_by(Visit.check_in_time)
     )
     return [_visit_to_dict(v) for v in result.scalars().all()]
+
+
+async def get_visit(db: AsyncSession, clinic_id: str, visit_id: str) -> Optional[dict]:
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
+    if not visit:
+        return None
+    return _visit_to_dict(visit)
 
 
 async def get_patient_visits(db: AsyncSession, clinic_id: str, patient_id: str) -> list:
@@ -1810,15 +1889,16 @@ async def create_service_type(db: AsyncSession, actor_id: str, name: str) -> dic
 async def update_service_type(
     db: AsyncSession, service_type_id: str, actor_id: str, updates: dict
 ) -> Optional[dict]:
-    st = await db.get(ServiceType, service_type_id)
-    if not st:
+    result = await db.execute(
+        update(ServiceType)
+        .where(ServiceType.service_type_id == service_type_id)
+        .values(**updates)
+    )
+    if not result.rowcount:
         return None
-    if "name" in updates and updates["name"] is not None:
-        st.name = updates["name"]
-    if "is_active" in updates and updates["is_active"] is not None:
-        st.is_active = updates["is_active"]
     await _append_event(db, "SERVICE_TYPE_UPDATED", actor_id, {"service_type_id": service_type_id, "updates": updates})
     await db.commit()
+    st = await db.get(ServiceType, service_type_id)
     return _svc_type_to_dict(st)
 
 

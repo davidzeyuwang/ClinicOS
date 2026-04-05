@@ -41,6 +41,13 @@ async def create_user(
     username: Optional[str] = None,
 ):
     supa = get_supabase()
+    existing_email = await supa.select("users", {"email": email}, limit=1)
+    if existing_email:
+        raise ValueError("Email already exists")
+    if username:
+        existing_username = await supa.select("users", {"username": username}, limit=1)
+        if existing_username:
+            raise ValueError("Username already exists")
     data = {
         "user_id": _new_id(),
         "clinic_id": clinic_id,
@@ -90,6 +97,13 @@ async def get_user_by_id(db, user_id: str) -> Optional["_UserProxy"]:
     if not rows:
         return None
     return _UserProxy(rows[0])
+
+
+async def list_users_by_clinic(db, clinic_id: str) -> list["_UserProxy"]:
+    supa = get_supabase()
+    rows = await supa.select("users", {"clinic_id": clinic_id})
+    rows = sorted(rows, key=lambda row: ((row.get("created_at") or ""), row.get("email") or ""))
+    return [_UserProxy(row) for row in rows]
 
 
 class _ClinicProxy:

@@ -231,7 +231,7 @@ def test_current_clinic_workflow_supported_path(client: TestClient, auth_headers
         {"visit_id": visit["visit_id"], "actor_id": "therapist-1"},
         headers=auth_headers,
     )
-    assert ended["status"] == "service_completed"
+    assert ended["status"] == "checked_in"
 
     note = post_json(
         client,

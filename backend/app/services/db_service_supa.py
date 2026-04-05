@@ -116,7 +116,7 @@ async def get_room_board(db, **_) -> list:
     # Fetch rooms and active visits concurrently to minimize latency
     all_rooms, active_visits = await asyncio.gather(
         supa.select("rooms", {}),
-        supa.select("visits", status_in=["checked_in", "in_service", "service_completed"], limit=500),
+        supa.select("visits", status_in=["in_service"], limit=500),
     )
     rooms = [r for r in all_rooms if r.get("active") is True]
     active_visits = [v for v in active_visits if v.get("room_id")]
@@ -132,12 +132,14 @@ async def get_room_board(db, **_) -> list:
             room["patient_name"] = v.get("patient_name")
             room["service_type"] = v.get("service_type")
             room["visit_status"] = v.get("status")
+            room["service_start_time"] = v.get("service_start_time")
         else:
             room["visit_id"] = None
             room["patient_id"] = None
             room["patient_name"] = None
             room["service_type"] = None
             room["visit_status"] = None
+            room["service_start_time"] = None
 
     return rooms
 
@@ -380,8 +382,7 @@ async def service_start(db, visit_id: str, actor_id: str, staff_id: Optional[str
         "service_type": service_type,
         "service_start_time": _utc_now(),
     }
-    if supervising_staff_id:
-        updates["supervising_staff_id"] = supervising_staff_id
+    updates["supervising_staff_id"] = supervising_staff_id
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if room_id:
         await supa.update("rooms", "room_id", room_id, {"status": "occupied", "updated_at": _utc_now()})
@@ -397,7 +398,7 @@ async def service_end(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     visit = rows[0]
     if visit["status"] != "in_service":
         return None
-    updates = {"status": "service_completed", "service_end_time": _utc_now()}
+    updates = {"status": "checked_in", "service_end_time": _utc_now()}
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if visit.get("room_id"):
         await supa.update("rooms", "room_id", visit["room_id"], {"status": "available", "updated_at": _utc_now()})
@@ -405,14 +406,53 @@ async def service_end(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     return result
 
 
-async def save_payment_info(db, visit_id: str, actor_id: str,
-                           payment_status=None, payment_amount=None,
-                           payment_method=None, copay_collected=None, **_):
-    """Save payment info on a visit without checking out."""
+async def service_resume(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
         return None
+    visit = rows[0]
+    if visit.get("status") != "checked_in" or not visit.get("service_start_time"):
+        raise ValueError("Visit is not resumable")
+    if not visit.get("staff_id") or not visit.get("room_id") or not visit.get("service_type"):
+        return None
+
+    room_rows = await supa.select("rooms", {"room_id": visit["room_id"]}, limit=1)
+    if not room_rows:
+        return None
+    room = room_rows[0]
+    if room.get("status") == "occupied":
+        occupying_rows = await supa.select("visits", {"room_id": visit["room_id"], "status": "in_service"})
+        occupying = next((row for row in occupying_rows if row.get("visit_id") != visit_id), None)
+        if occupying:
+            raise ValueError(f"Room {room.get('code') or visit['room_id']} is already occupied by another patient")
+
+    now = _utc_now()
+    updates = {
+        "status": "in_service",
+        "service_end_time": None,
+    }
+    result = await supa.update("visits", "visit_id", visit_id, updates)
+    await supa.update("rooms", "room_id", visit["room_id"], {"status": "occupied", "updated_at": now})
+    await _append_event("SERVICE_RESUMED", actor_id, {
+        "visit_id": visit_id,
+        "staff_id": visit.get("staff_id"),
+        "room_id": visit.get("room_id"),
+        "service_type": visit.get("service_type"),
+        "service_start_time": visit.get("service_start_time"),
+        "resumed_at": now,
+    })
+    return result
+
+
+def _payment_updates(
+    payment_status: Optional[str] = None,
+    payment_amount: Optional[float] = None,
+    payment_method: Optional[str] = None,
+    copay_collected: Optional[float] = None,
+    wd_verified: bool = False,
+    patient_signed: bool = False,
+) -> dict:
     updates = {}
     if payment_status:
         updates["payment_status"] = payment_status
@@ -422,10 +462,35 @@ async def save_payment_info(db, visit_id: str, actor_id: str,
         updates["payment_method"] = payment_method
     if copay_collected is not None:
         updates["copay_collected"] = copay_collected
-    if not updates:
-        return rows[0]
-    result = await supa.update("visits", "visit_id", visit_id, updates)
-    await _append_event("PAYMENT_RECORDED", actor_id, {"visit_id": visit_id, **updates})
+    updates["wd_verified"] = wd_verified
+    updates["patient_signed"] = patient_signed
+    return updates
+
+
+async def save_visit_payment(db, visit_id: str, actor_id: str, payment_status: Optional[str] = None,
+                             payment_amount: Optional[float] = None, payment_method: Optional[str] = None,
+                             copay_collected: Optional[float] = None, wd_verified: bool = False,
+                             patient_signed: bool = False, **_) -> Optional[dict]:
+    supa = get_supabase()
+    rows = await supa.select("visits", {"visit_id": visit_id})
+    if not rows:
+        return None
+    updates = _payment_updates(
+        payment_status=payment_status,
+        payment_amount=payment_amount,
+        payment_method=payment_method,
+        copay_collected=copay_collected,
+        wd_verified=wd_verified,
+        patient_signed=patient_signed,
+    )
+    try:
+        result = await supa.update("visits", "visit_id", visit_id, updates)
+    except Exception:
+        core = {k: v for k, v in updates.items()
+                if k in ("payment_status", "payment_amount", "payment_method",
+                         "copay_collected", "wd_verified", "patient_signed")}
+        result = await supa.update("visits", "visit_id", visit_id, core)
+    await _append_event("PAYMENT_INFO_SAVED", actor_id, {"visit_id": visit_id, **updates})
     return result
 
 
@@ -440,20 +505,15 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
     updates = {
         "status": "checked_out",
         "check_out_time": _utc_now(),
-        "payment_status": payment_status or "pending",
     }
-    # Only include optional fields if they have non-default values
-    # (avoids 422 if these columns haven't been migrated in production yet)
-    if wd_verified:
-        updates["wd_verified"] = wd_verified
-    if patient_signed:
-        updates["patient_signed"] = patient_signed
-    if payment_amount is not None:
-        updates["payment_amount"] = payment_amount
-    if payment_method is not None:
-        updates["payment_method"] = payment_method
-    if copay_collected is not None:
-        updates["copay_collected"] = copay_collected
+    updates.update(_payment_updates(
+        payment_status=payment_status or "pending",
+        payment_amount=payment_amount,
+        payment_method=payment_method,
+        copay_collected=copay_collected,
+        wd_verified=wd_verified,
+        patient_signed=patient_signed,
+    ))
 
     try:
         result = await supa.update("visits", "visit_id", visit_id, updates)
@@ -488,6 +548,12 @@ async def get_active_visits(db, **_) -> list:
         status_in=["checked_in", "in_service", "service_completed"],
         limit=500
     )
+
+
+async def get_visit(db, visit_id: str, **_) -> Optional[dict]:
+    supa = get_supabase()
+    rows = await supa.select("visits", {"visit_id": visit_id}, limit=1)
+    return rows[0] if rows else None
 
 
 async def get_patient_visits(db, patient_id: str, **_) -> list:

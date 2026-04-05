@@ -174,9 +174,10 @@ def test_pdf_includes_who_what_when_where():
         # Service types (WHAT)
         assert "Physical" in pdf_text or "PT-Eval" in pdf_text or "Occupational" in pdf_text
 
-        # Copay amounts in CC column and total row
-        assert "30.00" in pdf_text
-        assert "100.00" in pdf_text  # total: $40 + $30 + $30
+        # Co-Pay stays in the header amount field; CC is a checkbox marker per service row
+        assert "Co-Pay" in pdf_text
+        assert "30.00" in pdf_text or "40.00" in pdf_text
+        assert pdf_text.count(" v ") >= 3 or pdf_text.count("(v)") >= 3 or pdf_text.count(" v\n") >= 3
 
         # Table structure
         assert "Signature" in pdf_text
@@ -190,7 +191,7 @@ def test_pdf_includes_who_what_when_where():
         print(f"   Patient: John Doe (MRN-001)")
         print(f"   Insurance: Blue Shield PPO")
         print(f"   Total Visits: 3")
-        print(f"   Total Copay: $100.00")
+        print("   CC checkbox marked on each service row")
         print("\n📋 PDF INCLUDES:")
         print("   ✓ WHO: Dr. Sarah Chen (therapist)")
         print("   ✓ WHAT: PT-Evaluation, Physical Therapy, Occupational Therapy")
@@ -310,8 +311,9 @@ def test_pdf_with_multiple_staff_and_rooms():
         assert "PT" in pdf_text
         assert "OT" in pdf_text
 
-        # Copay collected for checked-out visit
-        assert "30.00" in pdf_text
+        # Co-Pay appears in the header and CC is rendered as a collected marker
+        assert "Co-Pay" in pdf_text
+        assert "CC" in pdf_text
         
         print("\n✅ PDF WITH MULTIPLE STAFF/ROOMS VALIDATED")
         print("   Visit 1: Alice Johnson PT in Treatment Room A")

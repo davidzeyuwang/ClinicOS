@@ -62,13 +62,16 @@ def generate_sign_sheet(patient, visits, policies):
     mrn   = str(patient.get("mrn") or "-")
     ph    = str(patient.get("phone") or "-")
 
-    # Pull primary insurance copay for header summary
+    # Pull primary insurance copay for header summary, but prefer saved visit copay when present.
     copay_label = "-"
     carrier_label = ""
     if policies:
         pri = next((p for p in policies if str(p.get("priority") or "").lower() == "primary"), policies[0])
-        copay_label   = _money(pri.get("copay_amount"))
+        copay_label = _money(pri.get("copay_amount"))
         carrier_label = str(pri.get("carrier_name") or "")
+    saved_copays = [v.get("copay_collected") for v in visits if v.get("copay_collected") is not None]
+    if saved_copays:
+        copay_label = _money(saved_copays[0])
 
     pdf.set_fill_color(235, 235, 235)
     pdf.set_draw_color(140, 140, 140)
@@ -106,24 +109,13 @@ def generate_sign_sheet(patient, visits, policies):
 
     ROW_H = 9   # tall enough to write a real signature
 
-    # Insurance copay amount to pre-fill expected copay on unchecked-out rows
-    ins_copay_amount = None
-    if policies:
-        pri = next((p for p in policies if str(p.get("priority") or "").lower() == "primary"), policies[0])
-        ins_copay_amount = pri.get("copay_amount")
-
     # Expand visits: one row per treatment (or one row per visit if no treatments)
     rows = []
     for v in visits:
-        status   = str(v.get("status") or "")
         date_str = _fmt_dt(v.get("check_in_time"), "%m/%d/%y")
-        w_val    = "v" if (status == "checked_out" and v.get("wd_verified")) else ""
-        if status == "checked_out":
-            cc_val = _money(v.get("copay_collected"))
-        elif ins_copay_amount:
-            cc_val = _money(ins_copay_amount)  # expected copay from insurance
-        else:
-            cc_val = ""
+        w_val    = "v" if v.get("wd_verified") else ""
+        d_val    = "v" if v.get("wd_verified") else ""
+        cc_val = "v" if str(v.get("payment_status") or "") == "copay_collected" else ""
 
         treatments = v.get("treatments") or []
         if treatments:
@@ -131,18 +123,18 @@ def generate_sign_sheet(patient, visits, policies):
                 mod = str(t.get("modality") or "-")
                 dur = t.get("duration_minutes")
                 svc_cell = (mod + " (" + str(dur) + "m)")[:20] if dur else mod[:20]
-                # CC only on first treatment row of the visit; W only on last
                 rows.append({
                     "date": date_str,
                     "svc": svc_cell,
-                    "w": w_val if ti == len(treatments) - 1 else "",
-                    "cc": cc_val if ti == 0 else "",
+                    "w": w_val,
+                    "d": d_val,
+                    "cc": cc_val,
                     "visit": v,
                 })
         else:
             # No explicit treatments — show service_type from ServiceStart
             svc_type = str(v.get("service_type") or "-")[:20]
-            rows.append({"date": date_str, "svc": svc_type, "w": w_val, "cc": cc_val, "visit": v})
+            rows.append({"date": date_str, "svc": svc_type, "w": w_val, "d": d_val, "cc": cc_val, "visit": v})
 
     alt = False
     for idx, row in enumerate(rows, 1):
@@ -154,7 +146,7 @@ def generate_sign_sheet(patient, visits, policies):
 
         pdf.set_draw_color(150, 150, 150)
         pdf.set_font("Helvetica", "", 8)
-        cells  = [str(idx), row["date"], row["svc"], row["w"], "", "", row["cc"], ""]
+        cells  = [str(idx), row["date"], row["svc"], row["w"], row["d"], "", row["cc"], ""]
         aligns = ["C", "C", "L", "C", "C", "L", "C", "L"]
         for i, cell in enumerate(cells):
             pdf.cell(W[i], ROW_H, cell, border=1, fill=True, align=aligns[i])
@@ -162,7 +154,6 @@ def generate_sign_sheet(patient, visits, policies):
 
     # ---- Totals row ----
     checked_out = [v for v in visits if v.get("status") == "checked_out"]
-    total_copay = sum(float(v.get("copay_collected") or 0) for v in checked_out)
     pdf.set_fill_color(210, 228, 210)
     pdf.set_draw_color(100, 130, 100)
     pdf.set_font("Helvetica", "B", 8)
@@ -170,7 +161,7 @@ def generate_sign_sheet(patient, visits, policies):
     total_label = "Total: %d visits | %d checked out" % (len(visits), len(checked_out))
     pdf.cell(label_w, 6, total_label, border=1, fill=True)
     pdf.cell(W[5],    6, "",          border=1, fill=True)
-    pdf.cell(W[6],    6, _money(total_copay) if total_copay else "-", border=1, fill=True, align="C")
+    pdf.cell(W[6],    6, "",          border=1, fill=True, align="C")
     pdf.cell(W[7],    6, "",          border=1, fill=True)
     pdf.ln(5)
 

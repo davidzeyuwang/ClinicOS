@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import CurrentUser, get_current_user, require_role
 from app.database import get_db, _IS_SUPABASE
 from app.schemas.prototype import (
+    AdminUserCreateRequest,
     AppointmentCreate,
     AppointmentUpdate,
     ClinicalNoteCreate,
@@ -25,11 +26,12 @@ from app.schemas.prototype import (
     PatientCheckout,
     PatientCreate,
     PatientUpdate,
+    VisitPaymentSave,
     RoomCreate,
     RoomStatusChange,
     RoomUpdate,
-    SavePaymentInfo,
     ServiceEnd,
+    ServiceResume,
     ServiceStart,
     ServiceTypeCreate,
     ServiceTypeUpdate,
@@ -45,8 +47,10 @@ from app.schemas.prototype import (
 
 if _IS_SUPABASE:
     from app.services import db_service_supa as db_service
+    from app.services import auth_service_supa as auth_service
 else:
     from app.services import db_service
+    from app.services import auth_service
 
 router = APIRouter(prefix="/prototype", tags=["prototype"])
 
@@ -172,6 +176,61 @@ async def delete_staff(
     return {"deleted": True, "staff": result}
 
 
+@router.get("/admin/users")
+async def list_users(
+    current_user: CurrentUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    users = await auth_service.list_users_by_clinic(db, current_user["clinic_id"])
+    return {
+        "users": [
+            {
+                "user_id": user.user_id,
+                "clinic_id": user.clinic_id,
+                "email": user.email,
+                "username": user.username,
+                "display_name": user.display_name,
+                "role": user.role,
+                "is_active": getattr(user, "is_active", True),
+            }
+            for user in users
+        ]
+    }
+
+
+@router.post("/admin/users")
+async def create_user(
+    payload: AdminUserCreateRequest,
+    current_user: CurrentUser = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        user = await auth_service.create_user(
+            db,
+            current_user["clinic_id"],
+            payload.email,
+            payload.password,
+            display_name=payload.display_name or payload.email,
+            role=payload.role,
+            username=payload.username or None,
+        )
+        if not _IS_SUPABASE:
+            await db.commit()
+    except ValueError as e:
+        if not _IS_SUPABASE and db is not None:
+            await db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
+    return {
+        "user_id": user.user_id,
+        "clinic_id": user.clinic_id,
+        "email": user.email,
+        "username": user.username,
+        "display_name": user.display_name,
+        "role": user.role,
+        "is_active": getattr(user, "is_active", True),
+    }
+
+
 @router.delete("/portal/visits/{visit_id}")
 async def delete_visit(
     visit_id: str,
@@ -236,12 +295,31 @@ async def service_end(
     return visit
 
 
+@router.post("/portal/service/resume")
+async def service_resume(
+    payload: ServiceResume,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        visit = await db_service.service_resume(
+            db, clinic_id=current_user["clinic_id"], visit_id=payload.visit_id, actor_id=current_user["user_id"]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found or prior service details missing")
+    return visit
+
+
 @router.post("/portal/checkout")
 async def patient_checkout(
     payload: PatientCheckout,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    if not payload.patient_signed:
+        raise HTTPException(status_code=400, detail="Patient signature required before checkout")
     visit = await db_service.patient_checkout(
         db, clinic_id=current_user["clinic_id"], visit_id=payload.visit_id, actor_id=current_user["user_id"],
         payment_status=payload.payment_status,
@@ -256,18 +334,20 @@ async def patient_checkout(
     return visit
 
 
-@router.post("/portal/save-payment")
-async def save_payment_info(
-    payload: SavePaymentInfo,
+@router.post("/portal/payment/save")
+async def save_visit_payment(
+    payload: VisitPaymentSave,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    visit = await db_service.save_payment_info(
+    visit = await db_service.save_visit_payment(
         db, clinic_id=current_user["clinic_id"], visit_id=payload.visit_id, actor_id=current_user["user_id"],
         payment_status=payload.payment_status,
         payment_amount=payload.payment_amount,
         payment_method=payload.payment_method,
         copay_collected=payload.copay_collected,
+        wd_verified=payload.wd_verified,
+        patient_signed=payload.patient_signed,
     )
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
@@ -309,6 +389,18 @@ async def get_active_visits(
     db: AsyncSession = Depends(get_db)
 ):
     return {"visits": await db_service.get_active_visits(db, clinic_id=current_user["clinic_id"])}
+
+
+@router.get("/visits/{visit_id}")
+async def get_visit(
+    visit_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    visit = await db_service.get_visit(db, clinic_id=current_user["clinic_id"], visit_id=visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return visit
 
 
 @router.get("/projections/daily-summary")

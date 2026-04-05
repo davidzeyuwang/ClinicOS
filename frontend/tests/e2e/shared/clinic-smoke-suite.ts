@@ -132,11 +132,15 @@ export async function runPatientWorkflow(page: Page, pt: PatientSpec, roomCode: 
   await toastMsg(page, "Service ended");
 
   // Checkout
-  await expect(visitRow).toContainText("service_completed", { timeout: 10_000 });
+  await expect(visitRow).toContainText("checked_in", { timeout: 10_000 });
   await page.evaluate(() => (window as any).closeModal());
   await visitRow.getByRole("button", { name: /out/i }).click();
   await page.locator("#co-cc").fill(pt.copay);
-  await page.locator("#co-ps").selectOption(pt.paymentStatus);
+  if (pt.paymentStatus === "copay_collected") {
+    await page.locator("#co-cc-collected").check();
+  } else {
+    await page.locator("#co-ps").selectOption(pt.paymentStatus);
+  }
   if (pt.paymentMethod) {
     await page.locator("#co-pm").selectOption(pt.paymentMethod);
   }

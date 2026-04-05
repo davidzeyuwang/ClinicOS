@@ -88,7 +88,7 @@ Each bug links to the feature it belongs to for test harness and regression trac
 **Feature:** PRD005-P3-01 (Treatment Records Page)
 **Where:** `frontend/tests/e2e/ops-board.spec.ts` — 3 tests written against the old per-treatment-row design that was replaced by the per-visit grouped design with A/PT/CP/TN columns.
 - Test 17 (`treatment records show correct date and duration format`): Expected `1h30m` but initial service (30m) + added PT (90m) = 120m → `2h`.
-- Test 18 (`treatment records table has all required columns`): Expected old headers (`Service`, `Modality`, `Therapist`, `Notes`) instead of new (`生诊医生`, `A`, `PT`, `CP`, `TN`, `Note`).
+- Test 18 (`treatment records table has all required columns`): Expected old headers (`Service`, `Modality`, `Therapist`, `Notes`) instead of new (`主诊医生`, `A`, `PT`, `CP`, `TN`, `Note`).
 - Test 19 (`walk-in treatment appears in treatment records with patient name`): Expected `Massage` as text (it's now in TN column as `"45m"`) and `45m` wasn't rendered (fixed by BUG-10).
 **Fix:** Updated all three test assertions to match the new visit-grouped design. BUG-10 fix resolved test 19's `45m` assertion independently.
 **Files changed:** `frontend/tests/e2e/ops-board.spec.ts`

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.deps import CurrentUser, get_current_user, require_role
+from app.auth.deps import CurrentUser, get_current_user
 from app.database import get_db, _IS_SUPABASE
 from app.schemas.prototype import LoginRequest, RegisterClinicRequest, TokenResponse
 
@@ -42,7 +42,6 @@ async def me(current_user: CurrentUser = Depends(get_current_user), db: AsyncSes
 @router.post("/register-clinic")
 async def register_clinic(
     payload: RegisterClinicRequest,
-    current_user: CurrentUser = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     # Duplicate slug check — SQLite uses SQLAlchemy; Supabase uses REST via auth_service
@@ -58,13 +57,18 @@ async def register_clinic(
         existing = await db.execute(select(Clinic).where(Clinic.slug == payload.slug))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Clinic slug already exists")
-    clinic = await auth_service.create_clinic(db, payload.clinic_name, payload.slug)
-    user = await auth_service.create_user(
-        db, clinic.clinic_id, payload.admin_email, payload.admin_password,
-        display_name=payload.admin_display_name or payload.admin_email,
-        role="admin",
-        username=payload.admin_username or None,
-    )
-    if not _IS_SUPABASE:
-        await db.commit()
+    try:
+        clinic = await auth_service.create_clinic(db, payload.clinic_name, payload.slug)
+        user = await auth_service.create_user(
+            db, clinic.clinic_id, payload.admin_email, payload.admin_password,
+            display_name=payload.admin_display_name or payload.admin_email,
+            role="admin",
+            username=payload.admin_username or None,
+        )
+        if not _IS_SUPABASE:
+            await db.commit()
+    except ValueError as e:
+        if not _IS_SUPABASE and db is not None:
+            await db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
     return {"clinic_id": clinic.clinic_id, "user_id": user.user_id}

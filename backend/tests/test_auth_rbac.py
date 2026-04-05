@@ -190,7 +190,6 @@ def test_register_clinic_creates_clinic_and_admin_user(client, auth_headers):
             "admin_password": "Smoke123!",
             "admin_display_name": f"Admin {suffix}",
         },
-        headers=auth_headers,
     )
     assert r.status_code == 200
     body = r.json()
@@ -209,15 +208,64 @@ def test_register_clinic_duplicate_slug_returns_409(client, auth_headers):
     r1 = client.post(
         "/prototype/auth/register-clinic",
         json={**payload, "admin_email": f"dup1-{suffix}@test.local"},
-        headers=auth_headers,
     )
     assert r1.status_code == 200
     r2 = client.post(
         "/prototype/auth/register-clinic",
         json={**payload, "admin_email": f"dup2-{suffix}@test.local"},
+    )
+    assert r2.status_code == 409
+
+
+def test_admin_can_create_and_list_users(client, auth_headers):
+    suffix = str(uuid.uuid4())[:8]
+    email = f"frontdesk-{suffix}@test.local"
+    create_r = client.post(
+        "/prototype/admin/users",
+        json={
+            "email": email,
+            "password": "Front123!",
+            "display_name": "Front Desk Smoke",
+            "role": "frontdesk",
+            "username": f"fd{suffix}",
+        },
+        headers=auth_headers,
+    )
+    assert create_r.status_code == 200, create_r.text
+    body = create_r.json()
+    assert body["email"] == email
+    assert body["role"] == "frontdesk"
+
+    list_r = client.get("/prototype/admin/users", headers=auth_headers)
+    assert list_r.status_code == 200
+    users = list_r.json()["users"]
+    assert any(u["email"] == email and u["role"] == "frontdesk" for u in users)
+
+
+def test_admin_create_user_duplicate_email_returns_409(client, auth_headers):
+    suffix = str(uuid.uuid4())[:8]
+    email = f"dupe-user-{suffix}@test.local"
+    r1 = client.post(
+        "/prototype/admin/users",
+        json={"email": email, "password": "Pass123!", "role": "frontdesk"},
+        headers=auth_headers,
+    )
+    assert r1.status_code == 200
+    r2 = client.post(
+        "/prototype/admin/users",
+        json={"email": email, "password": "Pass123!", "role": "doctor"},
         headers=auth_headers,
     )
     assert r2.status_code == 409
+
+
+def test_frontdesk_cannot_create_user(client, frontdesk_headers):
+    r = client.post(
+        "/prototype/admin/users",
+        json={"email": "blocked@test.local", "password": "Pass123!", "role": "frontdesk"},
+        headers=frontdesk_headers,
+    )
+    assert r.status_code == 403
 
 
 # ── MT-01 + MT-02: Multi-tenancy isolation ─────────────────────────────────────

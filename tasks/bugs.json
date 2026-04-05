@@ -130,7 +130,7 @@
     "feature_ref": "PRD005-P3-01",
     "date_fixed": "2026-03-28",
     "root_cause": "Three tests were written against the old per-treatment-row design. After redesign to per-visit grouped layout with A/PT/CP/TN columns: (1) expected duration '1h30m' but initial 30m + added 90m = '2h'; (2) expected old column headers; (3) expected 'Massage' as plain text (now in TN column) and '45m' was blank due to BUG-10.",
-    "fix": "Updated assertions: duration '1h30m' → '2h'; headers updated to ['#','Date','Patient','生诊医生','A','PT','CP','TN','Room','Duration','Note']; removed Massage text assertion; '45m' now visible after BUG-10 fix.",
+    "fix": "Updated assertions: duration '1h30m' → '2h'; headers updated to ['#','Date','Patient','主诊医生','A','PT','CP','TN','Room','Duration','Note']; removed Massage text assertion; '45m' now visible after BUG-10 fix.",
     "files": ["frontend/tests/e2e/ops-board.spec.ts"],
     "api_test": null,
     "ui_test": "npx playwright test --grep \"treatment records\""
@@ -154,8 +154,8 @@
     "feature_ref": "GAP-INS-11",
     "date_identified": "2026-03-29",
     "date_fixed": "2026-03-29",
-    "root_cause": "Checkout modal copay_collected field was blank. Insurance copay_amount existed in DB but was not fetched or displayed. Staff had to manually look up and type copay, causing mismatch with sign sheet CC column.",
-    "fix": "openCheckout() now fetches the patient's primary insurance policy and pre-fills #co-cc with copay_amount and auto-selects payment_status='copay_collected'. Staff can still override the amount.",
+    "root_cause": "Checkout modal did not pre-fill the Co-Pay amount. Insurance copay_amount existed in DB but was not fetched or displayed, so staff had to manually look it up and type it.",
+    "fix": "openCheckout() now fetches the patient's primary insurance policy and pre-fills the Co-Pay amount field (`#co-cc`). It no longer auto-marks the separate CC-collected checkbox.",
     "files": ["frontend/index.html"],
     "api_test": null,
     "ui_test": "npx playwright test --grep \"checkout modal pre-fills copay amount from patient insurance\""
@@ -192,15 +192,15 @@
   },
   {
     "id": "BUG-16",
-    "title": "Sign sheet PDF CC column blank for non-checked-out visits even when insurance copay is known",
+    "title": "Sign sheet PDF used CC column for dollar amount instead of collected checkbox semantics",
     "status": "fixed",
     "feature_ref": "ROADMAP-P1-04",
     "date_fixed": "2026-03-29",
-    "root_cause": "pdf_service.generate_sign_sheet() only showed copay_collected in the CC column for status=checked_out. Non-checked-out visits showed empty CC, giving staff no indication of expected copay amount when the patient signs.",
-    "fix": "For non-checked-out visits, CC column now shows the primary insurance copay_amount as the expected amount. Actual copay_collected still shown for checked-out visits.",
+    "root_cause": "The PDF renderer treated the paper form's `CC` column as a dollar amount field. That mixed up two separate concepts: `Co-Pay` is the amount, while `CC` is the collected checkbox.",
+    "fix": "The PDF header now shows the Co-Pay amount, preferring the saved visit copay when available. The table's `CC` column now renders only a collected checkmark based on the saved payment state.",
     "files": ["backend/app/services/pdf_service.py"],
     "api_test": "cd backend && python -m pytest tests/test_pdf_who_what_when_where.py -q",
-    "ui_test": "npx playwright test --grep \"sign sheet PDF shows expected copay from insurance for unchecked-out visits\""
+    "ui_test": "npx playwright test --grep \"sign sheet PDF shows Co-Pay amount from insurance for unchecked-out visits\""
   },
   {
     "id": "BUG-17",
@@ -270,5 +270,26 @@
     "files": ["backend/app/main.py"],
     "api_test": "cd backend && python -m pytest tests/test_security_blockers.py -k 'cors' -q",
     "ui_test": null
+  },
+  {
+    "id": "BUG-21",
+    "title": "Checkout modal conflated save-vs-checkout and pre-checkout PDFs omitted saved copay",
+    "status": "fixed",
+    "feature_ref": "PRD005-P1-01",
+    "date_fixed": "2026-04-05",
+    "root_cause": "The checkout flow only had one backend action: checkout. That forced the UI's PDF/save action to also check the patient out. The UI and PDF also conflated the paper form's `CC` checkbox with the numeric Co-Pay amount, so saved payment data and downloaded PDFs used inconsistent semantics.",
+    "fix": "Split the flow into two actions: POST /portal/payment/save saves payment fields without changing visit status, while POST /portal/checkout now requires patient_signed=true before checkout. The modal now exposes separate Save Payment + PDF and Check Out buttons, disables checkout until Patient Signed is checked, preserves explicit 0.00 values, uses a dedicated `CC collected` checkbox separate from the Co-Pay amount field, resolves patient_id from an authoritative visit lookup when needed, and renders PDFs with Co-Pay as the amount plus CC as a collected checkbox marker.",
+    "files": [
+      "frontend/index.html",
+      "backend/app/routers/db_routes.py",
+      "backend/app/services/db_service.py",
+      "backend/app/services/db_service_supa.py",
+      "backend/app/services/pdf_service.py",
+      "backend/app/schemas/prototype.py",
+      "backend/tests/test_prd004_features.py",
+      "frontend/tests/e2e/shared/clinic-harness-suite.ts"
+    ],
+    "api_test": "cd backend && SECRET_KEY=test-secret python3 -m pytest tests/test_prd004_features.py -q",
+    "ui_test": "SECRET_KEY=test-secret npx playwright test frontend/tests/e2e/local-smoke.spec.ts --grep \"signed checkout without payment info|checkout collects copay CC, WD verified, and patient signed|checkout modal has copay CC, WD, and signed fields|checkout modal PDF action saves payment info before downloading|checkout requires patient signature checkbox|checkout does not trigger PDF download\""
   }
 ]

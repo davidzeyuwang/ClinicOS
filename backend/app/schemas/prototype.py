@@ -137,6 +137,11 @@ class ServiceEnd(BaseModel):
     actor_id: str
 
 
+class ServiceResume(BaseModel):
+    visit_id: str
+    actor_id: str
+
+
 class PatientCheckout(BaseModel):
     visit_id: str
     payment_status: Optional[PaymentStatus] = None
@@ -148,12 +153,15 @@ class PatientCheckout(BaseModel):
     actor_id: str
 
 
-class SavePaymentInfo(BaseModel):
+class VisitPaymentSave(BaseModel):
     visit_id: str
     payment_status: Optional[PaymentStatus] = None
     payment_amount: Optional[float] = None
     payment_method: Optional[PaymentMethod] = None
     copay_collected: Optional[float] = None
+    wd_verified: bool = False
+    patient_signed: bool = False
+    actor_id: str
 
 
 class RoomStatusChange(BaseModel):
@@ -347,6 +355,14 @@ class RegisterClinicRequest(BaseModel):
     admin_password: str
     admin_display_name: str = ""
     admin_username: Optional[str] = None   # optional short alias for the admin
+
+
+class AdminUserCreateRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str = ""
+    role: str = "frontdesk"  # admin | frontdesk | doctor
+    username: Optional[str] = None
 
 
 class CreateTestUserRequest(BaseModel):

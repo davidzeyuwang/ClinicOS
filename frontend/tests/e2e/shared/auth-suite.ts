@@ -201,7 +201,6 @@ export function registerAuthTests(env: AuthEnv): void {
           admin_password: "Reg123!",
           admin_display_name: `Reg Admin ${env.runSuffix}`,
         },
-        headers: authHeaders(),
       });
       expect(r.ok(), `register-clinic failed: ${await r.text()}`).toBeTruthy();
       const body = await r.json();
@@ -220,14 +219,12 @@ export function registerAuthTests(env: AuthEnv): void {
       };
       const r1 = await request.post("/prototype/auth/register-clinic", {
         data: { ...base, admin_email: `dup1-${env.runSuffix}@dup.test` },
-        headers: authHeaders(),
       });
       expect(r1.ok(), await r1.text()).toBeTruthy();
       created.clinicIds.push((await r1.json()).clinic_id);
 
       const r2 = await request.post("/prototype/auth/register-clinic", {
         data: { ...base, admin_email: `dup2-${env.runSuffix}@dup.test` },
-        headers: authHeaders(),
       });
       expect(r2.status(), "expected 409 for duplicate slug").toBe(409);
     });
@@ -263,7 +260,6 @@ export function registerAuthTests(env: AuthEnv): void {
           admin_password: "MTPass123!",
           admin_display_name: "MT Admin",
         },
-        headers: authHeaders(),
       });
       expect(regR.ok(), await regR.text()).toBeTruthy();
       created.clinicIds.push((await regR.json()).clinic_id);
@@ -322,6 +318,46 @@ export function registerAuthTests(env: AuthEnv): void {
       await expect(
         page.getByTestId("tab-ops"),
         "ops board tab should be visible after login",
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test("self-service clinic owner can register clinic and create frontdesk account from admin UI", async ({ page }) => {
+      const slug = `ui-auth-${env.runSuffix}`;
+      const adminEmail = `ui-admin-${env.runSuffix}@auth.test`;
+      const staffEmail = `ui-front-${env.runSuffix}@auth.test`;
+      created.slugs.push(slug);
+
+      await _clearTokenAndReload(page);
+      await page.getByTestId("open-register-clinic").click();
+      await expect(page.locator("#register-modal")).toBeVisible({ timeout: 5_000 });
+
+      await page.getByTestId("register-clinic-name").fill(`UI Auth Clinic ${env.runSuffix}`);
+      await page.getByTestId("register-clinic-slug").fill(slug);
+      await page.getByTestId("register-admin-name").fill(`UI Owner ${env.runSuffix}`);
+      await page.getByTestId("register-admin-email").fill(adminEmail);
+      await page.getByTestId("register-admin-username").fill(`owner${env.runSuffix}`);
+      await page.getByTestId("register-admin-password").fill("UiOwner123!");
+      await page.getByTestId("register-clinic-submit").click();
+
+      await expect(page.locator("#register-modal")).toBeHidden({ timeout: 10_000 });
+      await expect(page.getByTestId("tab-admin")).toBeVisible({ timeout: 10_000 });
+
+      const clinicId = await page.evaluate(() => {
+        const raw = localStorage.getItem("clinicos_user");
+        return raw ? JSON.parse(raw).clinic_id : null;
+      });
+      if (clinicId) created.clinicIds.push(clinicId);
+
+      await page.getByTestId("tab-admin").click();
+      await page.getByTestId("user-display-name-input").fill("Front Desk UI");
+      await page.getByTestId("user-email-input").fill(staffEmail);
+      await page.getByTestId("user-username-input").fill(`front${env.runSuffix}`);
+      await page.getByTestId("user-role-input").selectOption("frontdesk");
+      await page.getByTestId("user-password-input").fill("Front123!");
+      await page.getByTestId("add-user-button").click();
+
+      await expect(
+        page.getByTestId(`users-list-item-${staffEmail.replace(/[^a-zA-Z0-9_-]/g, "-")}`),
       ).toBeVisible({ timeout: 10_000 });
     });
   });

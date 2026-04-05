@@ -100,6 +100,86 @@ def test_checkout_with_copay_collected(client, auth_headers):
     assert checkout["check_out_time"] is not None
 
 
+def test_save_payment_info_does_not_checkout_and_pdf_uses_saved_copay(client, auth_headers):
+    room = post(client, "/admin/rooms", {"name": "R1", "code": "R1", "room_type": "treatment"}, headers=auth_headers)
+    staff = post(client, "/admin/staff", {"name": "Therapist A", "role": "therapist"}, headers=auth_headers)
+    patient = post(client, "/patients", {"first_name": "Save", "last_name": "Only", "date_of_birth": "1990-01-01", "phone": "555-1112"}, headers=auth_headers)
+
+    visit = post(client, "/portal/checkin", {
+        "patient_ref": "walk-in",
+        "patient_name": "Save Only",
+        "patient_id": patient["patient_id"],
+        "actor_id": "front-desk",
+    }, headers=auth_headers)
+    visit_id = visit["visit_id"]
+
+    post(client, "/portal/service/start", {
+        "visit_id": visit_id,
+        "service_type": "PT-Eval",
+        "staff_id": staff["staff_id"],
+        "room_id": room["room_id"],
+        "actor_id": staff["staff_id"],
+    }, headers=auth_headers)
+    post(client, "/portal/service/end", {"visit_id": visit_id, "actor_id": staff["staff_id"]}, headers=auth_headers)
+
+    saved = post(client, "/portal/payment/save", {
+        "visit_id": visit_id,
+        "actor_id": "front-desk",
+        "payment_status": "copay_collected",
+        "payment_method": "card",
+        "copay_collected": 42.0,
+        "wd_verified": True,
+        "patient_signed": False,
+    }, headers=auth_headers)
+
+    assert saved["status"] == "checked_in"
+    assert saved["check_out_time"] is None
+    assert saved["copay_collected"] == 42.0
+    assert saved["wd_verified"] is True
+
+    visits = get(client, f"/patients/{patient['patient_id']}/visits", headers=auth_headers)["visits"]
+    assert visits[0]["status"] == "checked_in"
+    assert visits[0]["copay_collected"] == 42.0
+
+    pdf_resp = client.get(f"/prototype/patients/{patient['patient_id']}/sign-sheet.pdf?visit_ids={visit_id}", headers=auth_headers)
+    assert pdf_resp.status_code == 200
+    assert b"Co-Pay: $42.00" in pdf_resp.content
+
+
+def test_checkout_requires_patient_signature(client, auth_headers):
+    room = post(client, "/admin/rooms", {"name": "R1", "code": "R1", "room_type": "treatment"}, headers=auth_headers)
+    staff = post(client, "/admin/staff", {"name": "Therapist A", "role": "therapist"}, headers=auth_headers)
+    patient = post(client, "/patients", {"first_name": "Need", "last_name": "Signature", "date_of_birth": "1990-01-01", "phone": "555-1113"}, headers=auth_headers)
+
+    visit = post(client, "/portal/checkin", {
+        "patient_ref": "walk-in",
+        "patient_name": "Need Signature",
+        "patient_id": patient["patient_id"],
+        "actor_id": "front-desk",
+    }, headers=auth_headers)
+    visit_id = visit["visit_id"]
+
+    post(client, "/portal/service/start", {
+        "visit_id": visit_id,
+        "service_type": "PT-Eval",
+        "staff_id": staff["staff_id"],
+        "room_id": room["room_id"],
+        "actor_id": staff["staff_id"],
+    }, headers=auth_headers)
+    post(client, "/portal/service/end", {"visit_id": visit_id, "actor_id": staff["staff_id"]}, headers=auth_headers)
+
+    r = client.post("/prototype/portal/checkout", json={
+        "visit_id": visit_id,
+        "actor_id": "front-desk",
+        "payment_status": "copay_collected",
+        "copay_collected": 30.0,
+        "wd_verified": True,
+        "patient_signed": False,
+    }, headers=auth_headers)
+    assert r.status_code == 400
+    assert "signature required" in r.text.lower()
+
+
 # ============================================================
 # TC-2: Active Visits — Only In-Progress Visits
 # ============================================================
@@ -134,7 +214,7 @@ def test_active_visits_excludes_checked_out(client, auth_headers):
     assert len(active1["visits"]) == 2
 
     # Checkout visit 1
-    post(client, "/portal/checkout", {"visit_id": v1['visit_id'], "actor_id": "desk"}, headers=auth_headers)
+    post(client, "/portal/checkout", {"visit_id": v1['visit_id'], "actor_id": "desk", "patient_signed": True}, headers=auth_headers)
 
     # Check active visits — should have only 1 now (v2 still active)
     active2 = get(client, "/projections/active-visits", headers=auth_headers)
@@ -142,7 +222,7 @@ def test_active_visits_excludes_checked_out(client, auth_headers):
     assert active2["visits"][0]["visit_id"] == v2["visit_id"]
 
     # Checkout visit 2
-    post(client, "/portal/checkout", {"visit_id": v2['visit_id'], "actor_id": "desk"}, headers=auth_headers)
+    post(client, "/portal/checkout", {"visit_id": v2['visit_id'], "actor_id": "desk", "patient_signed": True}, headers=auth_headers)
 
     # Check active visits — should be 0
     active3 = get(client, "/projections/active-visits", headers=auth_headers)
@@ -178,7 +258,7 @@ def test_patient_visit_history_shows_all_visits(client, auth_headers):
         "actor_id": "desk",
         "copay_collected": 20.0,
         "wd_verified": True,
-        "patient_signed": False,
+        "patient_signed": True,
     }, headers=auth_headers)
     post(client, "/portal/checkout", {
         "visit_id": visits[1]['visit_id'],
@@ -221,7 +301,7 @@ def test_wd_verified_field_works(client, auth_headers):
     }, headers=auth_headers)
 
     # Checkout WITHOUT wd_verified
-    co1 = post(client, "/portal/checkout", {"visit_id": v1['visit_id'], "actor_id": "desk"}, headers=auth_headers)
+    co1 = post(client, "/portal/checkout", {"visit_id": v1['visit_id'], "actor_id": "desk", "patient_signed": True}, headers=auth_headers)
     assert co1["wd_verified"] is False  # Default
 
     # Checkin again
@@ -237,6 +317,7 @@ def test_wd_verified_field_works(client, auth_headers):
         "visit_id": v2['visit_id'],
         "actor_id": "desk",
         "wd_verified": True,
+        "patient_signed": True,
     }, headers=auth_headers)
     assert co2["wd_verified"] is True
 
@@ -333,6 +414,7 @@ def test_daily_summary_copay_total(client, auth_headers):
             "visit_id": v['visit_id'],
             "actor_id": "desk",
             "copay_collected": copay,
+            "patient_signed": True,
         }, headers=auth_headers)
 
     # Get daily summary (don't pass date to avoid timezone mismatch - defaults to UTC today)
@@ -366,6 +448,7 @@ def test_negative_copay_rejected(client, auth_headers):
         "visit_id": v['visit_id'],
         "actor_id": "desk",
         "copay_collected": -10.0,
+        "patient_signed": True,
     }, headers=auth_headers)
     
     # System accepts but records as-is (no validation currently)
@@ -397,6 +480,7 @@ def test_zero_copay_allowed(client, auth_headers):
         "actor_id": "desk",
         "copay_collected": 0.0,
         "payment_status": "insurance_only",
+        "patient_signed": True,
     }, headers=auth_headers)
     
     assert co["copay_collected"] == 0.0

@@ -541,6 +541,16 @@ async def get_patient_sign_sheet(
     from app.services import pdf_service
     patient = await db_service.get_patient(db, patient_id, clinic_id=current_user["clinic_id"])
     if not patient:
+        # Try searching by name if patient_id doesn't look like a UUID
+        if len(patient_id) < 32 and '-' not in patient_id[:12]:
+            try:
+                matches = await db_service.search_patients(db, clinic_id=current_user["clinic_id"], query=patient_id)
+                if matches:
+                    patient = matches[0]
+                    patient_id = patient["patient_id"]
+            except Exception:
+                pass
+    if not patient:
         # Walk-in patient — build a minimal patient dict from visit data
         if visit_ids:
             selected_ids = set(visit_ids.split(','))

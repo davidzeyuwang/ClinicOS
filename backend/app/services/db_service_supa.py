@@ -544,14 +544,14 @@ async def create_patient(db, actor_id: str, data: dict, force: bool = False) -> 
     return _with_full_name(result)
 
 
-async def list_patients(db) -> list:
+async def list_patients(db, clinic_id: str = None) -> list:
     supa = get_supabase()
     all_patients = await supa.select("patients", limit=5000)
     rows = [p for p in all_patients if p.get("active") is True]
     return [_with_full_name(p) for p in rows]
 
 
-async def search_patients(db, query: str) -> list:
+async def search_patients(db, query: str, clinic_id: str = None) -> list:
     supa = get_supabase()
     # Use PostgREST full-text search via ilike
     import httpx
@@ -567,7 +567,7 @@ async def search_patients(db, query: str) -> list:
     return [_with_full_name(p) for p in r.json()]
 
 
-async def get_patient(db, patient_id: str) -> Optional[dict]:
+async def get_patient(db, patient_id: str, clinic_id: str = None) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("patients", {"patient_id": patient_id})
     return _with_full_name(rows[0]) if rows else None

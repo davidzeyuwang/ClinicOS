@@ -1,215 +1,216 @@
-# PRD-001: Electronic Daily Sign Sheet
+# PRD-001：电子化每日签到总表
 
-**Status:** Draft v2 — scoped under PRD-003 §11.3 (Front Desk Operations Board)
-**Date:** 2026-03-02 (updated 2026-03-16)
-**Context:** See `docs/clinic-workflow.md` for full as-is workflow (18 steps)
-**Parent PRD:** `PRD/003-clinic-os-prd-v2.md` — this document provides detailed user stories, acceptance criteria, and event model for the **Front Desk Operations Board** module defined in PRD v2.0 §11.3.
+**状态：** 草稿 v2 —— 归属 PRD-003 §11.3（Front Desk Operations Board）
+**日期：** 2026-03-02（更新于 2026-03-16）
+**上下文：** 完整现状流程请见 `docs/clinic-workflow.md`（18 个步骤）
+**父 PRD：** `PRD/003-clinic-os-prd-v2.md` —— 本文档为 PRD v2.0 §11.3 中定义的 **Front Desk Operations Board** 模块提供详细用户故事、验收标准与事件模型。
 
-> **Note:** PRD v2.0 broadens this module's scope beyond the sign sheet. The unified **Front Desk Operations Board** merges the Daily Sign In Sheet, Google Sheets room board, and manual tallying into a single operational hub that also surfaces appointment status, payment/insurance hints, resource allocation, and next-appointment recording. This PRD-001 remains the detailed spec for the core check-in + room + service tracking + daily report slice.
+> **说明：** PRD v2.0 已将本模块的范围从单纯签到表扩大为统一的 **Front Desk Operations Board**。它把 Daily Sign In Sheet、Google Sheets 房间板以及手工汇总整合为一个统一的运营中心，并逐步承载预约状态、支付 / 保险提示、资源分配和下次预约记录等能力。PRD-001 仍然是核心切片的详细规格，聚焦 check-in + room + service tracking + daily report。
 
-## Background
+## 背景
 
-The clinic runs on a **paper Daily Sign Sheet** (Step ⑧) combined with a **Google Sheet for room status** (Step ⑨) and **manual end-of-day tallying** (Step ⑱). This is the operational heartbeat of the clinic — every patient visit flows through it.
+当前诊所日常运营依赖 **纸质 Daily Sign Sheet**（Step ⑧）+ **Google Sheet 房间状态表**（Step ⑨）+ **手工日终汇总**（Step ⑱）。这是诊所运营的心跳系统，每一次患者就诊都经过这套流程。
 
-Per PRD v2.0 §7, these tools will be phased out:
-- **Daily Sign In Sheet** → 迁移期可并存 → 停用主流程
-- **Google Sheets (room board)** → 迁移期对照使用 → 被替代
+根据 PRD v2.0 §7，这些工具将逐步退出主流程：
+- **Daily Sign In Sheet** → 迁移期可并存 → 最终停用
+- **Google Sheets（room board）** → 迁移期对照使用 → 最终替代
 
-### Current Pain Points
-- **Paper PHI exposure:** Sign sheet sits on front desk all day — visible, photographable, losable
-- **No real-time visibility:** Therapists can't see room status without walking to the front desk
-- **Google Sheets overwrites history:** Room status updates destroy previous state — no audit trail, BAA status unknown
-- **Manual daily reports:** End-of-day tallying is error-prone and not reproducible
-- **No traceability:** If a number is wrong, there's no way to trace how it was derived
+### 当前痛点
+- **纸质 PHI 暴露：** 签到表整天放在前台，可见、可拍照、可丢失
+- **没有实时可见性：** 治疗师必须走到前台才能知道房间状态
+- **Google Sheets 覆盖历史：** 一次房间状态更新会毁掉上一状态，没有审计轨迹，BAA 状态也不明确
+- **日报依赖手工：** 日终汇总容易出错，也无法复算
+- **无法追溯：** 如果某个数字错了，无法倒推它是怎么来的
 
-### What This Replaces
-| Current Tool | Problem | Clinic OS Replacement |
+### 本模块替代什么
+
+| 当前工具 | 问题 | Clinic OS 替代方案 |
 |---|---|---|
-| Paper Daily Sign Sheet (⑧) | PHI exposure, no backup, no audit | Digital sign sheet with event log |
-| Google Sheet room status (⑨) | Overwrites history, BAA unknown | Real-time room board |
-| Manual tallying (⑱) | Error-prone, not auditable | Auto-generated projections |
+| 纸质 Daily Sign Sheet（⑧） | PHI 暴露、无备份、无审计 | 带事件日志的电子签到表 |
+| Google Sheet 房间状态（⑨） | 覆盖历史、BAA 不明 | 实时房间板 |
+| 手工日终汇总（⑱） | 易错、不可审计 | 自动生成 projection |
 
-## Goal
+## 目标
 
-Replace the paper Daily Sign Sheet + Google Sheet room board + manual tallying with a single digital interface that is **as fast as paper**, provides **real-time multi-user visibility**, and produces an **immutable audit trail**.
+用一个 **像纸一样快**、支持 **多人实时可见**、并且产生 **不可变审计轨迹** 的数字界面，替代纸质 Daily Sign Sheet + Google Sheet room board + 手工汇总。
 
-Per PRD v2.0 §11.3, the long-term goal extends to a **unified Front Desk Operations Board** that additionally surfaces:
-- 今日预约列表 (today's appointment list)
-- 保险/资料缺失提醒 (insurance/missing info alerts)
+根据 PRD v2.0 §11.3，长期目标还包括一个更完整的 **Front Desk Operations Board**，逐步承载：
+- 今日预约列表
+- 保险 / 资料缺失提醒
 - copay / 未完成 intake / 待更新保险提示
-- next appointment 快捷记录
+- next appointment 快速记录
 - 当日统计汇总
 
-Milestone 1 focuses on check-in + room + service tracking + daily report. The broader board capabilities will be added incrementally in Phase 1.
+Milestone 1 先聚焦 check-in + 房间 + 服务追踪 + 日报，其余能力在 Phase 1 中逐步补齐。
 
-## Milestone 1 (First Build Target): Room + Staff + Check-In Core
+## Milestone 1（首个交付目标）：Room + Staff + Check-In Core
 
-This milestone is the **first shipping slice** of PRD-001 and becomes the base for all later automation.
+这是 PRD-001 的 **首个可交付切片**，也是后续自动化能力的基础。
 
-### Scope
+### 范围
 
 #### Admin Portal
-- Add room (name/code/type/active)
-- Edit room and change room active status
-- Add staff (name/role/license-id optional/active)
-- Edit staff and change staff active status
+- 添加房间（name / code / type / active）
+- 编辑房间并切换 active 状态
+- 添加员工（name / role / license-id 可选 / active）
+- 编辑员工并切换 active 状态
 
-#### User Portal (Front Desk + Therapist)
-- Patient check-in with check-in time
-- Select service type
-- Start service with service start time
-- Complete service with check-out time
-- Change room status (available/occupied/cleaning/out-of-service)
+#### User Portal（Front Desk + Therapist）
+- 患者签到，记录 check-in time
+- 选择服务类型
+- 开始服务，记录 service start time
+- 完成服务，记录 check-out time
+- 修改房间状态（available / occupied / cleaning / out-of-service）
 
-#### Real-Time Aggregation
-- Live per-staff working hours (sum of completed service durations)
-- Live active-session duration counter per staff
-- Live room occupancy/state board
+#### 实时聚合
+- 每位 staff 的实时工作时长（已完成服务总时长）
+- 每位 staff 当前进行中 session 的实时计时
+- 实时房间占用 / 状态板
 
-#### Reporting + Persistence
-- Auto-generate daily report at day close
-- Allow manual "generate now" re-run for reconciliation
-- Save all events and report snapshots for audit and back-office reference
+#### 报表与持久化
+- 在诊所日结时自动生成日报
+- 允许手动点击“立即生成”进行对账复跑
+- 保存所有事件和日报快照，用于审计和后台引用
 
-### Milestone 1 Plan
+### Milestone 1 计划
 
-#### Phase 1 — Event + Data Contracts
-- Define event schema for:
-  - `ROOM_CREATED`, `ROOM_UPDATED`, `ROOM_STATUS_CHANGED`
-  - `STAFF_CREATED`, `STAFF_UPDATED`, `STAFF_STATUS_CHANGED`
-  - `PATIENT_CHECKIN`, `SERVICE_STARTED`, `SERVICE_COMPLETED`, `PATIENT_CHECKOUT`
+#### Phase 1 — 事件与数据契约
+- 定义以下事件 schema：
+  - `ROOM_CREATED`、`ROOM_UPDATED`、`ROOM_STATUS_CHANGED`
+  - `STAFF_CREATED`、`STAFF_UPDATED`、`STAFF_STATUS_CHANGED`
+  - `PATIENT_CHECKIN`、`SERVICE_STARTED`、`SERVICE_COMPLETED`、`PATIENT_CHECKOUT`
   - `DAILY_REPORT_GENERATED`
-- Add idempotency key + actor metadata + recorded_at to all write events
+- 所有写事件补充 `idempotency key`、`actor metadata` 和 `recorded_at`
 
-#### Phase 2 — Backend APIs + Projections
-- Admin APIs: CRUD-lite for rooms/staff (create, update, activate/deactivate)
-- User APIs: check-in, start/end service, checkout, room status update
-- Projections:
-  - room_board_current
-  - staff_hours_daily
-  - visit_timeline_daily
-  - daily_report_snapshot
+#### Phase 2 — 后端 API + Projections
+- 管理端 API：rooms / staff 的 CRUD-lite（创建、更新、启用 / 停用）
+- 用户端 API：check-in、start / end service、checkout、room status 更新
+- Projections：
+  - `room_board_current`
+  - `staff_hours_daily`
+  - `visit_timeline_daily`
+  - `daily_report_snapshot`
 
-#### Phase 3 — UI Delivery
-- Admin portal screens: room list/form, staff list/form
-- User portal screens: patient flow timeline + room board + status actions
-- Real-time sync via WebSocket/SSE for room + staff hours widgets
+#### Phase 3 — UI 交付
+- 管理端页面：room 列表 / 表单、staff 列表 / 表单
+- 用户端页面：patient flow timeline + room board + status actions
+- room 与 staff hours 组件通过 WebSocket / SSE 实时同步
 
-#### Phase 4 — Daily Report Engine
-- Scheduled generation at clinic day-close cut-off
-- Manual regeneration endpoint with versioned snapshots
-- Report contents:
-  - total check-ins / check-outs
-  - service counts and total service minutes
-  - per-staff hours
-  - per-room utilization
-  - open/incomplete sessions
+#### Phase 4 — 日报引擎
+- 在诊所日结 cut-off 自动生成
+- 提供带版本化快照的手动重生成接口
+- 报告内容包括：
+  - 总 check-ins / check-outs
+  - 服务次数和总服务分钟数
+  - 每位 staff 工时
+  - 每个 room 的利用率
+  - open / incomplete sessions
 
-#### Phase 5 — Validation + Compliance Gates
-- RBAC checks for admin vs user portal actions
-- Audit verification: every state mutation maps to immutable event
-- Data retention test: report can be fully recomputed from event history
+#### Phase 5 — 校验与合规门禁
+- 管理端与用户端动作的 RBAC 校验
+- 审计验证：每个状态变化都映射为不可变事件
+- 数据保留测试：日报可以完全由事件历史重建
 
-### Milestone 1 Exit Criteria
-- Rooms and staff can be fully administered without spreadsheets
-- Front desk + therapist can complete the visit lifecycle in-app
-- Staff hour aggregates update in near real-time (≤ 5s projection delay)
-- Daily report is generated, persisted, and reproducible from event log
+### Milestone 1 退出标准
+- rooms 与 staff 可完全脱离 spreadsheet 管理
+- 前台和治疗师可以在系统内完成完整就诊生命周期
+- staff 工时聚合近实时更新（projection delay ≤ 5s）
+- 日报可生成、可保存、可由 event log 重建
 
-## Non-Goals (this PRD)
+## 本 PRD 当前不包含
 
-- ❌ Patient master file CRUD (PRD v2.0 §11.1 — Phase 1, separate spec)
-- ❌ Appointment management CRUD (PRD v2.0 §11.2 — Phase 1, separate spec)
-- ❌ Document / signature archive (PRD v2.0 §11.4 — Phase 1, separate spec)
-- ❌ Patient intake digitization (Step ① — Phase 5+)
-- ❌ Eligibility workflow / Asana replacement (Steps ②③④ — Phase 2)
-- ❌ Notability patient ledger replacement (Step ⑤ — Phase 2)
-- ❌ Claim generation (Steps ⑪⑫ — Phase 2)
-- ❌ EOB reconciliation (Steps ⑬–⑰ — Phase 2)
-- ❌ EHR integration (Step ⑩ — Phase 5)
-- ❌ Multi-location support (Phase 5)
-- ❌ AI input / extraction (Phase 3)
-- ❌ Offline-first (assume reliable clinic WiFi for MVP)
+- ❌ Patient master file CRUD（PRD v2.0 §11.1，单独规格）
+- ❌ Appointment management CRUD（PRD v2.0 §11.2，单独规格）
+- ❌ Document / signature archive（PRD v2.0 §11.4，单独规格）
+- ❌ 患者 intake 数字化（Step ①，Phase 5+）
+- ❌ Eligibility 工作流 / Asana 替代（Steps ②③④，Phase 2）
+- ❌ Notability patient ledger 替代（Step ⑤，Phase 2）
+- ❌ Claim 生成（Steps ⑪⑫，Phase 2）
+- ❌ EOB reconciliation（Steps ⑬–⑰，Phase 2）
+- ❌ EHR integration（Step ⑩，Phase 5）
+- ❌ Multi-location support（Phase 5）
+- ❌ AI 输入 / 抽取（Phase 3）
+- ❌ Offline-first（MVP 假设诊所 WiFi 稳定）
 
-## User Roles
+## 用户角色
 
-| Role | What They Do | Access Level |
+| 角色 | 负责内容 | 访问级别 |
 |---|---|---|
-| Front Desk | Check-in, payment recording, room status viewing | Read/write sign sheet, read room board |
-| Therapist | Start/end service, assign room, view schedule | Read/write own sessions, read room board |
-| Clinic Manager | View daily summary, export reports | Read all, no direct edits |
-| Back Office | Reference sign sheet data for claims (Step ⑪) | Read only |
+| Front Desk | Check-in、付款记录、查看房间状态 | 可读写签到表，可读房间板 |
+| Therapist | 开始 / 结束服务、分配房间、查看排程 | 可读写自己的 sessions，可读房间板 |
+| Clinic Manager | 查看日报、导出报表 | 全量只读，不直接编辑 |
+| Back Office | 在 claim 阶段引用签到数据（Step ⑪） | 只读 |
 
-## User Stories
+## 用户故事
 
-### Check-In (Replaces paper sign-in)
-- **US-1:** As front desk, I want to check in a patient with one tap, so the therapist knows they've arrived and I don't have to shout across the clinic.
-- **US-2:** As front desk, I want to see all of today's patients in a single scrollable list with color-coded status, so I know at a glance who's waiting, who's in session, who's done.
+### Check-In（替代纸质签到）
+- **US-1：** 作为前台，我希望点一下就能给患者签到，这样治疗师能知道患者到了，我也不用在诊所里喊人。
+- **US-2：** 作为前台，我希望在一个可滚动列表中看到今天所有患者，并且有颜色状态标记，这样我能一眼看出谁在等候、谁在治疗、谁已完成。
 
-### Service Tracking (Replaces paper time recording)
-- **US-3:** As a therapist, I want to start a service timer with one tap when I bring the patient to the room, so session duration is automatically tracked.
-- **US-4:** As a therapist, I want to select the room when starting service, so other staff can see room availability in real-time.
-- **US-5:** As a therapist, I want to end a service and confirm the service type (PT, OT, eval, etc.), so billing data is accurate.
-- **US-6:** As a therapist, I want to see how long my current session has been running, so I can manage my time.
+### 服务追踪（替代纸上的时间记录）
+- **US-3：** 作为治疗师，我希望把患者带进房间时一键开始计时，这样系统能自动跟踪 session 时长。
+- **US-4：** 作为治疗师，我希望在开始服务时选择房间，这样其他员工能实时看到房间占用。
+- **US-5：** 作为治疗师，我希望结束服务时确认服务类型（PT、OT、eval 等），这样 billing 数据更准确。
+- **US-6：** 作为治疗师，我希望看到当前 session 已经持续了多久，这样我能更好地管理时间。
 
-### Room Board (Replaces Google Sheet)
-- **US-7:** As any staff member, I want to see a real-time room board showing which patient is in which room, so I don't have to walk around to check.
-- **US-8:** As a therapist, I want to reassign a patient to a different room by dragging their card, and have it update for everyone within 2 seconds.
+### Room Board（替代 Google Sheet）
+- **US-7：** 作为任何 staff，我希望看到一个实时 room board，显示哪个患者在哪个房间，这样我不用来回走动确认。
+- **US-8：** 作为治疗师，我希望通过拖动患者卡片把患者改分配到另一个房间，并且 2 秒内所有人都能看到更新。
 
-### Payment (Replaces paper payment column)
-- **US-9:** As front desk, I want to record a payment at checkout (copay, cash, card, insurance-only, no-charge), so daily revenue is tracked without manual tallying.
-- **US-10:** As front desk, I want to see payment status for each patient (paid, pending, insurance-only), so I know who to collect from before they leave.
+### Payment（替代纸质付款栏）
+- **US-9：** 作为前台，我希望在 checkout 时记录付款（copay、cash、card、insurance-only、no-charge），这样无需手工汇总就能追踪当天收入。
+- **US-10：** 作为前台，我希望看到每位患者的 payment status（paid、pending、insurance-only），这样我知道谁离开前还需要收费。
 
-### Signature (Replaces paper signature)
-- **US-11:** As a patient, I want to sign on the iPad screen to confirm my visit, replacing the paper signature.
+### Signature（替代纸质签名）
+- **US-11：** 作为患者，我希望在 iPad 上签字确认我的 visit，替代纸质签字。
 
-### Daily Summary (Replaces manual tallying — Step ⑱)
-- **US-12:** As a clinic manager, I want an auto-generated daily summary showing:
-  - Total patients seen
-  - Total revenue collected (by payment method)
-  - Per-therapist hours and patient count
-  - Per-room utilization
-  - No-shows (checked in but no service)
-  - Open sessions (started but not ended — reconciliation flag)
-- **US-13:** As a clinic manager, I want to export/print the daily summary.
-- **US-14:** As back office, I want to view the daily sign sheet data to reference when creating claims (Step ⑪), reducing transcription errors.
+### Daily Summary（替代手工汇总 —— Step ⑱）
+- **US-12：** 作为诊所经理，我希望得到自动生成的日报，内容包括：
+  - 当日接诊患者总数
+  - 当日总收入（按支付方式分组）
+  - 每位治疗师的工时和患者数
+  - 每个房间的利用率
+  - No-shows（签到但未开始服务）
+  - Open sessions（已开始但未结束，作为 reconciliation flag）
+- **US-13：** 作为诊所经理，我希望可以导出 / 打印日报。
+- **US-14：** 作为后台人员，我希望在创建 claims（Step ⑪）时查看 daily sign sheet 数据，以减少手工转录错误。
 
-### Audit (Foundation for all compliance)
-- **US-15:** As a compliance officer, I want every action recorded as an immutable event with actor, timestamp, and action type, so there's a full audit trail.
-- **US-16:** As a compliance officer, I want to query "who accessed patient X's data on date Y" for incident investigation.
+### Audit（所有合规能力的基础）
+- **US-15：** 作为合规负责人，我希望每个动作都以不可变事件记录 actor、timestamp 和 action type，这样能形成完整审计轨迹。
+- **US-16：** 作为合规负责人，我希望查询“在日期 Y 谁访问了患者 X 的数据”，用于 incident investigation。
 
-## Acceptance Criteria
+## 验收标准
 
 ### Events
-- **AC-1:** Patient check-in produces `PATIENT_CHECKIN` event: `{patient_id, checked_in_by, timestamp}`
-- **AC-2:** Service start produces `SERVICE_STARTED` event: `{patient_id, therapist_id, room_id, service_type, timestamp}`
-- **AC-3:** Service end produces `SERVICE_COMPLETED` event: `{patient_id, therapist_id, service_type, duration_minutes, timestamp}`
-- **AC-4:** Room assignment/change produces `ROOM_ASSIGNED` event: `{patient_id, room_id, assigned_by, timestamp}`
-- **AC-5:** Payment produces `PAYMENT_RECORDED` event: `{patient_id, amount, method, recorded_by, timestamp}`
-- **AC-6:** Signature produces `SIGNATURE_CAPTURED` event: `{patient_id, signature_ref, timestamp}`
-- **AC-7:** No event can be modified or deleted after creation. Period.
+- **AC-1：** 患者 check-in 产生 `PATIENT_CHECKIN` 事件：`{patient_id, checked_in_by, timestamp}`
+- **AC-2：** 开始服务产生 `SERVICE_STARTED` 事件：`{patient_id, therapist_id, room_id, service_type, timestamp}`
+- **AC-3：** 结束服务产生 `SERVICE_COMPLETED` 事件：`{patient_id, therapist_id, service_type, duration_minutes, timestamp}`
+- **AC-4：** 房间分配 / 变更产生 `ROOM_ASSIGNED` 事件：`{patient_id, room_id, assigned_by, timestamp}`
+- **AC-5：** 付款产生 `PAYMENT_RECORDED` 事件：`{patient_id, amount, method, recorded_by, timestamp}`
+- **AC-6：** 签字产生 `SIGNATURE_CAPTURED` 事件：`{patient_id, signature_ref, timestamp}`
+- **AC-7：** 任何事件创建后都不能被修改或删除。
 
 ### Projections
-- **AC-8:** Daily summary projection updates within 5 seconds of any event.
-- **AC-9:** Room board projection shows current state within 2 seconds of any room event.
-- **AC-10:** Patient timeline shows complete visit history (all events for a patient on a given day).
+- **AC-8：** 日报 projection 在任意事件后 5 秒内更新。
+- **AC-9：** 房间板 projection 在任意 room event 后 2 秒内反映当前状态。
+- **AC-10：** 患者时间线展示指定日期内该患者完整 visit history。
 
 ### Security & Compliance
-- **AC-11:** All endpoints require JWT authentication.
-- **AC-12:** RBAC enforced: front desk cannot see daily summary export; back office cannot edit.
-- **AC-13:** No PHI in application logs, error messages, or URLs.
-- **AC-14:** All data encrypted at rest (database-level) and in transit (TLS).
-- **AC-15:** Signature images stored encrypted, accessible only to authorized roles.
+- **AC-11：** 所有 endpoints 都需要 JWT authentication。
+- **AC-12：** 强制 RBAC：front desk 不能导出日报；back office 不能编辑。
+- **AC-13：** 应用日志、错误信息、URL 中不出现 PHI。
+- **AC-14：** 所有数据都在静态（数据库层）和传输中（TLS）加密。
+- **AC-15：** Signature images 必须加密存储，只允许授权角色访问。
 
 ### UX
-- **AC-16:** Check-in action ≤ 2 taps from patient list screen.
-- **AC-17:** Service start ≤ 3 taps (select patient → select room → tap start).
-- **AC-18:** Minimum 44×44px touch targets on all interactive elements.
-- **AC-19:** Real-time updates visible to all connected clients without page refresh.
+- **AC-16：** 从患者列表页到 check-in 动作不超过 2 次点击。
+- **AC-17：** 开始服务不超过 3 次点击（选患者 → 选房间 → 点开始）。
+- **AC-18：** 所有可交互元素最小触控面积为 44×44px。
+- **AC-19：** 所有已连接客户端都能看到实时更新，无需刷新页面。
 
-## Event Model
+## 事件模型
 
-| event_type | payload | triggered_by | feeds_projection |
+| event_type | payload | 触发者 | feeds_projection |
 |---|---|---|---|
 | `PATIENT_CHECKIN` | patient_id, checked_in_by | Front Desk | daily_sheet, daily_summary |
 | `SERVICE_STARTED` | patient_id, therapist_id, room_id, service_type | Therapist | daily_sheet, room_board, daily_summary |
@@ -220,68 +221,68 @@ This milestone is the **first shipping slice** of PRD-001 and becomes the base f
 | `SIGNATURE_CAPTURED` | patient_id, signature_storage_ref | System | daily_sheet |
 | `NO_SHOW_MARKED` | patient_id, marked_by | Front Desk | daily_sheet, daily_summary |
 
-## Edge Cases / Boundary Conditions
+## 边界情况 / Edge Cases
 
-1. **No-show:** Patient checks in but never starts service → must be explicitly markable as no-show
-2. **Forgotten end:** Service started but not ended by EOD → system flags open sessions in daily summary; manager can force-close with `SERVICE_FORCE_COMPLETED` event (includes reason)
-3. **Multiple services:** Same patient has PT then OT in one day → each is a separate service event pair
-4. **Split payment:** Copay $30 + insurance → two `PAYMENT_RECORDED` events for same patient
-5. **Room conflict:** Two patients assigned same room → system warns, allows override (both assignments logged)
-6. **Staff role switching:** Therapist also doing front desk → user has multiple roles, system checks role on each action
-7. **Network interruption during signature:** Retry with deduplication (idempotency key)
-8. **Back-dated entry:** Therapist forgot to end session, does it next morning → event records actual_time + recorded_time
-9. **Mid-session room change:** Patient moves rooms → new `ROOM_ASSIGNED` + `ROOM_RELEASED` events
+1. **No-show：** 患者签到但没有开始服务 —— 必须允许显式标记为 no-show
+2. **忘记结束服务：** 服务开始后到日终都没结束 —— 系统在日报里标记 open session；经理可通过 `SERVICE_FORCE_COMPLETED` 强制结束（必须带 reason）
+3. **多次服务：** 同一患者一天内先 PT 再 OT —— 每个服务都对应独立事件对
+4. **拆分付款：** Copay $30 + insurance —— 同一患者允许产生两个 `PAYMENT_RECORDED` 事件
+5. **房间冲突：** 两个患者被分配到同一房间 —— 系统给出警告，但允许 override（两次分配都需记录）
+6. **角色切换：** 治疗师同时做前台 —— 用户可拥有多个角色，系统按动作逐个检查角色
+7. **签字过程中网络中断：** 需支持重试和 deduplication（idempotency key）
+8. **补录ย้อนหลัง：** 治疗师第二天才补录前一晚的结束服务 —— 事件同时记录 `actual_time` 和 `recorded_time`
+9. **中途换房：** 患者在治疗过程中换房 —— 产生新的 `ROOM_ASSIGNED` + `ROOM_RELEASED` 事件
 
-## PHI / Compliance Risks
+## PHI / 合规风险
 
-| Risk | Mitigation |
+| 风险 | 缓解措施 |
 |---|---|
-| iPad screen showing patient list in waiting area | Auto-lock timeout (5 min), screen privacy filter recommended |
-| Signature images are PHI | Encrypted storage, access-controlled, never in logs |
-| Daily summary with names is PHI | Role-gated: only manager/back office can view with names |
-| Staff accessing data after hours | Session timeout, audit log all access |
-| Patient data in browser cache | Appropriate cache-control headers, no PHI in localStorage |
-| Screenshots of digital sign sheet | Same risk as paper — mitigated by access control + audit |
+| 候诊区可看到 iPad 患者列表 | 5 分钟自动锁屏，建议加贴防窥膜 |
+| Signature images 属于 PHI | 加密存储、按权限访问、绝不写入日志 |
+| 含姓名的日报属于 PHI | 仅 manager / back office 可查看完整姓名 |
+| 下班后继续访问患者数据 | Session timeout + 全量访问审计 |
+| 浏览器缓存留存患者数据 | 正确设置 cache-control headers，不把 PHI 放进 localStorage |
+| 对电子签到表截图 | 风险与纸质相同，用访问控制 + 审计来降低风险 |
 
-## Dependencies
+## 依赖项
 
-- PostgreSQL database with encryption at rest
-- FastAPI backend with JWT auth
-- WebSocket or SSE for real-time updates
-- iPad with modern browser (Safari 16+)
-- Secure storage for signature images (S3-compatible with encryption or local encrypted)
+- 带静态加密能力的 PostgreSQL 数据库
+- 含 JWT auth 的 FastAPI 后端
+- 用于实时更新的 WebSocket 或 SSE
+- 现代浏览器 iPad（Safari 16+）
+- 用于 signature images 的安全存储（带加密的 S3-compatible 或本地加密存储）
 
-## Open Questions
+## 待确认问题
 
-- [ ] **Service types:** What's the full list? (PT, OT, Eval, Re-eval, others?)
-- [ ] **Room list:** How many rooms? Names or numbers?
-- [ ] **Payment methods:** Copay, cash, card, insurance-only, no-charge — anything else?
-- [ ] **Signature storage:** S3-compatible or local encrypted filesystem?
-- [ ] **Auth model:** Individual logins per staff, or shared iPad with PIN switch?
-- [ ] **PracticeMate integration:** Is there an API? Or is back office reference read-only for now?
-- [ ] **Appointment list source:** Where does today's patient list come from? Manual entry or PracticeMate sync?
-- [ ] **Google Workspace BAA:** Is there a signed BAA? (Determines urgency of replacing Google Sheets)
+- [ ] **服务类型：** 完整列表是什么？（PT、OT、Eval、Re-eval、其他？）
+- [ ] **房间列表：** 一共有多少个房间？是名字还是编号？
+- [ ] **支付方式：** Copay、cash、card、insurance-only、no-charge 之外还有什么？
+- [ ] **签字存储：** 使用 S3-compatible 还是本地加密文件系统？
+- [ ] **认证模型：** 每位 staff 独立登录，还是共享 iPad + PIN 切换？
+- [ ] **PracticeMate 集成：** 是否有 API？还是后台暂时只读引用？
+- [ ] **预约列表来源：** 今日患者列表来自手工录入还是 PracticeMate 同步？
+- [ ] **Google Workspace BAA：** 是否已经签署？这将影响替代 Google Sheets 的紧迫度。
 
-## Sprint Scope
+## Sprint 范围
 
-### Must Have (Sprint 1)
-- Event log table + core events
-- Patient check-in flow
-- Service start/end with room assignment
-- Room board (real-time)
+### Must Have（Sprint 1）
+- Event log 表 + 核心事件
+- 患者 check-in 流程
+- 带 room assignment 的 service start / end
+- Room board（实时）
 - Payment recording
 - Daily summary projection
-- JWT auth + basic RBAC
+- JWT auth + 基础 RBAC
 - Audit logging
 
-### Nice to Have (Sprint 1)
+### Nice to Have（Sprint 1）
 - Signature capture
-- Daily summary export/print
-- No-show marking
+- 日报导出 / 打印
+- No-show 标记
 - Force-close open sessions
 
 ### Deferred
-- Patient intake (Step ①)
-- Eligibility workflow (Steps ②③④)
-- Patient ledger (Step ⑤)
-- Claim generation (Step ⑪)
+- 患者 intake（Step ①）
+- Eligibility 工作流（Steps ②③④）
+- Patient ledger（Step ⑤）
+- Claim generation（Step ⑪）

@@ -1,79 +1,79 @@
-# PRD-005: Multiple Treatments Per Visit + Enhanced Workflow
+# PRD-005：单次就诊支持多个治疗项目 + 工作流增强
 
-**Status:** Approved v1  
-**Date:** 2026-03-27  
-**Owner:** Product  
-**Related:** PRD-001 (Daily Sign Sheet), PRD-004 (Form Gap Analysis)
-
----
-
-## 1. Problem Statement
-
-**Current limitation:** Each visit records only ONE `service_type` (e.g., "PT"). Real clinic sessions involve multiple concurrent modalities:
-- Physical Therapy (30 min) + E-stim (15 min) + Massage (20 min)
-- Multiple therapists may work on same patient
-- Each modality has different duration, start/end times
-
-**Business impact:**
-- Cannot accurately bill insurance for multiple CPT codes per visit
-- Cannot track individual therapist productivity per modality
-- Sign-off sheets lack treatment detail granularity
-- Cannot generate itemized patient records for compliance
+**状态：** 已批准 v1
+**日期：** 2026-03-27
+**Owner：** 产品
+**相关文档：** PRD-001（Daily Sign Sheet）、PRD-004（表单差距分析）
 
 ---
 
-## 2. User Stories
+## 1. 问题描述
 
-### US-1: Add Multiple Treatments to Visit
-**As a** front desk staff  
-**I want to** add multiple treatment modalities to an active visit  
-**So that** I can record all therapies the patient receives in one session
+**当前限制：** 每次 visit 只记录一个 `service_type`（例如 `"PT"`）。但真实诊所场景里，一次就诊往往会包含多个并行治疗项目：
+- Physical Therapy（30 分钟）+ E-stim（15 分钟）+ Massage（20 分钟）
+- 同一个患者可能由多个治疗师参与
+- 每个治疗项目都有不同的时长、开始时间和结束时间
 
-**Acceptance Criteria:**
-- Active visit card shows "+ Add Treatment" button
-- Can add multiple treatments with different modalities
-- Each treatment specifies: modality, therapist, duration (editable)
-- Treatments display as list under visit card
-
-### US-2: Review Treatments at Checkout
-**As a** front desk staff  
-**I want to** see all treatments performed before checkout  
-**So that** I can verify copay and generate accurate sign sheet
-
-**Acceptance Criteria:**
-- Checkout modal shows read-only treatment summary table
-- Columns: Modality, Therapist, Duration (min), Time
-- Option to "Generate PDF for patient signature" (checkbox)
-- PDF includes all treatments in visit history table
-
-### US-3: Selective PDF Generation
-**As a** billing staff  
-**I want to** select specific visits to include in sign sheet PDF  
-**So that** I can generate partial records (e.g., only this month's visits)
-
-**Acceptance Criteria:**
-- Patient detail modal shows checkboxes next to each visit
-- "Download Selected Visits PDF" button (only enabled when ≥1 selected)
-- Generated PDF includes only checked visits
-
-### US-4: Treatment Records Reporting
-**As a** clinic manager  
-**I want to** view all treatments across patients with filters  
-**So that** I can analyze therapist productivity and modality distribution
-
-**Acceptance Criteria:**
-- New "Treatment Records" page/tab
-- Filters: Date range, Patient, Staff (therapist), Modality
-- Table shows: Patient | Visit Date | Modality | Therapist | Duration | Room
-- Export to CSV capability
+**业务影响：**
+- 无法按一次 visit 中的多个 CPT code 进行准确 billing
+- 无法按治疗项目粒度统计治疗师产能
+- 签字表缺少足够细的治疗明细
+- 无法生成满足合规要求的明细化患者记录
 
 ---
 
-## 3. Technical Requirements
+## 2. 用户故事
 
-### 3.1 Database Schema
+### US-1：在一次就诊中添加多个治疗项目
+**作为** 前台人员
+**我希望** 在进行中的 visit 中添加多个治疗 modality
+**从而** 记录患者在同一次 session 中接受的全部治疗
 
-**New table:** `visit_treatments`
+**验收标准：**
+- Active visit 卡片显示 `+ Add Treatment` 按钮
+- 可以添加多个不同 modality 的 treatment
+- 每个 treatment 都包含：modality、therapist、duration（可编辑）
+- 所有 treatments 以列表形式显示在 visit 卡片下方
+
+### US-2：在 checkout 前复核所有治疗项目
+**作为** 前台人员
+**我希望** 在 checkout 前看到本次 visit 中完成的全部治疗
+**从而** 核对 copay 并生成准确的签字表
+
+**验收标准：**
+- Checkout modal 显示只读的 treatment summary table
+- 列为：Modality、Therapist、Duration（分钟）、Time
+- 提供“为患者签字生成 PDF”选项（checkbox）
+- PDF 在 visit history table 中显示所有 treatments
+
+### US-3：按选择的 visits 生成 PDF
+**作为** billing staff
+**我希望** 只选择特定 visits 进入 sign-sheet PDF
+**从而** 生成部分记录（例如只生成本月 visits）
+
+**验收标准：**
+- Patient detail modal 中每个 visit 旁都有 checkbox
+- `Download Selected Visits PDF` 按钮（仅在选中 ≥1 个 visit 时可用）
+- 生成的 PDF 只包含被勾选的 visits
+
+### US-4：治疗记录报表
+**作为** 诊所经理
+**我希望** 查看跨患者的全部治疗记录并支持筛选
+**从而** 分析治疗师产能和 modality 分布
+
+**验收标准：**
+- 新增 `Treatment Records` 页面 / 标签页
+- 支持筛选：Date range、Patient、Staff（therapist）、Modality
+- 表格列为：Patient | Visit Date | Modality | Therapist | Duration | Room
+- 支持导出 CSV
+
+---
+
+## 3. 技术需求
+
+### 3.1 数据库 Schema
+
+**新增表：** `visit_treatments`
 
 ```sql
 CREATE TABLE visit_treatments (
@@ -93,57 +93,57 @@ CREATE INDEX idx_visit_treatments_visit ON visit_treatments(visit_id);
 CREATE INDEX idx_visit_treatments_therapist ON visit_treatments(therapist_id);
 ```
 
-**Migration strategy:**
-- Keep `visits.service_type` for backward compatibility (mark as "Legacy")
-- New visits with treatments leave `service_type` as empty or "Multiple"
+**迁移策略：**
+- 保留 `visits.service_type` 以兼容旧逻辑（标记为 `Legacy`）
+- 新 visits 若使用多个 treatments，则 `service_type` 置空或设为 `"Multiple"`
 
 ### 3.2 API Endpoints
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | 用途 |
 |--------|----------|---------|
-| GET | `/prototype/visits/{visit_id}/treatments` | List treatments for visit |
-| POST | `/prototype/visits/{visit_id}/treatments/add` | Add new treatment |
-| PATCH | `/prototype/visits/{visit_id}/treatments/{treatment_id}/update` | Edit duration/notes |
-| DELETE | `/prototype/visits/{visit_id}/treatments/{treatment_id}/delete` | Remove treatment |
-| GET | `/prototype/treatment-records` | Query all treatments with filters |
-| GET | `/prototype/patients/{patient_id}/sign-sheet.pdf?visit_ids=x,y,z` | Generate PDF for selected visits |
+| GET | `/prototype/visits/{visit_id}/treatments` | 查询该 visit 的 treatments |
+| POST | `/prototype/visits/{visit_id}/treatments/add` | 添加新 treatment |
+| PATCH | `/prototype/visits/{visit_id}/treatments/{treatment_id}/update` | 编辑 duration / notes |
+| DELETE | `/prototype/visits/{visit_id}/treatments/{treatment_id}/delete` | 删除 treatment |
+| GET | `/prototype/treatment-records` | 按筛选条件查询全部 treatments |
+| GET | `/prototype/patients/{patient_id}/sign-sheet.pdf?visit_ids=x,y,z` | 为选中的 visits 生成 PDF |
 
 ### 3.3 Event Sourcing
 
-**New event types:**
-- `TREATMENT_ADDED` — treatment created in visit
-- `TREATMENT_UPDATED` — duration/notes changed
-- `TREATMENT_DELETED` — treatment removed (soft delete)
+**新增事件类型：**
+- `TREATMENT_ADDED` —— 在 visit 中创建 treatment
+- `TREATMENT_UPDATED` —— 更新 duration / notes
+- `TREATMENT_DELETED` —— 删除 treatment（软删除）
 
-All events logged to `event_log` table per ADR-001.
+所有事件都按 ADR-001 写入 `event_log`。
 
 ---
 
-## 4. UI Design
+## 4. UI 设计
 
-### 4.1 Active Visits Card (Enhanced)
+### 4.1 Active Visits Card（增强版）
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ John Doe | R201 | Checked In            │
 │ Service: Multiple Treatments            │
 │                                         │
 │ Treatments:                             │
 │  • PT (Dr. Chen) - 30min                │
-│  • E-stim (Dr. Chen) - 15min [Edit]    │
-│  • Massage (Lisa Wu) - 20min [Edit]    │
+│  • E-stim (Dr. Chen) - 15min [Edit]     │
+│  • Massage (Lisa Wu) - 20min [Edit]     │
 │                                         │
-│ [+ Add Treatment] [Start] [Checkout]   │
+│ [+ Add Treatment] [Start] [Checkout]    │
 └─────────────────────────────────────────┘
 ```
 
 ### 4.2 Add Treatment Modal
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │         Add Treatment                   │
 ├─────────────────────────────────────────┤
-│ Modality:  [Dropdown: PT, E-stim, ...]│
+│ Modality:  [Dropdown: PT, E-stim, ...] │
 │ Therapist: [Dropdown: Staff list]      │
 │ Duration:  [30] minutes                 │
 │ Notes:     [___________]                │
@@ -152,18 +152,18 @@ All events logged to `event_log` table per ADR-001.
 └─────────────────────────────────────────┘
 ```
 
-### 4.3 Checkout Modal (Enhanced)
+### 4.3 Checkout Modal（增强版）
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │      Checkout: John Doe                 │
 ├─────────────────────────────────────────┤
 │ Treatments Performed:                   │
 │ ┌─────────────────────────────────────┐ │
-│ │ Modality  Therapist    Duration Time││
-│ │ PT        Dr. Chen     30min    10:00││
-│ │ E-stim    Dr. Chen     15min    10:30││
-│ │ Massage   Lisa Wu      20min    10:45││
+│ │ Modality  Therapist    Duration Time│ │
+│ │ PT        Dr. Chen     30min   10:00│ │
+│ │ E-stim    Dr. Chen     15min   10:30│ │
+│ │ Massage   Lisa Wu      20min   10:45│ │
 │ └─────────────────────────────────────┘ │
 │                                         │
 │ Copay Collected: [$25] ✓                │
@@ -176,25 +176,25 @@ All events logged to `event_log` table per ADR-001.
 └─────────────────────────────────────────┘
 ```
 
-### 4.4 Patient Detail Modal (Enhanced)
+### 4.4 Patient Detail Modal（增强版）
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │  John Doe | DOB: 1980-05-15             │
 ├─────────────────────────────────────────┤
 │ Visit History:                          │
-│ [✓] 2026-03-27 | PT+E-stim | $25 | ✓  │
-│ [✓] 2026-03-20 | Massage | $25 | ✓     │
-│ [ ] 2026-03-13 | PT | $25 | ✓          │
+│ [✓] 2026-03-27 | PT+E-stim | $25 | ✓    │
+│ [✓] 2026-03-20 | Massage   | $25 | ✓    │
+│ [ ] 2026-03-13 | PT        | $25 | ✓    │
 │                                         │
 │ [Download Selected Visits PDF (2)]      │
 │ [Download All History PDF]              │
 └─────────────────────────────────────────┘
 ```
 
-### 4.5 Treatment Records Page (NEW)
+### 4.5 Treatment Records Page（新增）
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │        Treatment Records                │
 ├─────────────────────────────────────────┤
@@ -204,90 +204,90 @@ All events logged to `event_log` table per ADR-001.
 │ Modality: [All ▼]                       │
 │           [Apply Filters] [Export CSV]  │
 ├─────────────────────────────────────────┤
-│ Patient    Date       Modality  Therapist│
-│ John Doe   03-27 10:00 PT      Dr. Chen  │
-│ John Doe   03-27 10:30 E-stim  Dr. Chen  │
-│ Jane Smith 03-27 11:00 Massage Lisa Wu   │
+│ Patient    Date       Modality Therapist│
+│ John Doe   03-27 10:00 PT       Dr. Chen│
+│ John Doe   03-27 10:30 E-stim   Dr. Chen│
+│ Jane Smith 03-27 11:00 Massage  Lisa Wu │
 │ ...                                     │
 └─────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Implementation Phases
+## 5. 实施阶段
 
-### Phase 1: Database + Backend APIs (P0)
-- Create `visit_treatments` table (migration)
-- Implement 6 new API endpoints
-- Add event logging for treatments
-- **Estimate:** 8 hours
+### Phase 1：数据库 + Backend APIs（P0）
+- 创建 `visit_treatments` 表（migration）
+- 实现 6 个新 API
+- 为 treatments 增加 event logging
+- **预估：** 8 小时
 
-### Phase 2: Core UX (P0)
-- Add treatment management to active visits
-- Enhance checkout modal with treatment review
-- **Estimate:** 6 hours
+### Phase 2：核心 UX（P0）
+- 在 active visits 中增加 treatment 管理
+- 增强 checkout modal，支持复核 treatments
+- **预估：** 6 小时
 
-### Phase 3: PDF Enhancements (P1)
-- Add "Generate PDF at checkout" checkbox
-- Implement selective PDF generation with visit checkboxes
-- Update PDF template to show all treatments per visit
-- **Estimate:** 4 hours
+### Phase 3：PDF 增强（P1）
+- 增加 checkout 时“生成 PDF” checkbox
+- 实现按 visit checkbox 选择性生成 PDF
+- 更新 PDF 模板，在每次 visit 下展示所有 treatments
+- **预估：** 4 小时
 
-### Phase 4: Treatment Records Page (P2)
-- New page/tab for treatment records
-- Filters + export to CSV
-- **Estimate:** 5 hours
+### Phase 4：Treatment Records 页面（P2）
+- 新增 treatment records 页面 / tab
+- 增加筛选 + CSV 导出
+- **预估：** 5 小时
 
-**Total Estimate:** 23 hours (~3 days)
-
----
-
-## 6. Success Metrics
-
-- **Adoption:** ≥80% of visits use multiple treatments within 2 weeks
-- **Accuracy:** Zero billing disputes due to missing treatment records
-- **Efficiency:** Checkout time reduced by 30% (pre-filled treatments)
-- **Compliance:** 100% of PDFs include complete treatment breakdown
+**总预估：** 23 小时（约 3 天）
 
 ---
 
-## 7. Out of Scope (Future)
+## 6. 成功指标
 
-- Integration with billing system CPT code mapping
-- Automated insurance claim generation
-- Real-time treatment duration tracking (timer)
-- Treatment templates/favorites
-
----
-
-## 8. Dependencies
-
-- Requires: Event sourcing framework (ADR-001)
-- Requires: PDF generation service (fpdf2)
-- Requires: Staff table with therapist roles
+- **Adoption：** 两周内 ≥80% 的 visits 使用多 treatment 记录
+- **Accuracy：** 因缺失 treatment records 导致的 billing dispute 为 0
+- **Efficiency：** 因预填 treatments，checkout 时间下降 30%
+- **Compliance：** 100% PDF 包含完整 treatment breakdown
 
 ---
 
-## 9. Risks & Mitigations
+## 7. 当前阶段不包含（未来）
 
-| Risk | Impact | Mitigation |
+- 与 billing system 的 CPT code mapping 集成
+- 自动化 insurance claim 生成
+- 实时 treatment 时长计时器
+- treatment templates / favorites
+
+---
+
+## 8. 依赖项
+
+- 依赖：Event sourcing framework（ADR-001）
+- 依赖：PDF generation service（fpdf2）
+- 依赖：带 therapist 角色的 staff 表
+
+---
+
+## 9. 风险与缓解
+
+| 风险 | 影响 | 缓解措施 |
 |------|--------|------------|
-| Legacy `service_type` confusion | Medium | Keep field but mark "LEGACY" in code comments |
-| PDF generation performance with 100+ visits | Medium | Add pagination/date range constraints |
-| Multiple therapists per visit complicates billing | High | Add CSV export for manual billing review |
+| Legacy `service_type` 引发混淆 | 中 | 保留字段，但在代码注释中标记为 `LEGACY` |
+| 100+ visits 时 PDF 生成性能下降 | 中 | 增加分页 / 日期范围限制 |
+| 单个 visit 多治疗师导致 billing 更复杂 | 高 | 增加 CSV 导出供人工 billing 复核 |
 
 ---
 
-## 10. Compliance Notes
+## 10. 合规说明
 
-- All treatment records stored in `event_log` (immutable audit trail)
-- No PII in treatment notes visible to non-providers
-- Patient signature required before PDF generation (checkout)
-- Retention: 7 years per HIPAA (event_log never deleted)
+- 所有治疗记录写入 `event_log`（不可变审计链）
+- 非 provider 角色不可看到带 PII 的 treatment notes
+- checkout 生成 PDF 前需要患者签字
+- 保留期：按 HIPAA 要求保存 7 年（`event_log` 永不删除）
 
 ---
 
-**Approval:**
-- [x] Product Manager: Approved 2026-03-27
-- [x] Engineering Lead: Feasible, 3-day estimate
-- [x] Compliance: HIPAA-compliant if event logging enforced
+**审批：**
+- [x] Product Manager：Approved 2026-03-27
+- [x] Engineering Lead：可行，预估 3 天
+- [x] Compliance：在强制事件记录的前提下满足 HIPAA

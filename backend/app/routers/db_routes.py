@@ -541,15 +541,29 @@ async def get_patient_sign_sheet(
     from app.services import pdf_service
     patient = await db_service.get_patient(db, patient_id, clinic_id=current_user["clinic_id"])
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    visits = await db_service.get_patient_visits(db, clinic_id=current_user["clinic_id"], patient_id=patient_id)
-
-    # Filter visits if visit_ids provided
-    if visit_ids:
-        selected_ids = set(visit_ids.split(','))
-        visits = [v for v in visits if v.get('visit_id') in selected_ids]
-
-    policies = await db_service.list_insurance_policies(db, clinic_id=current_user["clinic_id"], patient_id=patient_id)
+        # Walk-in patient — build a minimal patient dict from visit data
+        if visit_ids:
+            selected_ids = set(visit_ids.split(','))
+        else:
+            selected_ids = None
+        all_visits = await db_service.get_patient_visits(db, clinic_id=current_user["clinic_id"], patient_id=patient_id)
+        if not all_visits:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        visits = [v for v in all_visits if v.get('visit_id') in selected_ids] if selected_ids else all_visits
+        patient = {
+            "patient_id": patient_id,
+            "first_name": all_visits[0].get("patient_name") or patient_id,
+            "last_name": "",
+            "full_name": all_visits[0].get("patient_name") or patient_id,
+            "date_of_birth": None, "phone": None, "email": None, "mrn": None,
+        }
+        policies = []
+    else:
+        visits = await db_service.get_patient_visits(db, clinic_id=current_user["clinic_id"], patient_id=patient_id)
+        if visit_ids:
+            selected_ids = set(visit_ids.split(','))
+            visits = [v for v in visits if v.get('visit_id') in selected_ids]
+        policies = await db_service.list_insurance_policies(db, clinic_id=current_user["clinic_id"], patient_id=patient_id)
     pdf_bytes = pdf_service.generate_sign_sheet(patient, visits, policies)
     filename_suffix = f"_selected_{len(visits)}" if visit_ids else ""
     return Response(

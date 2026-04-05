@@ -877,22 +877,7 @@ async def get_treatment_records(
     }
 
 
-@router.get("/debug/visit-records-test")
-async def debug_visit_records():
-    """Temporary debug endpoint to test visit-records without auth."""
-    import traceback
-    try:
-        from app.database import get_supabase
-        supa = get_supabase()
-        visits = await supa.select("visits", {}, limit=3)
-        staff = await supa.select("staff", {})
-        rooms = await supa.select("rooms", {})
-        tx = await supa.select("visit_treatments", {}, limit=3)
-        return {"visits_count": len(visits), "staff_count": len(staff), "rooms_count": len(rooms), "tx_count": len(tx), "ok": True}
-    except Exception as e:
-        return {"error": f"{type(e).__name__}: {e}", "tb": traceback.format_exc()[-800:]}
-
-
+@router.get("/visit-records")
 async def get_visit_records(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -902,20 +887,16 @@ async def get_visit_records(
     db: AsyncSession = Depends(get_db),
 ):
     """Return visits grouped with treatments organized by modality (A/PT/CP/TN) for 诊疗记录表 view."""
-    try:
-        return {
-            "visits": await db_service.list_visits_with_treatments(
-                db,
-                clinic_id=current_user["clinic_id"],
-                date_from=date_from,
-                date_to=date_to,
-                patient_id=patient_id,
-                staff_id=staff_id,
-            )
-        }
-    except Exception as e:
-        import traceback
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()[-500:]}")
+    return {
+        "visits": await db_service.list_visits_with_treatments(
+            db,
+            clinic_id=current_user["clinic_id"],
+            date_from=date_from,
+            date_to=date_to,
+            patient_id=patient_id,
+            staff_id=staff_id,
+        )
+    }
 
 
 # ==================== SERVICE TYPES ====================

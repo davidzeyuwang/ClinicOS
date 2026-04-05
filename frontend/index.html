@@ -364,7 +364,7 @@ async function api(m,p,b){
 }
 const GET=p=>api('GET',p), POST=(p,b)=>api('POST',p,b), PATCH=(p,b)=>api('PATCH',p,b), DELETE=p=>api('DELETE',p), PUT=(p,b)=>api('PUT',p,b);
 
-let _toastTimer=null;function toast(m,t='ok'){const e=document.getElementById('toast');if(_toastTimer)clearTimeout(_toastTimer);e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.textContent=m;e.classList.remove('hidden');_toastTimer=setTimeout(()=>e.classList.add('hidden'),3000);}
+let _toastTimer=null;function toast(m,t='ok',ms=3000){const e=document.getElementById('toast');if(_toastTimer)clearTimeout(_toastTimer);e.className=`toast ${t==='error'?'bg-red-600':'bg-green-600'}`;e.innerHTML=m;e.classList.remove('hidden');_toastTimer=setTimeout(()=>e.classList.add('hidden'),ms);}
 function openModal(t,h){document.getElementById('modal-title').textContent=t;document.getElementById('modal-body').innerHTML=h;document.getElementById('modal').classList.remove('hidden');}
 function closeModal(){document.getElementById('modal').classList.add('hidden');}
 
@@ -687,11 +687,12 @@ async function openCheckout(vid){
         <span class="text-sm font-medium">✍ Patient Signed</span>
       </label>
     </div>
-    <button onclick="doCheckout('${vid}')" class="btn btn-primary w-full">🚪 Check Out</button>
-    <button onclick="doCheckout('${vid}',true)" class="btn btn-outline w-full text-sm">Skip — just check out</button>
+    <button onclick="doCheckout('${vid}','${patientId}')" class="btn btn-primary w-full">🚪 Check Out</button>
+    <button onclick="doCheckout('${vid}','${patientId}',true)" class="btn btn-outline w-full text-sm">Skip — just check out</button>
+    ${patientId?`<a href="${API}/patients/${patientId}/sign-sheet.pdf?visit_ids=${vid}" target="_blank" class="btn btn-outline w-full text-sm text-center">📄 Download Sign Sheet PDF</a>`:''}
   </div>`);
 }
-async function doCheckout(vid,skipAll){
+async function doCheckout(vid,patientId,skipAll){
   const body={visit_id:vid,actor_id:'frontdesk'};
   if(!skipAll){
     const cc=parseFloat(document.getElementById('co-cc').value);if(!isNaN(cc)&&cc>0)body.copay_collected=cc;
@@ -703,9 +704,14 @@ async function doCheckout(vid,skipAll){
   }
   try{
     await POST('/portal/checkout',body);
-    toast('Checked out');
     closeModal();
     refreshOps();
+    if(patientId&&patientId!=='null'){
+      const pdfUrl=`${API}/patients/${patientId}/sign-sheet.pdf?visit_ids=${vid}`;
+      toast(`Checked out — <a href="${pdfUrl}" target="_blank" style="text-decoration:underline;font-weight:600">📄 Download PDF</a>`,'success',8000);
+    } else {
+      toast('Checked out');
+    }
   }catch(e){toast(e.message,'error');}
 }
 

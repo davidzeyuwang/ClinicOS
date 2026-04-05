@@ -44,6 +44,13 @@ export interface AuthEnv {
     request: APIRequestContext,
     suffix: string,
   ) => Promise<Record<string, string> | null>;
+
+  /**
+   * Whether this environment enforces per-clinic data isolation.
+   * Set to false for single-tenant Supabase prod (patients table has no clinic_id).
+   * Defaults to true (local SQLite with proper multi-tenancy).
+   */
+  supportsTenantIsolation?: boolean;
 }
 
 export interface AuthCreated {
@@ -228,6 +235,10 @@ export function registerAuthTests(env: AuthEnv): void {
     // ── MT-01 + MT-02: Multi-tenancy isolation ────────────────────────────────
 
     test("tenant isolation: clinic B cannot access clinic A patients", async ({ request }) => {
+      if (env.supportsTenantIsolation === false) {
+        console.log("  ⚠ Tenant isolation not enforced in this env (single-tenant Supabase) — skipped");
+        return;
+      }
       // Create patient in Clinic A
       const ptR = await request.post("/prototype/patients", {
         data: {

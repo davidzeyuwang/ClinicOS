@@ -405,6 +405,7 @@ const prodAuthEnv: AuthEnv = {
   adminEmail: "admin@test.clinicos.local",
   adminPassword: "test1234",
   runSuffix: RUN_SUFFIX,
+  supportsTenantIsolation: false, // Supabase patients table is single-tenant (no clinic_id column)
 
   async setup(request: APIRequestContext) {
     // Warm up Vercel cold start (light endpoints)

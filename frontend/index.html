@@ -289,9 +289,12 @@
         <p id="sum-empty" class="text-gray-400 text-center py-4">Select a date to view summary.</p>
       </div>
       <div class="card">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
           <h2 class="text-lg font-semibold">📋 Ops Report (Snapshot)</h2>
-          <button onclick="genReport()" data-testid="generate-report-button" class="btn btn-primary">Generate</button>
+          <div class="flex items-center gap-2">
+            <input id="rpt-date" type="date" class="input" style="width:160px">
+            <button onclick="genReport()" data-testid="generate-report-button" class="btn btn-primary">Generate</button>
+          </div>
         </div>
         <div id="rpt-content" data-testid="report-content" class="hidden">
           <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
@@ -1381,11 +1384,12 @@ async function saveServiceTypeStaff(svcId){
 }
 
 // ==================== REPORT ====================
-async function genReport(){try{const r=await POST('/reports/daily/generate',{actor_id:'manager'});showReport(r);toast('Generated');}catch(e){toast(e.message,'error');}}
+async function genReport(){try{const dt=document.getElementById('rpt-date').value||null;const r=await POST('/reports/daily/generate',{actor_id:'manager',date:dt});showReport(r);toast('Generated');}catch(e){toast(e.message,'error');}}
 async function loadReport(){
   // Load both daily summary and ops report
   const today=new Date().toISOString().slice(0,10);
   if(!document.getElementById('sum-date').value)document.getElementById('sum-date').value=today;
+  if(!document.getElementById('rpt-date').value)document.getElementById('rpt-date').value=today;
   loadDailySummary();
   try{showReport(await GET('/reports/daily'));}catch(e){document.getElementById('rpt-content').classList.add('hidden');document.getElementById('rpt-empty').classList.remove('hidden');}
 }

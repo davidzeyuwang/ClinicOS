@@ -961,9 +961,13 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
 
     appts = await supa.select("appointments", {"appointment_date": today})
 
-    # Build staff_hours from today's visits
+    # Build staff_hours using treatment duration_minutes (session length set at check-in)
     all_staff = await supa.select("staff", {})
     staff_map = {s["staff_id"]: s["name"] for s in all_staff}
+    all_treatments = await supa.select("visit_treatments", {}, limit=5000)
+    visit_ids = {v["visit_id"] for v in today_visits}
+    today_tx = [t for t in all_treatments if t.get("visit_id") in visit_ids]
+
     per_staff = {}
     for v in today_visits:
         sid = v.get("staff_id")
@@ -973,15 +977,18 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
             per_staff[sid] = {"staff_id": sid, "name": staff_map.get(sid, sid[:8]), "completed_minutes": 0, "active_minutes": 0, "sessions_completed": 0}
         if v.get("service_end_time"):
             per_staff[sid]["sessions_completed"] += 1
-            try:
-                from datetime import datetime
-                start = datetime.fromisoformat(v["service_start_time"].replace("Z", "+00:00"))
-                end = datetime.fromisoformat(v["service_end_time"].replace("Z", "+00:00"))
-                per_staff[sid]["completed_minutes"] += max(int((end - start).total_seconds() // 60), 0)
-            except Exception:
-                pass
         elif v.get("service_start_time"):
-            per_staff[sid]["active_minutes"] += 1  # placeholder
+            per_staff[sid]["active_minutes"] += 1
+
+    # Sum treatment durations per therapist
+    for t in today_tx:
+        tid = t.get("therapist_id")
+        dur = t.get("duration_minutes") or 0
+        if tid and tid in staff_map:
+            if tid not in per_staff:
+                per_staff[tid] = {"staff_id": tid, "name": staff_map.get(tid, tid[:8]), "completed_minutes": 0, "active_minutes": 0, "sessions_completed": 0}
+            per_staff[tid]["completed_minutes"] += dur
+
     staff_hours = list(per_staff.values())
 
     # Build room_board_snapshot

@@ -25,6 +25,7 @@ try {
 export default defineConfig({
   testDir: "./frontend/tests/e2e",
   testMatch: ["**/prod-smoke.spec.ts"],
+  globalSetup: "./frontend/tests/global-setup.ts",
   fullyParallel: false,
   retries: 1,
   timeout: 240_000,

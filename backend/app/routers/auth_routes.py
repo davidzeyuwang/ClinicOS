@@ -45,11 +45,19 @@ async def register_clinic(
     current_user: CurrentUser = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import select
-    from app.models.tables import Clinic
-    existing = await db.execute(select(Clinic).where(Clinic.slug == payload.slug))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Clinic slug already exists")
+    # Duplicate slug check — SQLite uses SQLAlchemy; Supabase uses REST via auth_service
+    if _IS_SUPABASE:
+        from app.database import get_supabase
+        supa = get_supabase()
+        rows = await supa.select("clinics", {"slug": payload.slug})
+        if rows:
+            raise HTTPException(status_code=409, detail="Clinic slug already exists")
+    else:
+        from sqlalchemy import select
+        from app.models.tables import Clinic
+        existing = await db.execute(select(Clinic).where(Clinic.slug == payload.slug))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Clinic slug already exists")
     clinic = await auth_service.create_clinic(db, payload.clinic_name, payload.slug)
     user = await auth_service.create_user(
         db, clinic.clinic_id, payload.admin_email, payload.admin_password,
@@ -57,5 +65,6 @@ async def register_clinic(
         role="admin",
         username=payload.admin_username or None,
     )
-    await db.commit()
+    if not _IS_SUPABASE:
+        await db.commit()
     return {"clinic_id": clinic.clinic_id, "user_id": user.user_id}

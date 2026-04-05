@@ -16,7 +16,7 @@ export default async function globalSetup() {
   // 1. Obtain JWT via direct API call (no browser needed)
   const ctx = await request.newContext({ baseURL: BASE_URL });
   const resp = await ctx.post("/prototype/auth/login", {
-    data: { username: TEST_USERNAME, password: TEST_PASSWORD },
+    data: { email: TEST_USERNAME, password: TEST_PASSWORD },
   });
   if (!resp.ok()) {
     const body = await resp.text();

@@ -3,9 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import CurrentUser, get_current_user, require_role
-from app.database import get_db
+from app.database import get_db, _IS_SUPABASE
 from app.schemas.prototype import LoginRequest, RegisterClinicRequest, TokenResponse
-from app.services import auth_service
+
+if _IS_SUPABASE:
+    from app.services import auth_service_supa as auth_service
+else:
+    from app.services import auth_service
 
 router = APIRouter(prefix="/prototype/auth", tags=["auth"])
 

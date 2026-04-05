@@ -16,7 +16,8 @@ import { authHeaders } from "../helpers";
 
 export interface AuthEnv {
   suiteName: string;
-  adminUsername: string;
+  /** The admin user's email address (used as login identifier). */
+  adminEmail: string;
   adminPassword: string;
 
   /**
@@ -72,7 +73,7 @@ export function registerAuthTests(env: AuthEnv): void {
       request,
     }) => {
       const r = await request.post("/prototype/auth/login", {
-        data: { username: env.adminUsername, password: env.adminPassword },
+        data: { email: env.adminEmail, password: env.adminPassword },
       });
       expect(r.ok(), `login failed: ${await r.text()}`).toBeTruthy();
       const body = await r.json();
@@ -86,23 +87,45 @@ export function registerAuthTests(env: AuthEnv): void {
 
     test("POST /auth/login with wrong password returns 401", async ({ request }) => {
       const r = await request.post("/prototype/auth/login", {
-        data: { username: env.adminUsername, password: "totally-wrong-pass" },
+        data: { email: env.adminEmail, password: "totally-wrong-pass" },
       });
       expect(r.status()).toBe(401);
     });
 
-    test("POST /auth/login with unknown username returns 401", async ({ request }) => {
+    test("POST /auth/login with unknown email returns 401", async ({ request }) => {
       const r = await request.post("/prototype/auth/login", {
-        data: { username: `nobody-${env.runSuffix}@nowhere.example`, password: "irrelevant" },
+        data: { email: `nobody-${env.runSuffix}@nowhere.example`, password: "irrelevant" },
       });
       expect(r.status()).toBe(401);
+    });
+
+    test("POST /auth/login with username alias returns JWT", async ({ request }) => {
+      const fdHeaders = await env.createFrontdeskUser(request, `alias-${env.runSuffix}`);
+      if (!fdHeaders) {
+        console.log("  ⚠ createFrontdeskUser not available in this env — username alias test skipped");
+        return;
+      }
+      // createFrontdeskUser creates user with email=`frontdesk-alias-<suffix>@local.test`
+      // Login using username field (alias) — backend accepts both email and username
+      const r = await request.post("/prototype/auth/login", {
+        data: { username: `frontdesk-alias-${env.runSuffix}@local.test`, password: "front123!" },
+      });
+      expect(r.ok(), `username alias login failed: ${await r.text()}`).toBeTruthy();
+      expect((await r.json()).access_token, "access_token missing").toBeTruthy();
+    });
+
+    test("POST /auth/login without email or username returns 422", async ({ request }) => {
+      const r = await request.post("/prototype/auth/login", {
+        data: { password: "irrelevant" },
+      });
+      expect(r.status(), "expected 422 when neither email nor username provided").toBe(422);
     });
 
     // ── AUTH-01: GET /auth/me ──────────────────────────────────────────────────
 
     test("GET /auth/me with valid token returns correct user object", async ({ request }) => {
       const loginR = await request.post("/prototype/auth/login", {
-        data: { username: env.adminUsername, password: env.adminPassword },
+        data: { email: env.adminEmail, password: env.adminPassword },
       });
       const { access_token } = await loginR.json();
 
@@ -111,7 +134,7 @@ export function registerAuthTests(env: AuthEnv): void {
       });
       expect(r.ok(), await r.text()).toBeTruthy();
       const body = await r.json();
-      expect(body.username).toBe(env.adminUsername);
+      expect(body.email).toBe(env.adminEmail);
       expect(body.role).toBe("admin");
       expect(body.clinic_id, "clinic_id missing from /auth/me").toBeTruthy();
     });
@@ -167,7 +190,7 @@ export function registerAuthTests(env: AuthEnv): void {
         data: {
           clinic_name: `Auth Reg Clinic ${env.runSuffix}`,
           slug,
-          admin_username: `reg-admin-${env.runSuffix}@auth.test`,
+          admin_email: `reg-admin-${env.runSuffix}@auth.test`,
           admin_password: "Reg123!",
           admin_display_name: `Reg Admin ${env.runSuffix}`,
         },
@@ -189,14 +212,14 @@ export function registerAuthTests(env: AuthEnv): void {
         admin_password: "Pass123!",
       };
       const r1 = await request.post("/prototype/auth/register-clinic", {
-        data: { ...base, admin_username: `dup1-${env.runSuffix}@dup.test` },
+        data: { ...base, admin_email: `dup1-${env.runSuffix}@dup.test` },
         headers: authHeaders(),
       });
       expect(r1.ok(), await r1.text()).toBeTruthy();
       created.clinicIds.push((await r1.json()).clinic_id);
 
       const r2 = await request.post("/prototype/auth/register-clinic", {
-        data: { ...base, admin_username: `dup2-${env.runSuffix}@dup.test` },
+        data: { ...base, admin_email: `dup2-${env.runSuffix}@dup.test` },
         headers: authHeaders(),
       });
       expect(r2.status(), "expected 409 for duplicate slug").toBe(409);
@@ -225,7 +248,7 @@ export function registerAuthTests(env: AuthEnv): void {
         data: {
           clinic_name: `MT Iso Clinic ${env.runSuffix}`,
           slug,
-          admin_username: `mt-admin-${env.runSuffix}@mt.test`,
+          admin_email: `mt-admin-${env.runSuffix}@mt.test`,
           admin_password: "MTPass123!",
           admin_display_name: "MT Admin",
         },
@@ -236,7 +259,7 @@ export function registerAuthTests(env: AuthEnv): void {
 
       // Login as Clinic B admin
       const loginR = await request.post("/prototype/auth/login", {
-        data: { username: `mt-admin-${env.runSuffix}@mt.test`, password: "MTPass123!" },
+        data: { email: `mt-admin-${env.runSuffix}@mt.test`, password: "MTPass123!" },
       });
       const { access_token: bToken } = await loginR.json();
       const bHeaders = { Authorization: `Bearer ${bToken}` };
@@ -269,7 +292,7 @@ export function registerAuthTests(env: AuthEnv): void {
 
     test("login modal: wrong password shows error message", async ({ page }) => {
       await _clearTokenAndReload(page);
-      await page.locator("#login-username").fill(env.adminUsername);
+      await page.locator("#login-username").fill(env.adminEmail);
       await page.locator("#login-password").fill("wrong-password-for-smoke-test");
       await page.getByRole("button", { name: /sign in/i }).click();
       await expect(page.locator("#login-error"), "error message should appear").toBeVisible({
@@ -279,7 +302,7 @@ export function registerAuthTests(env: AuthEnv): void {
 
     test("login modal: correct credentials hide modal and show ops board", async ({ page }) => {
       await _clearTokenAndReload(page);
-      await page.locator("#login-username").fill(env.adminUsername);
+      await page.locator("#login-username").fill(env.adminEmail);
       await page.locator("#login-password").fill(env.adminPassword);
       await page.getByRole("button", { name: /sign in/i }).click();
       await expect(page.locator("#login-modal"), "login modal should hide").toBeHidden({

@@ -178,7 +178,7 @@ registerSmokeTests(_localSmokeEnv);
 
 const _localAuthEnv: AuthEnv = {
   suiteName: "Auth — local (SQLite)",
-  adminUsername: "admin@test.clinicos.local",
+  adminEmail: "admin@test.clinicos.local",
   adminPassword: "test1234",
   runSuffix: Date.now().toString().slice(-6),
 
@@ -191,14 +191,14 @@ const _localAuthEnv: AuthEnv = {
   },
 
   async createFrontdeskUser(request: APIRequestContext, suffix: string) {
-    const username = `frontdesk-${suffix}@local.test`;
+    const email = `frontdesk-${suffix}@local.test`;
     const r = await request.post("/prototype/test/create-user", {
-      data: { username, password: "front123!", role: "frontdesk" },
+      data: { email, password: "front123!", role: "frontdesk" },
       headers: { "x-test-token": "test-admin-secret-fixed-token" },
     });
     if (!r.ok()) return null;
     const lr = await request.post("/prototype/auth/login", {
-      data: { username, password: "front123!" },
+      data: { email, password: "front123!" },
     });
     if (!lr.ok()) return null;
     const { access_token } = await lr.json();

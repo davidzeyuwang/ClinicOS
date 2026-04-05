@@ -402,7 +402,7 @@ registerHarnessTests(prodHarnessEnv);
 
 const prodAuthEnv: AuthEnv = {
   suiteName: "Auth — prod (Vercel + Supabase)",
-  adminUsername: "admin@test.clinicos.local",
+  adminEmail: "admin@test.clinicos.local",
   adminPassword: "test1234",
   runSuffix: RUN_SUFFIX,
 

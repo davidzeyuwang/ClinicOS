@@ -30,7 +30,11 @@ async def lifespan(app: FastAPI):
 
 
 async def _seed_test_clinic() -> None:
-    """Idempotent: create default test clinic + admin user on first startup."""
+    """Idempotent: create default test clinic + admin user on first startup (SQLite only)."""
+    from app.database import _IS_SUPABASE
+    if _IS_SUPABASE:
+        return  # Supabase prod uses pre-seeded data; SQLAlchemy session unavailable here
+
     from sqlalchemy import select
     from app.database import AsyncSessionLocal
     from app.models.tables import Clinic, User, _new_id, _utc_now

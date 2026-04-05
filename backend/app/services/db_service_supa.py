@@ -615,7 +615,7 @@ async def create_appointment(db, actor_id: str, data: dict, **_) -> dict:
 
 
 async def list_appointments(db, date: Optional[str] = None, patient_id: Optional[str] = None,
-                            provider_id: Optional[str] = None) -> list:
+                            provider_id: Optional[str] = None, **_) -> list:
     supa = get_supabase()
     filters = {}
     if date:
@@ -892,7 +892,8 @@ async def add_treatment(
     actor_id: str,
     therapist_id: Optional[str] = None,
     duration_minutes: Optional[int] = 30,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    **_,
 ) -> dict:
     """Add a treatment modality to a visit."""
     supa = get_supabase()

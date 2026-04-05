@@ -877,7 +877,22 @@ async def get_treatment_records(
     }
 
 
-@router.get("/visit-records")
+@router.get("/debug/visit-records-test")
+async def debug_visit_records():
+    """Temporary debug endpoint to test visit-records without auth."""
+    import traceback
+    try:
+        from app.database import get_supabase
+        supa = get_supabase()
+        visits = await supa.select("visits", {}, limit=3)
+        staff = await supa.select("staff", {})
+        rooms = await supa.select("rooms", {})
+        tx = await supa.select("visit_treatments", {}, limit=3)
+        return {"visits_count": len(visits), "staff_count": len(staff), "rooms_count": len(rooms), "tx_count": len(tx), "ok": True}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}", "tb": traceback.format_exc()[-800:]}
+
+
 async def get_visit_records(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,

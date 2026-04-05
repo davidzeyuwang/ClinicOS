@@ -1088,5 +1088,342 @@
     "verify": "Upload valid 835 file with 2 claims → both matched and posted → GET /billing/claims shows status=paid. Upload 835 with unknown payer_claim_id → flagged as unmatched in response.",
     "passes": false,
     "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-01",
+    "title": "Payer configuration registry",
+    "description": "Clinic-scoped payer_configs registry for portal scraping automation. Store payer_name, adapter_type, portal_url, encrypted credentials, and login/inquiry config. Admin-only CRUD. Foundation for all automated eligibility inquiry work.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "GAP-ELIG-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'payer_config' -q",
+    "ui_test": "npx playwright test --grep \"payer config\"",
+    "verify": "POST /prototype/admin/payer-configs with valid payload → encrypted credentials stored, GET list returns config metadata without plaintext secrets.",
+    "verify_manual": "Admin adds payer config for BCBS portal → config appears in admin list → credentials never displayed back in UI.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-02",
+    "title": "Manual eligibility inquiry",
+    "description": "One-click eligibility check per insurance policy using payer portal scraping. Creates eligibility_inquiries record, runs adapter workflow, updates policy projection, and exposes status lifecycle pending → running → completed/failed.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "INS-AUTO-01",
+      "GAP-ELIG-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'eligibility inquiry manual' -q",
+    "ui_test": "npx playwright test --grep \"check eligibility\"",
+    "verify": "POST /prototype/insurance-policies/{policy_id}/eligibility-inquiries → inquiry row created and status transitions to completed/failed with policy eligibility_status updated.",
+    "verify_manual": "Open patient insurance card → click Check Eligibility → status spinner appears → result updates policy fields and verification timestamp.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-03",
+    "title": "Immutable inquiry snapshots",
+    "description": "Append-only eligibility_snapshots table storing encrypted raw response or secure reference plus parsed eligibility result. Every completed inquiry creates a permanent snapshot linked to patient, policy, and inquiry.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "INS-AUTO-02"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'eligibility snapshot' -q",
+    "ui_test": null,
+    "verify": "Complete inquiry → one snapshot row inserted. Attempt UPDATE/DELETE on snapshot model is blocked by app and migration policy.",
+    "verify_manual": "Run inquiry twice for same patient → patient history shows two read-only snapshots with distinct timestamps.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-04",
+    "title": "Automated periodic re-inquiry scheduler",
+    "description": "Background scheduler re-verifies active insurance policies at configured intervals, with retry/backoff and off-hours execution window. Replaces recurring manual Asana follow-up for stale eligibility.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "INS-AUTO-03"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'eligibility scheduler' -q",
+    "ui_test": null,
+    "verify": "Policies older than re-inquiry interval are queued automatically and retried up to max retry count when payer lookup fails.",
+    "verify_manual": "Set clinic re-inquiry interval to 7 days → overnight worker queues stale policies → inquiry dashboard shows scheduled and completed runs.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-05",
+    "title": "Pre-visit eligibility trigger",
+    "description": "Automatically queue eligibility verification ahead of scheduled appointments when the last verified date is stale. Designed to catch expired or denied coverage before patient check-in.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "INS-AUTO-04",
+      "APPT-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'pre_visit eligibility' -q",
+    "ui_test": null,
+    "verify": "Appointment inside 48h window with stale eligibility automatically creates a pre_visit inquiry request and surfaces result before check-in.",
+    "verify_manual": "Create appointment for tomorrow with last eligibility check older than threshold → system queues inquiry and patient visit screen shows latest status.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-06",
+    "title": "Payer adapter library",
+    "description": "Pluggable Playwright adapter layer for payer portals, including generic adapter plus named adapters for priority carriers. Adapters encapsulate login, member search, and eligibility extraction without changing core engine code.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "INS-AUTO-01",
+      "INS-AUTO-02"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'eligibility adapter' -q",
+    "ui_test": null,
+    "verify": "Generic adapter and at least one named payer adapter return standardized EligibilityResult schema for mocked fixtures.",
+    "verify_manual": "Configure payer adapter type 'generic' and 'uhc' → both can run inquiries through the same engine with adapter-specific extraction paths.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-07",
+    "title": "Eligibility inquiry dashboard",
+    "description": "Operational UI for pending/running/completed/failed inquiries with filters by payer, patient, trigger type, and date. Includes patient history and retry actions for failed inquiries.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "INS-AUTO-02",
+      "INS-AUTO-03"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"eligibility dashboard\"",
+    "verify": "Eligibility dashboard lists inquiries, filters by status/payer/date, and links to patient history and snapshot detail.",
+    "verify_manual": "Open Eligibility tab → see completed and failed inquiries → filter to failed BCBS runs → click patient history to inspect snapshots.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "INS-AUTO-08",
+    "title": "Eligibility alerts and patient history",
+    "description": "Generate alerts when a policy changes from verified to denied/expired and show immutable inquiry history per patient. Staff can acknowledge alerts after review.",
+    "rfc": "docs/RFC/003-eligibility-inquiry-engine.md",
+    "phase": 10,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "INS-AUTO-03",
+      "INS-AUTO-04",
+      "INS-AUTO-07"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'eligibility alert' -q",
+    "ui_test": "npx playwright test --grep \"eligibility alert\"",
+    "verify": "Eligibility status change from verified to denied produces alert row and patient history entry; acknowledgment updates alert state without mutating snapshots.",
+    "verify_manual": "Automated re-inquiry returns denied after prior verified result → alert badge appears in dashboard and patient detail.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-01",
+    "title": "Clinic billing configuration",
+    "description": "Clinic-scoped billing identity record for claims work: legal billing name, address, phone, tax ID, billing NPI, taxonomy, default POS, and payer-specific submitter IDs. Required before CMS-1500 assembly can succeed.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "BILLING-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'billing config' -q",
+    "ui_test": "npx playwright test --grep \"billing config\"",
+    "verify": "POST /prototype/admin/billing-config creates clinic billing config; incomplete required fields block CMS-1500 assembly with validation errors.",
+    "verify_manual": "Admin enters clinic NPI, tax ID, billing address → save succeeds and values are available to claim assembly preview.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-02",
+    "title": "Structured ICD-10 diagnosis capture",
+    "description": "Support ordered diagnosis codes per visit for claim assembly, including diagnosis pointer positions needed by CMS-1500 service lines.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "BILLING-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'visit diagnosis' -q",
+    "ui_test": null,
+    "verify": "Visit can store ordered ICD-10 codes and claim assembly returns them in CMS-1500 Box 21 order.",
+    "verify_manual": "Add diagnoses M54.5 and R26.2 to visit → claim preview shows both in correct order and line diagnosis pointers reference them correctly.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-03",
+    "title": "Procedure coding on visit treatments",
+    "description": "Add procedure_code, modifiers, units, charges, and rendering provider to visit_treatments so claim service lines can be assembled without manual billing lookup.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "PRD005-P3-01",
+      "BILLING-01"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'procedure code' -q",
+    "ui_test": null,
+    "verify": "Billable treatment rows carry CPT code, units, and charge; CMS-1500 assembly emits one service line per billable treatment.",
+    "verify_manual": "Visit with two treatments 97110 and 97140 → claim preview shows two 24A-24J line items with units and charges.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-04",
+    "title": "CMS-1500 assembly API",
+    "description": "Normalized backend endpoint that assembles patient, insured, provider, diagnosis, and service-line data for a visit into a stable CMS-1500 JSON payload, including readiness warnings.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "EXT-01",
+      "EXT-02",
+      "EXT-03"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'cms1500 assembly' -q",
+    "ui_test": null,
+    "verify": "GET /prototype/billing/visits/{visit_id}/cms1500 returns normalized payload plus warnings/errors for missing required claim data.",
+    "verify_manual": "Request claim payload for checked-out visit → response includes patient block, insurance block, provider block, diagnoses, service lines, and validation warnings.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-05",
+    "title": "Chrome extension shell (Manifest V3)",
+    "description": "Build the extension runtime with popup UI, background service worker, content script, and Chrome storage wiring. This is the delivery vehicle for portal autofill.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "frontend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "EXT-04"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"chrome extension shell\"",
+    "verify": "Unpacked extension loads in Chrome, popup opens, background worker runs, and content script can message the worker on a mapped portal page.",
+    "verify_manual": "Load extension in Chrome developer mode → click icon → popup renders and detects current page context.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-06",
+    "title": "Extension authentication",
+    "description": "Secure extension login/logout flow using ClinicOS auth. Background worker owns tokens, preserves clinic context, and never exposes bearer token into page DOM.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "frontend-engineer",
+    "priority": "P0",
+    "depends_on": [
+      "EXT-05",
+      "AUTH-01"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"extension login\"",
+    "verify": "User can authenticate from extension popup, call protected claim assembly endpoint, and is forced to re-authenticate after token expiry.",
+    "verify_manual": "Login from extension popup using ClinicOS credentials → visit search loads. Logout clears extension state and further API calls fail with 401 until re-login.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-07",
+    "title": "Patient / visit claim selector",
+    "description": "Popup UI to search claim-eligible visits by patient, DOS, payer, or provider and preview readiness warnings before fill. Prevents staff from filling the wrong visit on a payer portal.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "EXT-04",
+      "EXT-06"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"claim selector\"",
+    "verify": "Extension popup lists only claim-eligible visits and displays claim warnings before autofill can start.",
+    "verify_manual": "Search patient name in extension popup → select visit → preview shows payer, DOS, missing-field warnings, and ready-to-fill status.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-08",
+    "title": "Portal field mapping registry",
+    "description": "Admin-managed registry of portal domains, selector sets, transform rules, and mapping versions for CMS-1500 fields. Lets the extension adapt to different payer portals without code changes per field.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "EXT-04"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'portal field mapping' -q",
+    "ui_test": null,
+    "verify": "POST mapping registry entry with domain and field_map JSON → GET active mapping returns versioned selector configuration for extension use.",
+    "verify_manual": "Admin saves mapping for payer portal domain → extension on that domain resolves active mapping version before fill.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-09",
+    "title": "Auto-fill execution engine",
+    "description": "Content-script engine that applies mapping rules to portal DOM, fills CMS-1500 fields, highlights failures, and stops before final submit for user review.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "frontend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "EXT-07",
+      "EXT-08"
+    ],
+    "api_test": null,
+    "ui_test": "npx playwright test --grep \"claims autofill\"",
+    "verify": "Extension fills mapped CMS-1500 fields on a test portal page, reports failed selectors, and never clicks final submit automatically.",
+    "verify_manual": "Open mapped payer claim page → choose visit → click Fill → visible fields populate and any failed fields are highlighted for manual correction.",
+    "passes": false,
+    "status": "TODO"
+  },
+  {
+    "id": "EXT-10",
+    "title": "Claim fill audit trail",
+    "description": "Audit every claim assembly and extension fill attempt with actor, visit, portal domain, mapping version, and outcome. Supports compliance review and debugging when portal mappings drift.",
+    "rfc": "docs/RFC/004-claims-autofill-chrome-extension.md",
+    "phase": 11,
+    "owner": "backend-engineer",
+    "priority": "P1",
+    "depends_on": [
+      "EXT-04",
+      "EXT-09"
+    ],
+    "api_test": "cd backend && python -m pytest tests/ -k 'claim fill audit' -q",
+    "ui_test": null,
+    "verify": "Every extension-initiated fill attempt creates audit record with outcome, field counts, and mapping version, without storing raw PHI in event payloads.",
+    "verify_manual": "Run autofill on test portal → claim fill audit screen shows visit ID, user, portal, success/failure status, and mapping version.",
+    "passes": false,
+    "status": "TODO"
   }
 ]

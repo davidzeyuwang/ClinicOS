@@ -887,16 +887,20 @@ async def get_visit_records(
     db: AsyncSession = Depends(get_db),
 ):
     """Return visits grouped with treatments organized by modality (A/PT/CP/TN) for 诊疗记录表 view."""
-    return {
-        "visits": await db_service.list_visits_with_treatments(
-            db,
-            clinic_id=current_user["clinic_id"],
-            date_from=date_from,
-            date_to=date_to,
-            patient_id=patient_id,
-            staff_id=staff_id,
-        )
-    }
+    try:
+        return {
+            "visits": await db_service.list_visits_with_treatments(
+                db,
+                clinic_id=current_user["clinic_id"],
+                date_from=date_from,
+                date_to=date_to,
+                patient_id=patient_id,
+                staff_id=staff_id,
+            )
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()[-500:]}")
 
 
 # ==================== SERVICE TYPES ====================

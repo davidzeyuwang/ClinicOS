@@ -269,7 +269,7 @@ class TaskUpdate(BaseModel):
 # ==================== REPORT ====================
 
 class DailyReportGenerate(BaseModel):
-    actor_id: str
+    actor_id: Optional[str] = None
     date: Optional[str] = Field(default=None, description="YYYY-MM-DD. Defaults to today UTC")
 
 

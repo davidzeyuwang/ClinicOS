@@ -988,7 +988,7 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
     all_rooms = await supa.select("rooms", {})
     room_board = [{"room_id": r["room_id"], "name": r.get("name", ""), "code": r.get("code", ""), "status": r.get("status", "available")} for r in all_rooms]
 
-    report = {
+    db_report = {
         "report_date": today,
         "total_check_ins": len([v for v in today_visits if v.get("check_in_time")]),
         "total_check_outs": len([v for v in today_visits if v.get("status") == "checked_out"]),
@@ -996,16 +996,17 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
         "total_appointments": len(appts),
         "no_shows": len([a for a in appts if a.get("status") == "no_show"]),
         "open_sessions": len([v for v in today_visits if v.get("status") in ("checked_in", "in_service")]),
-        "staff_hours": staff_hours,
-        "room_board_snapshot": room_board,
         "generated_at": _utc_now(),
     }
     try:
-        result = await supa.insert("daily_reports", report)
+        await supa.insert("daily_reports", db_report)
     except Exception:
-        result = report
+        pass
     await _append_event("REPORT_GENERATED", actor_id, {"date": today})
-    return result
+    # Return enriched report with staff_hours and room_board_snapshot
+    db_report["staff_hours"] = staff_hours
+    db_report["room_board_snapshot"] = room_board
+    return db_report
 
 
 async def get_daily_report(db, report_date: Optional[str] = None, **_) -> Optional[dict]:

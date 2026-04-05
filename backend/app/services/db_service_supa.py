@@ -1264,10 +1264,23 @@ async def list_visits_with_treatments(
     staff_map = {s["staff_id"]: s["name"] for s in all_staff}
     room_map = {r["room_id"]: r["name"] for r in all_rooms}
 
+    # Convert UTC check_in_time to clinic local date (America/New_York) for date filtering
+    def _local_date(iso_str):
+        if not iso_str:
+            return ""
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+            month = dt.month
+            offset = timedelta(hours=-4) if 3 <= month <= 10 else timedelta(hours=-5)
+            return (dt + offset).strftime("%Y-%m-%d")
+        except Exception:
+            return iso_str[:10] if len(iso_str) >= 10 else ""
+
     if date_from:
-        visits_raw = [v for v in visits_raw if (v.get("check_in_time") or "") >= date_from]
+        visits_raw = [v for v in visits_raw if _local_date(v.get("check_in_time")) >= date_from]
     if date_to:
-        visits_raw = [v for v in visits_raw if (v.get("check_in_time") or "") <= date_to + " 23:59:59"]
+        visits_raw = [v for v in visits_raw if _local_date(v.get("check_in_time")) <= date_to]
 
     visits_raw.sort(key=lambda v: v.get("check_in_time") or "", reverse=True)
 

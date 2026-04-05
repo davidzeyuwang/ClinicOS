@@ -1421,7 +1421,7 @@ function showReport(r){
   document.getElementById('rpt-svc').textContent=r.total_services_completed;document.getElementById('rpt-open').textContent=r.open_sessions;
   document.getElementById('rpt-appts').textContent=r.total_appointments||0;document.getElementById('rpt-noshow').textContent=r.no_shows||0;
   document.getElementById('rpt-ts').textContent='Generated: '+new Date(r.generated_at).toLocaleString();
-  const sh=r.staff_hours||[];document.getElementById('rpt-staff').innerHTML=sh.length?`<table class="w-full text-sm"><tbody>${sh.map(s=>`<tr class="border-b border-gray-100"><td class="py-1">${s.name}</td><td class="py-1">${s.completed_minutes+s.active_minutes}m</td><td class="py-1">${s.sessions_completed} sess</td></tr>`).join('')}</tbody></table>`:'<p class="text-gray-400">—</p>';
+  const sh=r.staff_hours||[];document.getElementById('rpt-staff').innerHTML=sh.length?`<table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b text-xs"><th class="pb-1">Name</th><th class="pb-1">Duration</th><th class="pb-1">Sessions</th></tr></thead><tbody>${sh.map(s=>`<tr class="border-b border-gray-100"><td class="py-1">${s.name}</td><td class="py-1">${s.completed_minutes+s.active_minutes}m</td><td class="py-1">${s.sessions_completed} sess</td></tr>`).join('')}</tbody></table>`:'<p class="text-gray-400">—</p>';
   const rr=r.room_board_snapshot||[];document.getElementById('rpt-rooms').innerHTML=rr.length?rr.map(x=>`<div class="flex justify-between py-1 text-sm"><span>${x.code} ${x.name}</span><span class="badge badge-${x.status}">${x.status}</span></div>`).join(''):'<p class="text-gray-400">—</p>';
 }
 

@@ -1171,12 +1171,36 @@ async function loadAppointments(){
   }catch(e){toast(e.message,'error');}
 }
 function openNewAppointment(){openModal('New Appointment',`<div class="space-y-3">
-  <input id="na-pid" class="input" placeholder="Patient ID *">
+  <div class="relative">
+    <input id="na-search" class="input" placeholder="Patient Name *" autocomplete="off" oninput="searchApptPatient(this.value)">
+    <input type="hidden" id="na-pid">
+    <div id="na-patient-dropdown" class="absolute z-50 w-full bg-white border rounded shadow-lg mt-1 hidden max-h-40 overflow-y-auto"></div>
+  </div>
   <input id="na-date" type="date" class="input" value="${document.getElementById('appt-date').value}">
   <input id="na-time" type="time" class="input">
   <select id="na-type" class="input"><option value="regular">Regular</option><option value="walk_in">Walk-In</option><option value="follow_up">Follow-Up</option><option value="eval">Eval</option></select>
   <button onclick="createAppt()" class="btn btn-primary w-full">+ Create</button></div>`);}
-async function createAppt(){const pid=document.getElementById('na-pid').value.trim();if(!pid)return toast('Patient ID required','error');try{await POST('/appointments',{patient_id:pid,appointment_date:document.getElementById('na-date').value,appointment_time:document.getElementById('na-time').value||null,appointment_type:document.getElementById('na-type').value});toast('Appointment created');closeModal();loadAppointments();}catch(e){toast(e.message,'error');}}
+let _naSearchTimer=null;
+function searchApptPatient(q){
+  clearTimeout(_naSearchTimer);
+  const dd=document.getElementById('na-patient-dropdown');
+  if(!q||q.length<1){dd.classList.add('hidden');return;}
+  _naSearchTimer=setTimeout(async()=>{
+    try{
+      const r=await GET('/patients?q='+encodeURIComponent(q));
+      const pts=r.patients||[];
+      if(!pts.length){dd.innerHTML='<div class="px-3 py-2 text-gray-400 text-sm">No patients found</div>';dd.classList.remove('hidden');return;}
+      dd.innerHTML=pts.slice(0,8).map(p=>`<div class="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm" onmousedown="event.preventDefault();selectApptPatient('${p.patient_id}','${(p.first_name||'')} ${(p.last_name||'')}')"><div class="font-medium">${p.first_name||''} ${p.last_name||''}</div><div class="text-xs text-gray-400">${p.date_of_birth||'-'} · ${p.phone||'-'}</div></div>`).join('');
+      dd.classList.remove('hidden');
+    }catch(e){dd.classList.add('hidden');}
+  },250);
+}
+function selectApptPatient(id,name){
+  document.getElementById('na-search').value=name.trim();
+  document.getElementById('na-pid').value=id;
+  document.getElementById('na-patient-dropdown').classList.add('hidden');
+}
+async function createAppt(){const pid=document.getElementById('na-pid').value.trim()||document.getElementById('na-search').value.trim();if(!pid)return toast('Patient required','error');try{await POST('/appointments',{patient_id:pid,appointment_date:document.getElementById('na-date').value,appointment_time:document.getElementById('na-time').value||null,appointment_type:document.getElementById('na-type').value});toast('Appointment created');closeModal();loadAppointments();}catch(e){toast(e.message,'error');}}
 async function apptCheckin(aid,pid){try{let p=await GET('/patients/'+pid).catch(()=>null);if(!p){const sr=await GET('/patients?q='+encodeURIComponent(pid)).catch(()=>null);if(sr&&sr.patients&&sr.patients.length===1)p=sr.patients[0];}const nm=p?p.full_name:(pid||'Patient');const realPid=p?p.patient_id:pid;await POST('/portal/checkin',{patient_name:nm,patient_id:realPid,appointment_id:aid,actor_id:'frontdesk'});toast(nm+' checked in');loadAppointments();refreshOps();}catch(e){toast(e.message,'error');}}
 async function apptNoShow(id){try{await POST('/appointments/'+id+'/no-show');toast('No-show');loadAppointments();}catch(e){toast(e.message,'error');}}
 async function apptCancel(id){try{await POST('/appointments/'+id+'/cancel');toast('Cancelled');loadAppointments();}catch(e){toast(e.message,'error');}}

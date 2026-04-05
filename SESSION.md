@@ -7,117 +7,74 @@
 
 ## Last Updated
 
-**Date:** 2026-03-27  
-**Session goal:** PRD-005 Multiple Treatments Per Visit — Backend Complete
+**Date:** 2026-04-05  
+**Session goal:** Document recently implemented features; update README
 
 ---
 
 ## What Was Done This Session
 
-1. Created **PRD-005** — Complete requirements doc for multiple treatments per visit
-2. Implemented backend for multiple treatments:
-   - Added `VisitTreatment` table model (already existed in models)
-   - Added 3 new Pydantic schemas: `TreatmentAdd`, `TreatmentUpdate`, `TreatmentRecordsFilter`
-   - Implemented 5 service functions in `db_service.py`:
-     - `add_treatment()` — Add modality to visit
-     - `update_treatment()` — Edit duration/notes
-     - `delete_treatment()` — Remove treatment
-     - `list_visit_treatments()` — Get all treatments for visit
-     - `list_treatment_records()` — Query with filters (date/patient/staff/modality)
-   - Added 5 API routes in `db_routes.py`:
-     - POST `/visits/{id}/treatments/add`
-     - GET `/visits/{id}/treatments`
-     - PATCH `/visits/{id}/treatments/{tid}/update`
-     - DELETE `/visits/{id}/treatments/{tid}/delete`
-     - GET `/treatment-records?date_from=X&staff_id=Y`
-   - Added event logging: `TREATMENT_ADDED`, `TREATMENT_UPDATED`, `TREATMENT_DELETED`
-3. Wrote comprehensive test suite (`test_treatments.py`, 421 lines):
-   - `test_prd005_multiple_treatments_workflow` — Full E2E with 3 treatments
-   - `test_cannot_add_treatment_to_checked_out_visit` — Edge case
-   - `test_treatment_without_therapist_defaults_to_actor` — Default behavior
-   - `test_treatment_records_date_filter` — Filter validation
-4. Updated `tasks/features.json` — Added 5 new PRD-005 tasks (1 backend complete, 4 frontend pending)
-5. Created `TEST-REPORT-PRD005.md` — Comprehensive test report (all tests passing)
+1. Updated **README.md** — replaced stale content with accurate tech stack and a "Recently Implemented Features" section covering all 22 completed features.
 
-## What Was Completed
+---
 
-- ✅ PRD-005 Backend API — 100% complete (5 endpoints working)
-- ✅ Treatment event logging — All operations logged to event_log
-- ✅ Treatment test suite — 4/4 tests passing
-- ✅ Data enrichment — Treatments enriched with therapist_name, patient_name, room_name
-- ⚠️ UI not implemented yet (next step)
+## What Was Completed (cumulative as of 2026-04-03)
+
+### Auth + Multi-Tenancy (2026-04-03) — most recent batch
+- ✅ AUTH-00: Clinic owner self-registration (`POST /auth/register`)
+- ✅ AUTH-01: JWT authentication (`POST /auth/login` → signed JWT)
+- ✅ AUTH-02: Role model (admin · frontdesk · doctor)
+- ✅ MT-01: `clinics` table + `clinic_id` FK on all tenant-scoped tables
+- ✅ MT-02: Tenant-isolation FastAPI middleware
+- ✅ NEXT-P1-01: Admin-managed service types API
+- ✅ NEXT-P1-02: Staff qualification by service type
+
+### Multiple Treatments (2026-03-26 – 2026-03-27)
+- ✅ PRD005-BE-01: Backend — `visit_treatments` table + 5 endpoints + event logging
+- ✅ PRD005-P1-01 – P4-01: Frontend phases (treatment UI, records tab, selective PDF, checkout summary)
+
+### Core Ops (2026-03-26 — foundation)
+- ✅ ROADMAP-P1-01 – P1-06: Patient CRUD, Ops Board, Visit lifecycle, PDF archive, Daily report, Supabase backend
 
 ## Current State
 
-- **Backend:** All treatment APIs working, tested, passing
-- **Tests:** 19 total (15 passing, 4 pre-existing failures unrelated to treatments)
-- **PRD-005 Status:**
-  - Backend: DONE ✅
-  - Frontend: NOT STARTED
-  - PDF enhancements: NOT STARTED
-- **Database:** `visit_treatments` table model exists, will be created on next `alembic migrate` (SQLite auto-creates on first use)
+- **Backend:** Auth endpoints, multi-tenant middleware, treatment APIs all implemented
+- **Frontend:** Ops board, treatment management, records tab — all in `frontend/index.html`
+- **Tests:** Backend pytest suite in `backend/tests/`; Playwright UI tests at repo root
+- **Production:** https://clinicos-psi.vercel.app
 
-## Critical Issues Found (must fix before production)
+## Critical Issues Found (must fix before production-wide launch)
 
-**Pre-existing issues (not changed this session):**
-
-1. **No auth** — `backend/app/auth/` empty, all endpoints unprotected (HIPAA violation)
-2. **Room not released on checkout** — `patient_checkout()` in `db_service.py` doesn't free the room if `service_end` was skipped
-3. **EventLog deleted in test reset** — `reset_demo_data()` runs `DELETE FROM event_log`, violating ADR-001 append-only
-4. **3x hard deletes** — `delete_room/delete_staff/delete_visit` physically delete projection rows instead of soft-delete
-5. **PDF shows staff UUID** — `_visit_to_dict()` omits `staff_name`, PDF sign sheet shows UUID
-
-**New issue found this session:**
-6. **Hardcoded actor_id in treatment routes** — Some routes use `actor_id="admin"` instead of JWT-authenticated user
+1. **RBAC not enforced on all routes** — auth middleware exists but older routes still unauthenticated
+2. **Frontend has no login flow** — JWT exists but `frontend/index.html` doesn't prompt for credentials
+3. **Room not released on checkout** — `patient_checkout()` doesn't free room if `service_end` was skipped
+4. **EventLog deleted in test reset** — `reset_demo_data()` runs `DELETE FROM event_log`, violating ADR-001 append-only
+5. **Hard deletes on room/staff/visit** — should be soft deletes
 
 ## Recommended Next Steps (in order)
 
-1. **Implement PRD-005 Frontend** (4 tasks in features.json):
-   - Add treatment management to active visits (+ button, list, edit/delete)
-   - Checkout modal with treatment summary
-   - Treatment records page with filters
-   - Selective PDF generation (checkboxes)
-
-2. **Fix critical bugs** (can do in one session):
-   - Fix `reset_demo_data` to skip EventLog
-   - Fix `patient_checkout` to release room
-   - Fix hard deletes → soft deletes in `delete_room/staff/visit`
-   - Replace hardcoded actor_id with JWT context
-
-3. **Then start M1-BE-03** (Auth + RBAC) — nothing else matters without this
-
-4. **After auth works**, proceed with M1-BE-01/02 to complete event_log schema
+1. **Add login screen to frontend** — use the JWT auth endpoints already built
+2. **Enforce RBAC on all existing routes** — wrap older routes with the tenant middleware
+3. **Fix room-not-released bug** at checkout
+4. **Fix EventLog in test reset** — skip `event_log` in `reset_demo_data()`
 
 ## How to Start Next Session
 
 ```bash
-./init.sh          # start server + run smoke tests
-cd backend && python -m pytest tests/test_treatments.py -v  # verify treatments working
-# Then implement PRD-005 frontend (see docs/PRD/005-multiple-treatments-per-visit.md)
+./init.sh          # start server + smoke tests
+cd backend && python -m pytest tests/ -x -q  # verify all tests pass
 ```
 
-**Next Priority:** Frontend for PRD-005 (4 UI tasks)  
-**Backend Status:** Treatment APIs complete and tested ✅
+**Next Priority:** Login UI + RBAC enforcement on all routes  
+**Backend Status:** Auth + multi-tenancy + treatments APIs complete ✅
 
 ---
 
 ## Session Notes
 
-_Context for next session:_
+_Previous session (2026-03-27):_
 
-- **New files created:**
-  - `docs/PRD/005-multiple-treatments-per-visit.md` — Complete PRD
-  - `backend/tests/test_treatments.py` — 4 comprehensive tests (421 lines)
-  - `TEST-REPORT-PRD005.md` — Test report with all results
-
-- **Modified files:**
-  - `backend/app/schemas/prototype.py` — Added TreatmentAdd, TreatmentUpdate, TreatmentRecordsFilter
-  - `backend/app/services/db_service.py` — Added 5 treatment functions + _treatment_to_dict helper
-  - `backend/app/routers/db_routes.py` — Added 5 treatment routes
-  - `tasks/features.json` — Added 5 PRD-005 tasks (PRD005-BE-01 passes: true)
-
-- **Database note:** `visit_treatments` table model exists in `models/tables.py` but table not yet created in DB. SQLite will auto-create on first use. Supabase production needs manual migration.
-
-- **Test coverage:** All 4 new treatment tests pass. Backend fully functional. UI completely missing.
-
-- **Known limitation:** Cannot generate PDF at checkout yet (checkbox exists in PRD spec but not implemented). Cannot select visits for PDF (requires UI checkboxes).
+- Created `docs/PRD/005-multiple-treatments-per-visit.md`
+- Added `backend/tests/test_treatments.py` (421 lines)
+- Modified `backend/app/schemas/prototype.py`, `db_service.py`, `db_routes.py`
+- Updated `tasks/features.json` with PRD-005 tasks

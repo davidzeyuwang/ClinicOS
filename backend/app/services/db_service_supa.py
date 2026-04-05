@@ -21,9 +21,9 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-async def _append_event(event_type: str, actor_id: str, payload: dict) -> None:
+async def _append_event(event_type: str, actor_id: str, payload: dict, clinic_id: str = None) -> None:
     supa = get_supabase()
-    await supa.insert("event_log", {
+    event_data = {
         "event_id": _new_id(),
         "event_type": event_type,
         "occurred_at": _utc_now(),
@@ -31,7 +31,10 @@ async def _append_event(event_type: str, actor_id: str, payload: dict) -> None:
         "idempotency_key": _new_id(),
         "schema_version": 1,
         "payload": _serialize(payload),
-    })
+    }
+    if clinic_id:
+        event_data["clinic_id"] = clinic_id
+    await supa.insert("event_log", event_data)
 
 
 def _serialize(payload: dict) -> dict:
@@ -56,7 +59,7 @@ def _with_full_name(patient: dict) -> dict:
 
 # ==================== ROOMS ====================
 
-async def create_room(db, actor_id: str, data: dict, **_) -> dict:
+async def create_room(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     room = {
         "room_id": _new_id(),
@@ -69,57 +72,73 @@ async def create_room(db, actor_id: str, data: dict, **_) -> dict:
         "status": "available",
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        room["clinic_id"] = clinic_id
     result = await supa.insert("rooms", room)
-    await _append_event("ROOM_CREATED", actor_id, result)
+    await _append_event("ROOM_CREATED", actor_id, result, clinic_id=clinic_id)
     return result
 
 
-async def update_room(db, room_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_room(db, room_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("rooms", "room_id", room_id, updates)
     if not result:
         return None
-    await _append_event("ROOM_UPDATED", actor_id, {"room_id": room_id, "updates": updates})
+    await _append_event("ROOM_UPDATED", actor_id, {"room_id": room_id, "updates": updates}, clinic_id=clinic_id)
     return result
 
 
-async def delete_room(db, room_id: str, actor_id: str, **_) -> Optional[dict]:
+async def delete_room(db, room_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
-    rows = await supa.select("rooms", {"room_id": room_id})
+    filters = {"room_id": room_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("rooms", filters)
     if not rows:
         return None
     room = rows[0]
     # Check if room has active visits
-    visits = await supa.select("visits", {"room_id": room_id})
+    visit_filters = {"room_id": room_id}
+    if clinic_id:
+        visit_filters["clinic_id"] = clinic_id
+    visits = await supa.select("visits", visit_filters)
     active = [v for v in visits if v.get("status") in ("checked_in", "in_service")]
     if active:
         raise ValueError(f"Room {room_id} has active visits")
     await supa.delete("rooms", "room_id", room_id)
-    await _append_event("ROOM_DELETED", actor_id, {"room_id": room_id})
+    await _append_event("ROOM_DELETED", actor_id, {"room_id": room_id}, clinic_id=clinic_id)
     return room
 
 
-async def change_room_status(db, room_id: str, actor_id: str, status: str, **_) -> Optional[dict]:
+async def change_room_status(db, room_id: str, actor_id: str, status: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     result = await supa.update("rooms", "room_id", room_id, {"status": status, "updated_at": _utc_now()})
     if not result:
         return None
-    await _append_event("ROOM_STATUS_CHANGED", actor_id, {"room_id": room_id, "status": status})
+    await _append_event("ROOM_STATUS_CHANGED", actor_id, {"room_id": room_id, "status": status}, clinic_id=clinic_id)
     return result
 
 
-async def get_room_board(db, **_) -> list:
+async def get_room_board(db, clinic_id: str = None, **_) -> list:
     """Room board projection - parallel fetch: rooms + active visits concurrently."""
     supa = get_supabase()
 
+    room_filters = {}
+    if clinic_id:
+        room_filters["clinic_id"] = clinic_id
+    
     # Fetch rooms and active visits concurrently to minimize latency
     all_rooms, active_visits = await asyncio.gather(
-        supa.select("rooms", {}),
+        supa.select("rooms", room_filters),
         supa.select("visits", status_in=["in_service"], limit=500),
     )
     rooms = [r for r in all_rooms if r.get("active") is True]
-    active_visits = [v for v in active_visits if v.get("room_id")]
+    # Filter visits by clinic_id if specified
+    if clinic_id:
+        active_visits = [v for v in active_visits if v.get("clinic_id") == clinic_id and v.get("room_id")]
+    else:
+        active_visits = [v for v in active_visits if v.get("room_id")]
 
     # Build room -> visit mapping
     visits_by_room = {v["room_id"]: v for v in active_visits}
@@ -146,7 +165,7 @@ async def get_room_board(db, **_) -> list:
 
 # ==================== STAFF ====================
 
-async def create_staff(db, actor_id: str, data: dict, **_) -> dict:
+async def create_staff(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     staff = {
         "staff_id": _new_id(),
@@ -156,39 +175,52 @@ async def create_staff(db, actor_id: str, data: dict, **_) -> dict:
         "active": data.get("active", True),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        staff["clinic_id"] = clinic_id
     result = await supa.insert("staff", staff)
-    await _append_event("STAFF_CREATED", actor_id, result)
+    await _append_event("STAFF_CREATED", actor_id, result, clinic_id=clinic_id)
     return result
 
 
-async def update_staff(db, staff_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_staff(db, staff_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("staff", "staff_id", staff_id, updates)
     if not result:
         return None
-    await _append_event("STAFF_UPDATED", actor_id, {"staff_id": staff_id})
+    await _append_event("STAFF_UPDATED", actor_id, {"staff_id": staff_id}, clinic_id=clinic_id)
     return result
 
 
-async def delete_staff(db, staff_id: str, actor_id: str, **_) -> Optional[dict]:
+async def delete_staff(db, staff_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
-    rows = await supa.select("staff", {"staff_id": staff_id})
+    filters = {"staff_id": staff_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("staff", filters)
     if not rows:
         return None
     await supa.delete("staff", "staff_id", staff_id)
-    await _append_event("STAFF_DELETED", actor_id, {"staff_id": staff_id})
+    await _append_event("STAFF_DELETED", actor_id, {"staff_id": staff_id}, clinic_id=clinic_id)
     return rows[0]
 
 
-async def get_staff_hours(db, **_) -> list:
+async def get_staff_hours(db, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     today = datetime.now(timezone.utc).date().isoformat()
     now = datetime.now(timezone.utc)
 
+    staff_filters = {"active": True}
+    if clinic_id:
+        staff_filters["clinic_id"] = clinic_id
+    
+    visit_filters = {}
+    if clinic_id:
+        visit_filters["clinic_id"] = clinic_id
+
     all_staff, all_visits, all_links, all_types = await asyncio.gather(
-        supa.select("staff", {"active": True}),
-        supa.select("visits", {}),
+        supa.select("staff", staff_filters),
+        supa.select("visits", visit_filters),
         supa.select("staff_service_types", {}),
         supa.select("service_types", {}),
     )
@@ -272,15 +304,17 @@ async def ensure_default_service_types(db) -> None:
         })
 
 
-async def list_service_types(db, include_inactive: bool = False) -> list:
+async def list_service_types(db, include_inactive: bool = False, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     filters = {} if include_inactive else {"is_active": True}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
     rows = await supa.select("service_types", filters)
     rows.sort(key=lambda r: r.get("name") or "")
     return rows
 
 
-async def create_service_type(db, actor_id: str, name: str) -> dict:
+async def create_service_type(db, actor_id: str, name: str, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     row = {
         "service_type_id": _new_id(),
@@ -288,18 +322,23 @@ async def create_service_type(db, actor_id: str, name: str) -> dict:
         "is_active": True,
         "created_at": _utc_now(),
     }
+    if clinic_id:
+        row["clinic_id"] = clinic_id
     result = await supa.insert("service_types", row)
-    await _append_event("SERVICE_TYPE_CREATED", actor_id, {"service_type_id": result["service_type_id"], "name": name})
+    await _append_event("SERVICE_TYPE_CREATED", actor_id, {"service_type_id": result["service_type_id"], "name": name}, clinic_id=clinic_id)
     return result
 
 
-async def update_service_type(db, service_type_id: str, actor_id: str, updates: dict) -> Optional[dict]:
+async def update_service_type(db, service_type_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
-    rows = await supa.select("service_types", {"service_type_id": service_type_id})
+    filters = {"service_type_id": service_type_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("service_types", filters)
     if not rows:
         return None
     result = await supa.update("service_types", "service_type_id", service_type_id, updates)
-    await _append_event("SERVICE_TYPE_UPDATED", actor_id, {"service_type_id": service_type_id, "updates": updates})
+    await _append_event("SERVICE_TYPE_UPDATED", actor_id, {"service_type_id": service_type_id, "updates": updates}, clinic_id=clinic_id)
     return result
 
 
@@ -314,21 +353,24 @@ async def get_staff_service_types(db, staff_id: str) -> list:
     return [t for t in all_types if t["service_type_id"] in ids]
 
 
-async def set_staff_service_types(db, staff_id: str, service_type_ids: list, actor_id: str, **_) -> dict:
+async def set_staff_service_types(db, staff_id: str, service_type_ids: list, actor_id: str, clinic_id: str = None, **_) -> dict:
     """Replace all service type qualifications for a staff member (delete + insert)."""
     supa = get_supabase()
     # Delete all existing links for this staff member in one call
     # SupabaseClient.delete(table, pk_col, pk_val) → DELETE /table?pk_col=eq.pk_val
     await supa.delete("staff_service_types", "staff_id", staff_id)
     for sid in service_type_ids:
-        await supa.insert("staff_service_types", {
+        link_data = {
             "staff_id": staff_id,
             "service_type_id": sid,
-        })
+        }
+        if clinic_id:
+            link_data["clinic_id"] = clinic_id
+        await supa.insert("staff_service_types", link_data)
     await _append_event("STAFF_SERVICE_TYPES_UPDATED", actor_id, {
         "staff_id": staff_id,
         "service_type_ids": service_type_ids,
-    })
+    }, clinic_id=clinic_id)
     return {"staff_id": staff_id, "service_type_ids": service_type_ids}
 
 
@@ -346,7 +388,8 @@ async def get_service_type_staff(db, service_type_id: str) -> list:
 
 
 async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Optional[str] = None,
-                          patient_id: Optional[str] = None, appointment_id: Optional[str] = None, **_) -> dict:
+                          patient_id: Optional[str] = None, appointment_id: Optional[str] = None, 
+                          clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     now = _utc_now()
     visit = {
@@ -360,6 +403,8 @@ async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Opt
         "note_status": "pending",
         "payment_status": "pending",
     }
+    if clinic_id:
+        visit["clinic_id"] = clinic_id
     result = await supa.insert("visits", visit)
 
     # Update appointment status if linked
@@ -369,13 +414,13 @@ async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Opt
         except Exception:
             pass  # appointment may not exist for walk-ins
 
-    await _append_event("PATIENT_CHECKIN", actor_id, result)
+    await _append_event("PATIENT_CHECKIN", actor_id, result, clinic_id=clinic_id)
     return result
 
 
 async def service_start(db, visit_id: str, actor_id: str, staff_id: Optional[str] = None,
                         room_id: Optional[str] = None, service_type: Optional[str] = None,
-                        supervising_staff_id: Optional[str] = None, **_) -> Optional[dict]:
+                        supervising_staff_id: Optional[str] = None, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -394,11 +439,11 @@ async def service_start(db, visit_id: str, actor_id: str, staff_id: Optional[str
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if room_id:
         await supa.update("rooms", "room_id", room_id, {"status": "occupied", "updated_at": _utc_now()})
-    await _append_event("SERVICE_STARTED", actor_id, {"visit_id": visit_id, **updates})
+    await _append_event("SERVICE_STARTED", actor_id, {"visit_id": visit_id, **updates}, clinic_id=clinic_id)
     return result
 
 
-async def service_end(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
+async def service_end(db, visit_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -410,11 +455,11 @@ async def service_end(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     result = await supa.update("visits", "visit_id", visit_id, updates)
     if visit.get("room_id"):
         await supa.update("rooms", "room_id", visit["room_id"], {"status": "available", "updated_at": _utc_now()})
-    await _append_event("SERVICE_COMPLETED", actor_id, {"visit_id": visit_id})
+    await _append_event("SERVICE_COMPLETED", actor_id, {"visit_id": visit_id}, clinic_id=clinic_id)
     return result
 
 
-async def service_resume(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
+async def service_resume(db, visit_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -449,7 +494,7 @@ async def service_resume(db, visit_id: str, actor_id: str, **_) -> Optional[dict
         "service_type": visit.get("service_type"),
         "service_start_time": visit.get("service_start_time"),
         "resumed_at": now,
-    })
+    }, clinic_id=clinic_id)
     return result
 
 
@@ -478,7 +523,7 @@ def _payment_updates(
 async def save_visit_payment(db, visit_id: str, actor_id: str, payment_status: Optional[str] = None,
                              payment_amount: Optional[float] = None, payment_method: Optional[str] = None,
                              copay_collected: Optional[float] = None, wd_verified: bool = False,
-                             patient_signed: bool = False, **_) -> Optional[dict]:
+                             patient_signed: bool = False, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -498,14 +543,14 @@ async def save_visit_payment(db, visit_id: str, actor_id: str, payment_status: O
                 if k in ("payment_status", "payment_amount", "payment_method",
                          "copay_collected", "wd_verified", "patient_signed")}
         result = await supa.update("visits", "visit_id", visit_id, core)
-    await _append_event("PAYMENT_INFO_SAVED", actor_id, {"visit_id": visit_id, **updates})
+    await _append_event("PAYMENT_INFO_SAVED", actor_id, {"visit_id": visit_id, **updates}, clinic_id=clinic_id)
     return result
 
 
 async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Optional[str] = None,
                            payment_amount: Optional[float] = None, payment_method: Optional[str] = None,
                            copay_collected: Optional[float] = None, wd_verified: bool = False,
-                           patient_signed: bool = False, **_) -> Optional[dict]:
+                           patient_signed: bool = False, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -531,11 +576,11 @@ async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Opt
                 if k in ("status", "check_out_time", "payment_status", "payment_amount",
                          "payment_method", "copay_collected", "wd_verified", "patient_signed")}
         result = await supa.update("visits", "visit_id", visit_id, core)
-    await _append_event("PATIENT_CHECKOUT", actor_id, {"visit_id": visit_id})
+    await _append_event("PATIENT_CHECKOUT", actor_id, {"visit_id": visit_id}, clinic_id=clinic_id)
     return result
 
 
-async def delete_visit(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
+async def delete_visit(db, visit_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     rows = await supa.select("visits", {"visit_id": visit_id})
     if not rows:
@@ -544,18 +589,21 @@ async def delete_visit(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     if visit["status"] in ("checked_in", "in_service"):
         raise ValueError("Cannot delete active visit")
     await supa.delete("visits", "visit_id", visit_id)
-    await _append_event("VISIT_DELETED", actor_id, {"visit_id": visit_id})
+    await _append_event("VISIT_DELETED", actor_id, {"visit_id": visit_id}, clinic_id=clinic_id)
     return visit
 
 
-async def get_active_visits(db, **_) -> list:
+async def get_active_visits(db, clinic_id: str = None, **_) -> list:
     """Fetch only active visits using server-side filtering."""
     supa = get_supabase()
-    return await supa.select(
+    visits = await supa.select(
         "visits",
         status_in=["checked_in", "in_service", "service_completed"],
         limit=500
     )
+    if clinic_id:
+        visits = [v for v in visits if v.get("clinic_id") == clinic_id]
+    return visits
 
 
 async def get_visit(db, visit_id: str, **_) -> Optional[dict]:
@@ -564,26 +612,35 @@ async def get_visit(db, visit_id: str, **_) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-async def get_patient_visits(db, patient_id: str, **_) -> list:
+async def get_patient_visits(db, patient_id: str, clinic_id: str = None, **_) -> list:
     """All visits for a patient, newest first. Includes treatments for PDF generation."""
     supa = get_supabase()
-    rows = await supa.select("visits", {"patient_id": patient_id})
+    filters = {"patient_id": patient_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("visits", filters)
     sorted_visits = sorted(rows, key=lambda v: v.get("check_in_time") or "", reverse=True)
     
     # Enrich each visit with treatments
     for visit in sorted_visits:
-        treatments = await supa.select("visit_treatments", {"visit_id": visit["visit_id"]})
+        treatment_filters = {"visit_id": visit["visit_id"]}
+        if clinic_id:
+            treatment_filters["clinic_id"] = clinic_id
+        treatments = await supa.select("visit_treatments", treatment_filters)
         visit["treatments"] = treatments or []
     
     return sorted_visits
 
 
-async def get_daily_summary(db, date: Optional[str] = None, **_) -> dict:
+async def get_daily_summary(db, date: Optional[str] = None, clinic_id: str = None, **_) -> dict:
     """Summary of all visits for a given date with copay totals."""
     from datetime import datetime, timezone
     target_date = date or datetime.now(timezone.utc).date().isoformat()
     supa = get_supabase()
-    all_visits = await supa.select("visits", {})
+    visit_filters = {}
+    if clinic_id:
+        visit_filters["clinic_id"] = clinic_id
+    all_visits = await supa.select("visits", visit_filters)
     today_visits = [
         v for v in all_visits
         if (v.get("check_in_time") or "")[:10] == target_date
@@ -637,14 +694,19 @@ async def create_patient(db, actor_id: str, data: dict, force: bool = False, cli
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        patient["clinic_id"] = clinic_id
     result = await supa.insert("patients", patient)
-    await _append_event("PATIENT_CREATED", actor_id, {"patient_id": result["patient_id"]})
+    await _append_event("PATIENT_CREATED", actor_id, {"patient_id": result["patient_id"]}, clinic_id=clinic_id)
     return _with_full_name(result)
 
 
 async def list_patients(db, clinic_id: str = None) -> list:
     supa = get_supabase()
-    all_patients = await supa.select("patients", limit=5000)
+    filters = {}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    all_patients = await supa.select("patients", filters, limit=5000)
     rows = [p for p in all_patients if p.get("active") is True]
     return [_with_full_name(p) for p in rows]
 
@@ -660,6 +722,8 @@ async def search_patients(db, query: str, clinic_id: str = None) -> list:
         "active": "eq.true",
         "or": f"(first_name.ilike.*{query}*,last_name.ilike.*{query}*,phone.ilike.*{query}*,mrn.ilike.*{query}*)",
     }
+    if clinic_id:
+        params["clinic_id"] = f"eq.{clinic_id}"
     r = await client.get(url, params=params)
     r.raise_for_status()
     return [_with_full_name(p) for p in r.json()]
@@ -667,7 +731,10 @@ async def search_patients(db, query: str, clinic_id: str = None) -> list:
 
 async def get_patient(db, patient_id: str, clinic_id: str = None) -> Optional[dict]:
     supa = get_supabase()
-    rows = await supa.select("patients", {"patient_id": patient_id})
+    filters = {"patient_id": patient_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("patients", filters)
     return _with_full_name(rows[0]) if rows else None
 
 
@@ -677,23 +744,26 @@ async def update_patient(db, patient_id: str, actor_id: str, updates: dict, clin
     result = await supa.update("patients", "patient_id", patient_id, updates)
     if not result:
         return None
-    await _append_event("PATIENT_UPDATED", actor_id, {"patient_id": patient_id})
+    await _append_event("PATIENT_UPDATED", actor_id, {"patient_id": patient_id}, clinic_id=clinic_id)
     return _with_full_name(result)
 
 
 async def delete_patient(db, patient_id: str, actor_id: str, clinic_id: str = None) -> Optional[dict]:
     supa = get_supabase()
-    rows = await supa.select("patients", {"patient_id": patient_id})
+    filters = {"patient_id": patient_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("patients", filters)
     if not rows:
         return None
     await supa.update("patients", "patient_id", patient_id, {"active": False, "updated_at": _utc_now()})
-    await _append_event("PATIENT_DELETED", actor_id, {"patient_id": patient_id})
+    await _append_event("PATIENT_DELETED", actor_id, {"patient_id": patient_id}, clinic_id=clinic_id)
     return _with_full_name(rows[0])
 
 
 # ==================== APPOINTMENTS ====================
 
-async def create_appointment(db, actor_id: str, data: dict, **_) -> dict:
+async def create_appointment(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     appt = {
         "appointment_id": _new_id(),
@@ -707,13 +777,15 @@ async def create_appointment(db, actor_id: str, data: dict, **_) -> dict:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        appt["clinic_id"] = clinic_id
     result = await supa.insert("appointments", appt)
-    await _append_event("APPOINTMENT_CREATED", actor_id, {"appointment_id": result["appointment_id"]})
+    await _append_event("APPOINTMENT_CREATED", actor_id, {"appointment_id": result["appointment_id"]}, clinic_id=clinic_id)
     return result
 
 
 async def list_appointments(db, date: Optional[str] = None, patient_id: Optional[str] = None,
-                            provider_id: Optional[str] = None, **_) -> list:
+                            provider_id: Optional[str] = None, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     filters = {}
     if date:
@@ -722,6 +794,8 @@ async def list_appointments(db, date: Optional[str] = None, patient_id: Optional
         filters["patient_id"] = patient_id
     if provider_id:
         filters["provider_id"] = provider_id
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
     appts = await supa.select("appointments", filters)
 
     # Enrich with patient and provider names
@@ -735,27 +809,27 @@ async def list_appointments(db, date: Optional[str] = None, patient_id: Optional
     return appts
 
 
-async def update_appointment(db, appointment_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_appointment(db, appointment_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("appointments", "appointment_id", appointment_id, updates)
     if not result:
         return None
-    await _append_event("APPOINTMENT_UPDATED", actor_id, {"appointment_id": appointment_id})
+    await _append_event("APPOINTMENT_UPDATED", actor_id, {"appointment_id": appointment_id}, clinic_id=clinic_id)
     return result
 
 
-async def cancel_appointment(db, appointment_id: str, actor_id: str, reason: Optional[str] = None, **_) -> Optional[dict]:
-    return await update_appointment(db, appointment_id, actor_id, {"status": "cancelled", "cancellation_reason": reason})
+async def cancel_appointment(db, appointment_id: str, actor_id: str, reason: Optional[str] = None, clinic_id: str = None, **_) -> Optional[dict]:
+    return await update_appointment(db, appointment_id, actor_id, {"status": "cancelled", "cancellation_reason": reason}, clinic_id=clinic_id)
 
 
-async def mark_no_show(db, appointment_id: str, actor_id: str, **_) -> Optional[dict]:
-    return await update_appointment(db, appointment_id, actor_id, {"status": "no_show"})
+async def mark_no_show(db, appointment_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
+    return await update_appointment(db, appointment_id, actor_id, {"status": "no_show"}, clinic_id=clinic_id)
 
 
 # ==================== CLINICAL NOTES ====================
 
-async def create_note(db, actor_id: str, data: dict, **_) -> dict:
+async def create_note(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     note = {
         "note_id": _new_id(),
@@ -769,38 +843,42 @@ async def create_note(db, actor_id: str, data: dict, **_) -> dict:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        note["clinic_id"] = clinic_id
     result = await supa.insert("clinical_notes", note)
-    await _append_event("NOTE_CREATED", actor_id, {"note_id": result["note_id"]})
+    await _append_event("NOTE_CREATED", actor_id, {"note_id": result["note_id"]}, clinic_id=clinic_id)
     return result
 
 
-async def list_notes(db, visit_id: Optional[str] = None, patient_id: Optional[str] = None, **_) -> list:
+async def list_notes(db, visit_id: Optional[str] = None, patient_id: Optional[str] = None, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     filters = {}
     if visit_id:
         filters["visit_id"] = visit_id
     if patient_id:
         filters["patient_id"] = patient_id
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
     return await supa.select("clinical_notes", filters)
 
 
-async def update_note(db, note_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_note(db, note_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("clinical_notes", "note_id", note_id, updates)
     if not result:
         return None
-    await _append_event("NOTE_UPDATED", actor_id, {"note_id": note_id})
+    await _append_event("NOTE_UPDATED", actor_id, {"note_id": note_id}, clinic_id=clinic_id)
     return result
 
 
-async def sign_note(db, note_id: str, actor_id: str, **_) -> Optional[dict]:
-    return await update_note(db, note_id, actor_id, {"status": "signed", "signed_at": _utc_now(), "signed_by": actor_id})
+async def sign_note(db, note_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
+    return await update_note(db, note_id, actor_id, {"status": "signed", "signed_at": _utc_now(), "signed_by": actor_id}, clinic_id=clinic_id)
 
 
 # ==================== INSURANCE ====================
 
-async def create_insurance_policy(db, actor_id: str, data: dict, **_) -> dict:
+async def create_insurance_policy(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     policy = {
         "policy_id": _new_id(),
@@ -819,30 +897,35 @@ async def create_insurance_policy(db, actor_id: str, data: dict, **_) -> dict:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        policy["clinic_id"] = clinic_id
     result = await supa.insert("insurance_policies", policy)
-    await _append_event("INSURANCE_CREATED", actor_id, {"policy_id": result["policy_id"]})
+    await _append_event("INSURANCE_CREATED", actor_id, {"policy_id": result["policy_id"]}, clinic_id=clinic_id)
     return result
 
 
-async def list_insurance_policies(db, patient_id: str, **_) -> list:
+async def list_insurance_policies(db, patient_id: str, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
-    all_policies = await supa.select("insurance_policies", {"patient_id": patient_id}, limit=50)
+    filters = {"patient_id": patient_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    all_policies = await supa.select("insurance_policies", filters, limit=50)
     return [p for p in all_policies if p.get("active") is True]
 
 
-async def update_insurance_policy(db, policy_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_insurance_policy(db, policy_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("insurance_policies", "policy_id", policy_id, updates)
     if not result:
         return None
-    await _append_event("INSURANCE_UPDATED", actor_id, {"policy_id": policy_id})
+    await _append_event("INSURANCE_UPDATED", actor_id, {"policy_id": policy_id}, clinic_id=clinic_id)
     return result
 
 
 # ==================== DOCUMENTS ====================
 
-async def create_document(db, actor_id: str, data: dict, **_) -> dict:
+async def create_document(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     doc = {
         "document_id": _new_id(),
@@ -858,36 +941,40 @@ async def create_document(db, actor_id: str, data: dict, **_) -> dict:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        doc["clinic_id"] = clinic_id
     result = await supa.insert("documents", doc)
-    await _append_event("DOCUMENT_CREATED", actor_id, {"document_id": result["document_id"]})
+    await _append_event("DOCUMENT_CREATED", actor_id, {"document_id": result["document_id"]}, clinic_id=clinic_id)
     return result
 
 
-async def list_documents(db, patient_id: str, document_type: Optional[str] = None, **_) -> list:
+async def list_documents(db, patient_id: str, document_type: Optional[str] = None, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     filters = {"patient_id": patient_id}
     if document_type:
         filters["document_type"] = document_type
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
     return await supa.select("documents", filters)
 
 
-async def update_document(db, document_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_document(db, document_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("documents", "document_id", document_id, updates)
     if not result:
         return None
-    await _append_event("DOCUMENT_UPDATED", actor_id, {"document_id": document_id})
+    await _append_event("DOCUMENT_UPDATED", actor_id, {"document_id": document_id}, clinic_id=clinic_id)
     return result
 
 
-async def sign_document(db, document_id: str, actor_id: str, **_) -> Optional[dict]:
-    return await update_document(db, document_id, actor_id, {"status": "signed", "signed_at": _utc_now(), "signed_by": actor_id})
+async def sign_document(db, document_id: str, actor_id: str, clinic_id: str = None, **_) -> Optional[dict]:
+    return await update_document(db, document_id, actor_id, {"status": "signed", "signed_at": _utc_now(), "signed_by": actor_id}, clinic_id=clinic_id)
 
 
 # ==================== TASKS ====================
 
-async def create_task(db, actor_id: str, data: dict, **_) -> dict:
+async def create_task(db, actor_id: str, data: dict, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     task = {
         "task_id": _new_id(),
@@ -904,13 +991,15 @@ async def create_task(db, actor_id: str, data: dict, **_) -> dict:
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        task["clinic_id"] = clinic_id
     result = await supa.insert("tasks", task)
-    await _append_event("TASK_CREATED", actor_id, {"task_id": result["task_id"]})
+    await _append_event("TASK_CREATED", actor_id, {"task_id": result["task_id"]}, clinic_id=clinic_id)
     return result
 
 
 async def list_tasks(db, patient_id: Optional[str] = None, assignee_id: Optional[str] = None,
-                     status: Optional[str] = None, task_type: Optional[str] = None, **_) -> list:
+                     status: Optional[str] = None, task_type: Optional[str] = None, clinic_id: str = None, **_) -> list:
     supa = get_supabase()
     filters = {}
     if patient_id:
@@ -921,28 +1010,33 @@ async def list_tasks(db, patient_id: Optional[str] = None, assignee_id: Optional
         filters["status"] = status
     if task_type:
         filters["task_type"] = task_type
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
     return await supa.select("tasks", filters)
 
 
-async def update_task(db, task_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
+async def update_task(db, task_id: str, actor_id: str, updates: dict, clinic_id: str = None, **_) -> Optional[dict]:
     supa = get_supabase()
     updates["updated_at"] = _utc_now()
     result = await supa.update("tasks", "task_id", task_id, updates)
     if not result:
         return None
-    await _append_event("TASK_UPDATED", actor_id, {"task_id": task_id})
+    await _append_event("TASK_UPDATED", actor_id, {"task_id": task_id}, clinic_id=clinic_id)
     return result
 
 
 # ==================== EVENTS ====================
 
-async def get_events(db, **_) -> dict:
+async def get_events(db, clinic_id: str = None, **_) -> dict:
     supa = get_supabase()
     # Return most-recent 500 events so tests always see latest activity
     client = supa._get_client()
+    params = {"select": "*", "order": "occurred_at.desc", "limit": 500}
+    if clinic_id:
+        params["clinic_id"] = f"eq.{clinic_id}"
     r = await client.get(
         f"{supa._url}/rest/v1/event_log",
-        params={"select": "*", "order": "occurred_at.desc", "limit": 500},
+        params=params,
     )
     r.raise_for_status()
     events = r.json()
@@ -951,7 +1045,7 @@ async def get_events(db, **_) -> dict:
 
 # ==================== REPORTS ====================
 
-async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = None, **_) -> dict:
+async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = None, clinic_id: str = None, **_) -> dict:
     from datetime import date as _date, datetime, timezone, timedelta
     supa = get_supabase()
     today = report_date or _date.today().isoformat()
@@ -971,15 +1065,28 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
         except Exception:
             return iso_str[:10] if len(iso_str) >= 10 else ""
 
-    visits = await supa.select("visits")
+    visit_filters = {}
+    if clinic_id:
+        visit_filters["clinic_id"] = clinic_id
+    visits = await supa.select("visits", visit_filters)
     today_visits = [v for v in visits if _local_date(v.get("check_in_time")) == today]
 
-    appts = await supa.select("appointments", {"appointment_date": today})
+    appt_filters = {"appointment_date": today}
+    if clinic_id:
+        appt_filters["clinic_id"] = clinic_id
+    appts = await supa.select("appointments", appt_filters)
 
     # Build staff_hours using treatment duration_minutes (session length set at check-in)
-    all_staff = await supa.select("staff", {})
+    staff_filters = {}
+    if clinic_id:
+        staff_filters["clinic_id"] = clinic_id
+    all_staff = await supa.select("staff", staff_filters)
     staff_map = {s["staff_id"]: s["name"] for s in all_staff}
-    all_treatments = await supa.select("visit_treatments", {}, limit=5000)
+    
+    treatment_filters = {}
+    if clinic_id:
+        treatment_filters["clinic_id"] = clinic_id
+    all_treatments = await supa.select("visit_treatments", treatment_filters, limit=5000)
     visit_ids = {v["visit_id"] for v in today_visits}
     today_tx = [t for t in all_treatments if t.get("visit_id") in visit_ids]
 
@@ -1007,7 +1114,10 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
     staff_hours = list(per_staff.values())
 
     # Build room_board_snapshot
-    all_rooms = await supa.select("rooms", {})
+    room_filters = {}
+    if clinic_id:
+        room_filters["clinic_id"] = clinic_id
+    all_rooms = await supa.select("rooms", room_filters)
     room_board = [{"room_id": r["room_id"], "name": r.get("name", ""), "code": r.get("code", ""), "status": r.get("status", "available")} for r in all_rooms]
 
     db_report = {
@@ -1020,22 +1130,27 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
         "open_sessions": len([v for v in today_visits if v.get("status") in ("checked_in", "in_service")]),
         "generated_at": _utc_now(),
     }
+    if clinic_id:
+        db_report["clinic_id"] = clinic_id
     try:
         await supa.insert("daily_reports", db_report)
     except Exception:
         pass
-    await _append_event("REPORT_GENERATED", actor_id, {"date": today})
+    await _append_event("REPORT_GENERATED", actor_id, {"date": today}, clinic_id=clinic_id)
     # Return enriched report with staff_hours and room_board_snapshot
     db_report["staff_hours"] = staff_hours
     db_report["room_board_snapshot"] = room_board
     return db_report
 
 
-async def get_daily_report(db, report_date: Optional[str] = None, **_) -> Optional[dict]:
+async def get_daily_report(db, report_date: Optional[str] = None, clinic_id: str = None, **_) -> Optional[dict]:
     from datetime import date as _date
     supa = get_supabase()
     today = report_date or _date.today().isoformat()
-    rows = await supa.select("daily_reports", {"report_date": today})
+    filters = {"report_date": today}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    rows = await supa.select("daily_reports", filters)
     return rows[-1] if rows else None
 
 
@@ -1049,6 +1164,7 @@ async def add_treatment(
     therapist_id: Optional[str] = None,
     duration_minutes: Optional[int] = 30,
     notes: Optional[str] = None,
+    clinic_id: str = None,
     **_,
 ) -> dict:
     """Add a treatment modality to a visit."""
@@ -1073,6 +1189,8 @@ async def add_treatment(
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
     }
+    if clinic_id:
+        treatment["clinic_id"] = clinic_id
     
     result = await supa.insert("visit_treatments", treatment)
     
@@ -1082,7 +1200,7 @@ async def add_treatment(
         "modality": modality,
         "therapist_id": therapist_id,
         "duration_minutes": duration_minutes,
-    })
+    }, clinic_id=clinic_id)
     
     return result
 
@@ -1092,7 +1210,9 @@ async def update_treatment(
     treatment_id: str,
     actor_id: str,
     duration_minutes: Optional[int] = None,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
+    clinic_id: str = None,
+    **_
 ) -> dict:
     """Update treatment duration and notes."""
     supa = get_supabase()
@@ -1116,12 +1236,12 @@ async def update_treatment(
     await _append_event("TREATMENT_UPDATED", actor_id, {
         "treatment_id": treatment_id,
         "updates": payload_updates,
-    })
+    }, clinic_id=clinic_id)
     
     return result
 
 
-async def delete_treatment(db, treatment_id: str, actor_id: str, **_) -> dict:
+async def delete_treatment(db, treatment_id: str, actor_id: str, clinic_id: str = None, **_) -> dict:
     """Soft delete a treatment."""
     supa = get_supabase()
     
@@ -1134,18 +1254,21 @@ async def delete_treatment(db, treatment_id: str, actor_id: str, **_) -> dict:
     await _append_event("TREATMENT_DELETED", actor_id, {
         "treatment_id": treatment_id,
         "visit_id": treatment.get("visit_id"),
-    })
+    }, clinic_id=clinic_id)
     
     await supa.delete("visit_treatments", {"treatment_id": treatment_id})
     
     return {"deleted": True, "treatment_id": treatment_id}
 
 
-async def list_visit_treatments(db, visit_id: str, **_) -> list:
+async def list_visit_treatments(db, visit_id: str, clinic_id: str = None, **_) -> list:
     """List all treatments for a visit."""
     supa = get_supabase()
     
-    treatments = await supa.select("visit_treatments", {"visit_id": visit_id})
+    filters = {"visit_id": visit_id}
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+    treatments = await supa.select("visit_treatments", filters)
     
     # Enrich with therapist names
     enriched = []
@@ -1166,13 +1289,17 @@ async def list_treatment_records(
     patient_id: Optional[str] = None,
     staff_id: Optional[str] = None,
     modality: Optional[str] = None,
+    clinic_id: str = None,
     **_,
 ) -> list:
     """Query treatment records with filters."""
     supa = get_supabase()
     
     # Get all treatments first
-    treatments = await supa.select("visit_treatments", {})
+    treatment_filters = {}
+    if clinic_id:
+        treatment_filters["clinic_id"] = clinic_id
+    treatments = await supa.select("visit_treatments", treatment_filters)
     
     # Filter and enrich
     enriched = []
@@ -1246,6 +1373,7 @@ async def list_visits_with_treatments(
     date_to: Optional[str] = None,
     patient_id: Optional[str] = None,
     staff_id: Optional[str] = None,
+    clinic_id: str = None,
     **_,
 ) -> list:
     """Return one record per visit with treatments organized by modality column (A/PT/CP/TN)."""
@@ -1254,11 +1382,21 @@ async def list_visits_with_treatments(
     filters: Dict[str, Any] = {}
     if patient_id:
         filters["patient_id"] = patient_id
+    if clinic_id:
+        filters["clinic_id"] = clinic_id
+
+    staff_filters = {}
+    if clinic_id:
+        staff_filters["clinic_id"] = clinic_id
+    
+    room_filters = {}
+    if clinic_id:
+        room_filters["clinic_id"] = clinic_id
 
     visits_raw, all_staff, all_rooms = await asyncio.gather(
         supa.select("visits", filters, limit=2000),
-        supa.select("staff", {}),
-        supa.select("rooms", {}),
+        supa.select("staff", staff_filters),
+        supa.select("rooms", room_filters),
     )
 
     staff_map = {s["staff_id"]: s["name"] for s in all_staff}
@@ -1284,7 +1422,10 @@ async def list_visits_with_treatments(
 
     visits_raw.sort(key=lambda v: v.get("check_in_time") or "", reverse=True)
 
-    all_treatments = await supa.select("visit_treatments", {}, limit=5000)
+    treatment_filters = {}
+    if clinic_id:
+        treatment_filters["clinic_id"] = clinic_id
+    all_treatments = await supa.select("visit_treatments", treatment_filters, limit=5000)
     tx_by_visit: Dict[str, list] = {}
     for t in all_treatments:
         vid = t.get("visit_id")

@@ -722,7 +722,6 @@ async function savePaymentOnly(vid){
     toast('Payment info saved','success');
   }catch(e){toast(e.message,'error');}
 }
-}
 async function doCheckout(vid,patientId,skipAll){
   const body={visit_id:vid,actor_id:'frontdesk'};
   if(!skipAll){

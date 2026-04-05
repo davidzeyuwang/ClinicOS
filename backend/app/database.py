@@ -10,18 +10,22 @@ _SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 _SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 _IS_SUPABASE = bool(_SUPABASE_URL and _SUPABASE_KEY)
 
+# ── SQLAlchemy base — always defined so app.models.tables can import it ───────
+# In Supabase mode the models are never used for queries, but the import must
+# succeed so auth_service.py and other modules can be loaded without errors.
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    pass
+
 # ── Local SQLite path (dev only) ──────────────────────────────────────────────
 if not _IS_SUPABASE:
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-    from sqlalchemy.orm import DeclarativeBase
 
     DATABASE_URL = "sqlite+aiosqlite:///./clinicos.db"
     engine = create_async_engine(DATABASE_URL, echo=False)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     AsyncSessionLocal = async_session  # Alias for consistency
-
-    class Base(DeclarativeBase):
-        pass
 
     async def get_db():
         async with async_session() as session:

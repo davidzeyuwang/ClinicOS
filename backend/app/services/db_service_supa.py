@@ -1099,7 +1099,8 @@ async def list_treatment_records(
     date_to: Optional[str] = None,
     patient_id: Optional[str] = None,
     staff_id: Optional[str] = None,
-    modality: Optional[str] = None
+    modality: Optional[str] = None,
+    **_,
 ) -> list:
     """Query treatment records with filters."""
     supa = get_supabase()
@@ -1179,6 +1180,7 @@ async def list_visits_with_treatments(
     date_to: Optional[str] = None,
     patient_id: Optional[str] = None,
     staff_id: Optional[str] = None,
+    **_,
 ) -> list:
     """Return one record per visit with treatments organized by modality column (A/PT/CP/TN)."""
     supa = get_supabase()
@@ -1263,10 +1265,10 @@ async def list_visits_with_treatments(
             "primary_therapist": staff_map.get(v.get("staff_id") or "", ""),
             "room_name": room_map.get(v.get("room_id") or "", ""),
             "service_type": v.get("service_type") or "",
-            "col_A": _col_display("A"),
-            "col_PT": _col_display("PT"),
-            "col_CP": _col_display("CP"),
-            "col_TN": _col_display("TN"),
+            "A": _col_display("A"),
+            "PT": _col_display("PT"),
+            "CP": _col_display("CP"),
+            "TN": _col_display("TN"),
             "other_modalities": ", ".join(other_modalities),
             "notes": "; ".join(notes_parts),
             "total_minutes": total_minutes,

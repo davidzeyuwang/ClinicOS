@@ -952,12 +952,27 @@ async def get_events(db, **_) -> dict:
 # ==================== REPORTS ====================
 
 async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = None, **_) -> dict:
-    from datetime import date as _date
+    from datetime import date as _date, datetime, timezone, timedelta
     supa = get_supabase()
     today = report_date or _date.today().isoformat()
 
+    # Use clinic timezone (America/New_York = UTC-4 EDT / UTC-5 EST)
+    # Convert UTC check_in_time to local date for filtering
+    def _local_date(iso_str):
+        if not iso_str:
+            return ""
+        try:
+            dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+            # America/New_York: use -4 for EDT (Apr-Nov), -5 for EST (Nov-Mar)
+            month = dt.month
+            offset = timedelta(hours=-4) if 3 <= month <= 10 else timedelta(hours=-5)
+            local = dt + offset
+            return local.strftime("%Y-%m-%d")
+        except Exception:
+            return iso_str[:10] if len(iso_str) >= 10 else ""
+
     visits = await supa.select("visits")
-    today_visits = [v for v in visits if (v.get("check_in_time") or "").startswith(today)]
+    today_visits = [v for v in visits if _local_date(v.get("check_in_time")) == today]
 
     appts = await supa.select("appointments", {"appointment_date": today})
 

@@ -318,12 +318,22 @@
     <!-- ==================== EVENTS (§11.11) ==================== -->
     <div id="page-events" class="hidden">
       <div class="card">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 class="text-lg font-semibold">📜 Event Audit Log</h2>
-          <button onclick="loadEvents()" class="btn btn-outline btn-sm">↻</button>
+          <button onclick="loadEvents()" class="btn btn-outline btn-sm">↻ Refresh</button>
         </div>
-        <div id="ev-list" data-testid="events-list" class="space-y-1 font-mono text-sm"></div>
-        <p id="ev-empty" class="text-gray-400 text-center py-8 hidden">No events.</p>
+        <div class="bg-gray-50 rounded-lg p-4 mb-4 space-y-3">
+          <div class="text-sm font-medium text-gray-600">Filters</div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <input id="evf-from" type="date" class="input" placeholder="Date from">
+            <input id="evf-to" type="date" class="input" placeholder="Date to">
+            <select id="evf-action" class="input"><option value="">All Actions</option></select>
+            <input id="evf-search" class="input" placeholder="Search patient/user...">
+          </div>
+          <button onclick="loadEvents()" class="btn btn-primary btn-sm w-full">Search</button>
+        </div>
+        <div id="ev-list" data-testid="events-list"></div>
+        <p id="ev-empty" class="text-gray-400 text-center py-8 hidden">No events match filters.</p>
       </div>
     </div>
   </main>
@@ -1426,35 +1436,77 @@ function showReport(r){
 }
 
 // ==================== EVENTS ====================
+let _evUserMap={};
 async function loadEvents(){
   try{
-    const d=await GET('/events');const el=document.getElementById('ev-list'),em=document.getElementById('ev-empty');
-    if(!d.events.length){el.innerHTML='';em.classList.remove('hidden');}
+    const d=await GET('/events');
+    // Build user lookup once
+    if(!Object.keys(_evUserMap).length){
+      try{const u=await GET('/admin/users');(u.users||[]).forEach(x=>_evUserMap[x.user_id]=x.display_name||x.email);}catch(e){}
+    }
+    // Populate action filter if empty
+    const af=document.getElementById('evf-action');
+    if(af.options.length<=1){
+      const types=[...new Set(d.events.map(e=>e.event_type))].sort();
+      types.forEach(t=>af.add(new Option(t,t)));
+    }
+    // Set default dates
+    const today=new Date().toISOString().slice(0,10);
+    if(!document.getElementById('evf-from').value)document.getElementById('evf-from').value=today;
+    if(!document.getElementById('evf-to').value)document.getElementById('evf-to').value=today;
+
+    const dateFrom=document.getElementById('evf-from').value||'';
+    const dateTo=document.getElementById('evf-to').value||'';
+    const actionFilter=document.getElementById('evf-action').value||'';
+    const searchText=(document.getElementById('evf-search').value||'').toLowerCase();
+
+    const fmtActor=id=>_evUserMap[id]||id.slice(0,8);
+    const fmtDetail=p=>{
+      if(!p||typeof p!=='object')return '';
+      const parts=[];
+      if(p.patient_name)parts.push(p.patient_name);
+      else if(p.patient_id)parts.push(p.patient_id.slice(0,8));
+      if(p.modality)parts.push(p.modality);
+      if(p.service_type)parts.push(p.service_type);
+      if(p.visit_id)parts.push('Visit:'+p.visit_id.slice(0,8));
+      return parts.join(' · ');
+    };
+
+    let filtered=[...d.events].reverse().filter(e=>{
+      const dt=(e.occurred_at||'').slice(0,10);
+      if(dateFrom&&dt<dateFrom)return false;
+      if(dateTo&&dt>dateTo)return false;
+      if(actionFilter&&e.event_type!==actionFilter)return false;
+      if(searchText){
+        const hay=(fmtActor(e.actor_id)+' '+fmtDetail(e.payload)+' '+e.event_type).toLowerCase();
+        if(!hay.includes(searchText))return false;
+      }
+      return true;
+    });
+
+    const el=document.getElementById('ev-list'),em=document.getElementById('ev-empty');
+    if(!filtered.length){el.innerHTML='';em.classList.remove('hidden');}
     else{
       em.classList.add('hidden');
-      // Build user lookup from cached users or fetch
-      let userMap={};
-      try{const u=await GET('/admin/users');(u.users||[]).forEach(x=>userMap[x.user_id]=x.display_name||x.email);}catch(e){}
-      const fmtActor=id=>userMap[id]||id.slice(0,8);
-      const fmtPayload=p=>{
-        if(!p||typeof p!=='object')return '';
-        const parts=[];
-        if(p.patient_name)parts.push(p.patient_name);
-        else if(p.patient_id)parts.push('Patient:'+p.patient_id.slice(0,8));
-        if(p.visit_id)parts.push('Visit:'+p.visit_id.slice(0,8));
-        if(p.modality)parts.push(p.modality);
-        if(p.service_type)parts.push(p.service_type);
-        return parts.join(' · ');
-      };
-      el.innerHTML=[...d.events].reverse().map(e=>{
-        const detail=fmtPayload(e.payload);
-        return`<div class="flex items-start gap-3 py-2 border-b border-gray-100">
-          <span class="text-xs text-gray-400 whitespace-nowrap">${new Date(e.occurred_at).toLocaleTimeString()}</span>
-          <span class="font-medium text-xs px-2 py-0.5 rounded bg-gray-100">${e.event_type}</span>
-          <span class="text-xs text-blue-600 font-medium">${fmtActor(e.actor_id)}</span>
-          ${detail?`<span class="text-xs text-gray-500">${detail}</span>`:''}
-        </div>`;
-      }).join('');
+      el.innerHTML=`<div class="text-xs text-gray-500 mb-2">Showing ${filtered.length} event(s)</div>
+        <div class="overflow-x-auto"><table class="w-full text-sm border-collapse">
+        <thead><tr class="bg-gray-100 text-gray-600 text-xs font-semibold border-b border-gray-300">
+          <th class="py-2 px-2 border border-gray-200">Date & Time</th>
+          <th class="py-2 px-2 border border-gray-200">Action</th>
+          <th class="py-2 px-2 border border-gray-200">Who</th>
+          <th class="py-2 px-2 border border-gray-200">Details</th>
+        </tr></thead>
+        <tbody>${filtered.map((e,i)=>{
+          const dt=new Date(e.occurred_at);
+          const dtStr=dt.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          const bg=i%2===0?'':'background:#f9f9f9';
+          return`<tr style="${bg}" class="border-b border-gray-200 hover:bg-yellow-50">
+            <td class="py-1.5 px-2 text-xs text-gray-500 whitespace-nowrap border border-gray-200">${dtStr}</td>
+            <td class="py-1.5 px-2 border border-gray-200"><span class="font-medium text-xs px-2 py-0.5 rounded bg-gray-100">${e.event_type}</span></td>
+            <td class="py-1.5 px-2 text-xs text-blue-600 font-medium border border-gray-200">${fmtActor(e.actor_id)}</td>
+            <td class="py-1.5 px-2 text-xs text-gray-600 border border-gray-200">${fmtDetail(e.payload)}</td>
+          </tr>`;
+        }).join('')}</tbody></table></div>`;
     }
   }catch(e){toast(e.message,'error');}
 }

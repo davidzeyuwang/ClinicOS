@@ -1502,15 +1502,28 @@ async function loadEvents(){
     const actionFilter=document.getElementById('evf-action').value||'';
     const searchText=(document.getElementById('evf-search').value||'').toLowerCase();
 
-    const fmtActor=id=>_evUserMap[id]||id.slice(0,8);
+    const fmtActor=id=>{
+      if(_evUserMap[id])return _evUserMap[id];
+      // For old events with role strings like "frontdesk", "therapist", "manager"
+      const roleLabels={'frontdesk':'Front Desk','therapist':'Therapist','manager':'Manager','staff':'Staff','admin':'Admin'};
+      if(roleLabels[id])return roleLabels[id];
+      return id&&id.length>8?id.slice(0,8):id||'-';
+    };
     const fmtDetail=p=>{
       if(!p||typeof p!=='object')return '';
       const parts=[];
-      if(p.patient_name)parts.push(p.patient_name);
-      else if(p.patient_id)parts.push(p.patient_id.slice(0,8));
-      if(p.modality)parts.push(p.modality);
-      if(p.service_type)parts.push(p.service_type);
-      if(p.visit_id)parts.push('Visit:'+p.visit_id.slice(0,8));
+      // Patient info - always show name if available
+      if(p.patient_name)parts.push('🧑 '+p.patient_name);
+      // Service/modality info
+      if(p.modality)parts.push('💊 '+p.modality);
+      if(p.service_type)parts.push('💊 '+p.service_type);
+      // Visit reference
+      if(p.visit_id)parts.push('📋 '+p.visit_id.slice(0,8));
+      // Other useful fields
+      if(p.name&&!p.patient_name)parts.push(p.name);  // staff/room name
+      if(p.appointment_id)parts.push('📅 '+p.appointment_id.slice(0,8));
+      if(p.patient_id&&!p.patient_name)parts.push('🧑 '+p.patient_id.slice(0,8));
+      if(p.date)parts.push('📆 '+p.date);
       return parts.join(' · ');
     };
 

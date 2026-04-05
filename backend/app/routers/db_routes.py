@@ -822,7 +822,7 @@ async def add_treatment_to_visit(
             clinic_id=current_user["clinic_id"],
             visit_id=visit_id,
             modality=payload.modality,
-            actor_id=payload.actor_id,
+            actor_id=payload.actor_id or current_user["user_id"],
             therapist_id=payload.therapist_id,
             duration_minutes=payload.duration_minutes,
             notes=payload.notes

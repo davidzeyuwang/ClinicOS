@@ -405,6 +405,30 @@ async def service_end(db, visit_id: str, actor_id: str, **_) -> Optional[dict]:
     return result
 
 
+async def save_payment_info(db, visit_id: str, actor_id: str,
+                           payment_status=None, payment_amount=None,
+                           payment_method=None, copay_collected=None, **_):
+    """Save payment info on a visit without checking out."""
+    supa = get_supabase()
+    rows = await supa.select("visits", {"visit_id": visit_id})
+    if not rows:
+        return None
+    updates = {}
+    if payment_status:
+        updates["payment_status"] = payment_status
+    if payment_amount is not None:
+        updates["payment_amount"] = payment_amount
+    if payment_method is not None:
+        updates["payment_method"] = payment_method
+    if copay_collected is not None:
+        updates["copay_collected"] = copay_collected
+    if not updates:
+        return rows[0]
+    result = await supa.update("visits", "visit_id", visit_id, updates)
+    await _append_event("PAYMENT_RECORDED", actor_id, {"visit_id": visit_id, **updates})
+    return result
+
+
 async def patient_checkout(db, visit_id: str, actor_id: str, payment_status: Optional[str] = None,
                            payment_amount: Optional[float] = None, payment_method: Optional[str] = None,
                            copay_collected: Optional[float] = None, wd_verified: bool = False,

@@ -148,6 +148,14 @@ class PatientCheckout(BaseModel):
     actor_id: str
 
 
+class SavePaymentInfo(BaseModel):
+    visit_id: str
+    payment_status: Optional[PaymentStatus] = None
+    payment_amount: Optional[float] = None
+    payment_method: Optional[PaymentMethod] = None
+    copay_collected: Optional[float] = None
+
+
 class RoomStatusChange(BaseModel):
     room_id: str
     status: RoomStatus

@@ -379,6 +379,37 @@ async def service_end(db: AsyncSession, clinic_id: str, visit_id: str, actor_id:
     return _visit_to_dict(visit)
 
 
+async def save_payment_info(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
+                           payment_status: Optional[str] = None,
+                           payment_amount: Optional[float] = None,
+                           payment_method: Optional[str] = None,
+                           copay_collected: Optional[float] = None) -> Optional[dict]:
+    """Save payment info on a visit without checking out."""
+    result = await db.execute(select(Visit).where(Visit.visit_id == visit_id, Visit.clinic_id == clinic_id))
+    visit = result.scalar_one_or_none()
+    if not visit:
+        return None
+
+    if payment_status:
+        visit.payment_status = payment_status
+    if payment_amount is not None:
+        visit.payment_amount = payment_amount
+    if payment_method:
+        visit.payment_method = payment_method
+    if copay_collected is not None:
+        visit.copay_collected = copay_collected
+
+    await _append_event(db, "PAYMENT_RECORDED", actor_id, {
+        "visit_id": visit_id,
+        "payment_status": payment_status,
+        "payment_amount": payment_amount,
+        "payment_method": payment_method,
+        "copay_collected": copay_collected,
+    })
+    await db.commit()
+    return _visit_to_dict(visit)
+
+
 async def patient_checkout(db: AsyncSession, clinic_id: str, visit_id: str, actor_id: str,
                            payment_status: Optional[str] = None,
                            payment_amount: Optional[float] = None,

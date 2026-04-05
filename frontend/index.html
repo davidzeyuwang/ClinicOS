@@ -689,8 +689,9 @@ async function openCheckout(vid){
     </div>
     <div class="flex gap-2">
       <button onclick="doCheckout('${vid}','${patientId}')" class="btn btn-primary flex-1">🚪 Check Out</button>
-      ${patientId?`<button onclick="downloadSignSheet('${patientId}','${vid}')" class="btn btn-outline px-3" title="Download Sign Sheet PDF">📄</button>`:''}
+      ${patientId?`<button onclick="downloadSignSheet('${patientId}','${vid}')" class="btn btn-outline px-3" title="Download Sign Sheet PDF">📄 PDF</button>`:''}
     </div>
+    <button onclick="savePaymentOnly('${vid}')" class="btn btn-outline w-full text-sm">💾 Save Payment Info</button>
     <button onclick="doCheckout('${vid}','${patientId}',true)" class="btn btn-outline w-full text-sm">Skip — just check out</button>
   </div>`);
 }
@@ -707,6 +708,20 @@ async function downloadSignSheet(patientId,visitIds){
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   }catch(e){toast('PDF error: '+e.message,'error');}
+}
+async function savePaymentOnly(vid){
+  const body={visit_id:vid};
+  const cc=parseFloat(document.getElementById('co-cc').value);if(!isNaN(cc)&&cc>0)body.copay_collected=cc;
+  const ps=document.getElementById('co-ps').value;if(ps)body.payment_status=ps;
+  const amt=parseFloat(document.getElementById('co-amt').value);if(!isNaN(amt)&&amt>0)body.payment_amount=amt;
+  const pm=document.getElementById('co-pm').value;if(pm)body.payment_method=pm;
+  try{
+    await POST('/portal/save-payment',body);
+    closeModal();
+    refreshOps();
+    toast('Payment info saved','success');
+  }catch(e){toast(e.message,'error');}
+}
 }
 async function doCheckout(vid,patientId,skipAll){
   const body={visit_id:vid,actor_id:'frontdesk'};

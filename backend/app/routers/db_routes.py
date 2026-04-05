@@ -28,6 +28,7 @@ from app.schemas.prototype import (
     RoomCreate,
     RoomStatusChange,
     RoomUpdate,
+    SavePaymentInfo,
     ServiceEnd,
     ServiceStart,
     ServiceTypeCreate,
@@ -249,6 +250,24 @@ async def patient_checkout(
         copay_collected=payload.copay_collected,
         wd_verified=payload.wd_verified,
         patient_signed=payload.patient_signed,
+    )
+    if not visit:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    return visit
+
+
+@router.post("/portal/save-payment")
+async def save_payment_info(
+    payload: SavePaymentInfo,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    visit = await db_service.save_payment_info(
+        db, clinic_id=current_user["clinic_id"], visit_id=payload.visit_id, actor_id=current_user["user_id"],
+        payment_status=payload.payment_status,
+        payment_amount=payload.payment_amount,
+        payment_method=payload.payment_method,
+        copay_collected=payload.copay_collected,
     )
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")

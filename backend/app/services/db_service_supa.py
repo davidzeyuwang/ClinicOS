@@ -361,6 +361,14 @@ async def patient_checkin(db, actor_id: str, patient_name: str, patient_ref: Opt
         "payment_status": "pending",
     }
     result = await supa.insert("visits", visit)
+
+    # Update appointment status if linked
+    if appointment_id:
+        try:
+            await supa.update("appointments", "appointment_id", appointment_id, {"status": "checked_in", "updated_at": now})
+        except Exception:
+            pass  # appointment may not exist for walk-ins
+
     await _append_event("PATIENT_CHECKIN", actor_id, result)
     return result
 
@@ -714,7 +722,17 @@ async def list_appointments(db, date: Optional[str] = None, patient_id: Optional
         filters["patient_id"] = patient_id
     if provider_id:
         filters["provider_id"] = provider_id
-    return await supa.select("appointments", filters)
+    appts = await supa.select("appointments", filters)
+
+    # Enrich with patient and provider names
+    all_patients = await supa.select("patients", {})
+    pat_map = {p["patient_id"]: f"{p.get('first_name','')} {p.get('last_name','')}".strip() for p in all_patients}
+    all_staff = await supa.select("staff", {})
+    staff_map = {s["staff_id"]: s["name"] for s in all_staff}
+    for a in appts:
+        a["patient_name"] = pat_map.get(a.get("patient_id"), a.get("patient_id") or "-")
+        a["provider_name"] = staff_map.get(a.get("provider_id"), "")
+    return appts
 
 
 async def update_appointment(db, appointment_id: str, actor_id: str, updates: dict, **_) -> Optional[dict]:
@@ -943,11 +961,32 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
 
     appts = await supa.select("appointments", {"appointment_date": today})
 
-    report_data = {
-        "date": today,
-        "visits": [v["visit_id"] for v in today_visits],
-        "appointments_count": len(appts),
-    }
+    # Build staff_hours from today's visits
+    all_staff = await supa.select("staff", {})
+    staff_map = {s["staff_id"]: s["name"] for s in all_staff}
+    per_staff = {}
+    for v in today_visits:
+        sid = v.get("staff_id")
+        if not sid:
+            continue
+        if sid not in per_staff:
+            per_staff[sid] = {"staff_id": sid, "name": staff_map.get(sid, sid[:8]), "completed_minutes": 0, "active_minutes": 0, "sessions_completed": 0}
+        if v.get("service_end_time"):
+            per_staff[sid]["sessions_completed"] += 1
+            try:
+                from datetime import datetime
+                start = datetime.fromisoformat(v["service_start_time"].replace("Z", "+00:00"))
+                end = datetime.fromisoformat(v["service_end_time"].replace("Z", "+00:00"))
+                per_staff[sid]["completed_minutes"] += max(int((end - start).total_seconds() // 60), 0)
+            except Exception:
+                pass
+        elif v.get("service_start_time"):
+            per_staff[sid]["active_minutes"] += 1  # placeholder
+    staff_hours = list(per_staff.values())
+
+    # Build room_board_snapshot
+    all_rooms = await supa.select("rooms", {})
+    room_board = [{"room_id": r["room_id"], "name": r.get("name", ""), "code": r.get("code", ""), "status": r.get("status", "available")} for r in all_rooms]
 
     report = {
         "report_date": today,
@@ -957,10 +996,14 @@ async def generate_daily_report(db, actor_id: str, report_date: Optional[str] = 
         "total_appointments": len(appts),
         "no_shows": len([a for a in appts if a.get("status") == "no_show"]),
         "open_sessions": len([v for v in today_visits if v.get("status") in ("checked_in", "in_service")]),
-        "report_data": report_data,
+        "staff_hours": staff_hours,
+        "room_board_snapshot": room_board,
         "generated_at": _utc_now(),
     }
-    result = await supa.insert("daily_reports", report)
+    try:
+        result = await supa.insert("daily_reports", report)
+    except Exception:
+        result = report
     await _append_event("REPORT_GENERATED", actor_id, {"date": today})
     return result
 

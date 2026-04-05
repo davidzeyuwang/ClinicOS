@@ -29,9 +29,25 @@ async def me(current_user: CurrentUser = Depends(get_current_user), db: AsyncSes
     user = await auth_service.get_user_by_id(db, current_user["user_id"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Resolve clinic name
+    clinic_name = ""
+    if _IS_SUPABASE:
+        from app.database import get_supabase
+        supa = get_supabase()
+        clinics = await supa.select("clinics", {"clinic_id": user.clinic_id})
+        if clinics:
+            clinic_name = clinics[0].get("name", "")
+    else:
+        from sqlalchemy import select as sa_select
+        from app.models.tables import Clinic
+        result = await db.execute(sa_select(Clinic).where(Clinic.clinic_id == user.clinic_id))
+        clinic = result.scalar_one_or_none()
+        if clinic:
+            clinic_name = clinic.name
     return {
         "user_id": user.user_id,
         "clinic_id": user.clinic_id,
+        "clinic_name": clinic_name,
         "email": user.email,
         "username": user.username,
         "display_name": user.display_name,

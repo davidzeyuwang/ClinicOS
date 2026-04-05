@@ -74,13 +74,16 @@
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <span class="text-2xl">🏥</span>
-        <h1 class="text-xl font-bold text-gray-800">ClinicOS</h1>
+        <div>
+          <h1 class="text-xl font-bold text-gray-800">ClinicOS</h1>
+          <span id="clinic-name" class="text-xs text-gray-500"></span>
+        </div>
         <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">v0.3</span>
       </div>
       <div class="flex items-center gap-4">
         <span class="text-sm text-gray-500" id="clock"></span>
         <span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700" id="room-summary"></span>
-        <span class="text-sm text-gray-600" id="user-display" style="display:none"></span>
+        <button onclick="openUserProfile()" class="text-sm text-gray-600 hover:text-blue-600 cursor-pointer font-medium" id="user-display" style="display:none"></button>
         <button onclick="doLogout()" data-testid="logout-btn" id="logout-btn" class="btn btn-outline btn-xs" style="display:none">Sign Out</button>
       </div>
     </div>
@@ -501,7 +504,21 @@ function doLogout(){
   clearToken();localStorage.removeItem('clinicos_user');
   document.getElementById('user-display').style.display='none';
   document.getElementById('logout-btn').style.display='none';
+  document.getElementById('clinic-name').textContent='';
   showLoginModal();
+}
+function openUserProfile(){
+  const u=JSON.parse(localStorage.getItem('clinicos_user')||'{}');
+  openModal('👤 User Profile',`<div class="space-y-3">
+    <div class="bg-gray-50 rounded-lg p-4 space-y-2">
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Name</span><span class="font-medium">${u.display_name||'-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Email</span><span class="font-medium">${u.email||'-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Username</span><span class="font-medium">${u.username||'-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Role</span><span class="badge badge-${u.role}">${u.role||'-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Clinic</span><span class="font-medium">${u.clinic_name||'-'}</span></div>
+      <div class="flex justify-between"><span class="text-gray-500 text-sm">Clinic ID</span><span class="text-xs text-gray-400">${u.clinic_id||'-'}</span></div>
+    </div>
+  </div>`);
 }
 function applyRoleVisibility(role){
   // doctor: hide Admin+Events; frontdesk: hide Admin+Events; admin: show all
@@ -523,6 +540,7 @@ async function initAuth(){
     document.getElementById('user-display').textContent=user.display_name||user.username;
     document.getElementById('user-display').style.display='';
     document.getElementById('logout-btn').style.display='';
+    if(user.clinic_name)document.getElementById('clinic-name').textContent=user.clinic_name;
     refreshOps();
   }catch{clearToken();showLoginModal();}
 }
